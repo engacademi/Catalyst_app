@@ -19,7 +19,7 @@ from app.models import (
     Venue,
 )
 from app.modules.clock import demo_time_on, event_now
-from app.modules.delays import estimated_start
+from app.modules.delays import estimated_start, expected_soon
 
 SNAPSHOT_MODES = {"manual_import", "demo_fixture"}
 
@@ -150,9 +150,16 @@ def delay_notice_public(notice: DelayNotice) -> dict[str, Any]:
 
 
 def match_public(
-    match: Match, event: Event, latest_change: ChangeEvent | None = None, notice: DelayNotice | None = None
+    match: Match,
+    event: Event,
+    latest_change: ChangeEvent | None = None,
+    notice: DelayNotice | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
-    """notice is the court's active delay notice when the match hasn't started (delays.notice_for)."""
+    """notice is the court's active delay notice when the match hasn't started (delays.notice_for).
+
+    now is the event clock; without it a match is never reported as expected to start soon.
+    """
     estimate, estimate_by = estimated_start(match, notice)
     return {
         "id": str(match.id),
@@ -166,6 +173,8 @@ def match_public(
         "estimated_start": iso(estimate),
         "estimated_start_by": estimate_by,
         "delay_notice": delay_notice_public(notice) if notice else None,
+        # Its start has passed but the source hasn't marked it started: never shown as in progress.
+        "expected_to_start_soon": bool(now) and expected_soon(match, notice, now),
         "timezone": event.timezone,
         "court": court_public(match.court),
         "home": participant_public(match, "home"),

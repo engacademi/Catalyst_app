@@ -94,6 +94,8 @@ export type Match = {
   estimated_start_by: "source" | "ova_staff" | null;
   /** The court's active delay notice, shown only while the match hasn't started. */
   delay_notice: DelayNotice | null;
+  /** Its estimated (or official) start has passed but the source hasn't marked it started. */
+  expected_to_start_soon: boolean;
   timezone: string;
   court: { id: string; label: string; area: string | null; venue_id: string; venue_name: string } | null;
   home: Participant;
@@ -150,6 +152,8 @@ export type MyDay = {
   next_match_id: string | null;
   next_by_entry: Record<string, string>;
   upcoming_ids: string[];
+  /** Upcoming matches whose start has passed without the source marking them started. */
+  expected_soon_ids: string[];
   awaiting_schedule_ids: string[];
   completed_ids: string[];
   conflicts: { match_ids: string[]; different_venues: boolean }[];

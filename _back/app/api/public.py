@@ -61,8 +61,9 @@ def sources_envelope(event: Event) -> list[dict]:
 
 def project_matches(db: Session, event: Event, matches: list[Match], *, latest: bool = True) -> list[dict]:
     changes = latest_changes(db, [m.id for m in matches]) if latest else {}
-    notices = active_notices(db, event.id, event_now(event))
-    return [P.match_public(m, event, changes.get(m.id), notice_for(m, notices)) for m in matches]
+    now = event_now(event)
+    notices = active_notices(db, event.id, now)
+    return [P.match_public(m, event, changes.get(m.id), notice_for(m, notices), now) for m in matches]
 
 
 @router.get("/events")
@@ -190,7 +191,8 @@ def my_day(
         else []
     )
     now = event_now(event)
-    summary = build_my_day(matches, set(followed), settings.assumed_match_minutes, now=now)
+    notices = active_notices(db, event.id, now)
+    summary = build_my_day(matches, set(followed), settings.assumed_match_minutes, now=now, notices=notices)
     divisions = (
         db.scalars(
             select(Division)
@@ -204,7 +206,7 @@ def my_day(
     for division in divisions:
         division_matches = list(db.scalars(match_query(event.id, division_id=division.id)))
         matches += division_matches
-        sections.append({"division": P.division_public(division), **build_division_section(division_matches)})
+        sections.append({"division": P.division_public(division), **build_division_section(division_matches, notices)})
     payload = {
         "data": {
             **summary,
@@ -360,10 +362,11 @@ def get_match(match_id: str, request: Request, db: DB) -> Response:
         .limit(20)
     )
     history = list(history)
-    notice = notice_for(match, active_notices(db, event.id, event_now(event)))
+    now = event_now(event)
+    notice = notice_for(match, active_notices(db, event.id, now))
     payload = {
         "data": {
-            **P.match_public(match, event, history[0] if history else None, notice),
+            **P.match_public(match, event, history[0] if history else None, notice, now),
             "event": P.event_public(event),
             "history": [P.change_public(h) for h in history],
         },

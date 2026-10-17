@@ -246,13 +246,7 @@ class DelayNoticeIn(BaseModel):
     duration_minutes: int = Field(60, ge=5, le=24 * 60)
 
 
-@router.post("/courts/{court_id}/delay-notices", status_code=201)
-def post_delay_notice(court_id: str, body: DelayNoticeIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
-    court = db.get(Court, parse_uuid(court_id))
-    if court is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    require_event_role(principal, court.venue.event_id, STAFF)
-    event = db.get(Event, court.venue.event_id)
+def _post_delay(db: Session, request: Request, principal: Principal, event: Event, court: Court, body: DelayNoticeIn) -> DelayNotice:
     notice, replaced = post_notice(
         db, event, court.id, body.minutes, body.duration_minutes, principal.user.id, event_now(event)
     )
@@ -262,8 +256,36 @@ def post_delay_notice(court_id: str, body: DelayNoticeIn, request: Request, db: 
         replaced=str(replaced.id) if replaced else None,
     )
     record_change(db, notice, "delay_posted", 1)
+    return notice
+
+
+@router.post("/courts/{court_id}/delay-notices", status_code=201)
+def post_delay_notice(court_id: str, body: DelayNoticeIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    court = db.get(Court, parse_uuid(court_id))
+    if court is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    require_event_role(principal, court.venue.event_id, STAFF)
+    notice = _post_delay(db, request, principal, db.get(Event, court.venue.event_id), court, body)
     db.commit()
     return {"data": P.delay_notice_public(notice)}
+
+
+class AreaDelayIn(DelayNoticeIn):
+    area: str = Field(min_length=1, max_length=100)
+
+
+@router.post("/venues/{venue_id}/delay-notices", status_code=201)
+def post_area_delay_notices(venue_id: str, body: AreaDelayIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    """One notice per court in the venue's area, each clearable on its own."""
+    venue = get_owned(db, principal, Venue, venue_id)
+    area = body.area.strip().casefold()
+    courts = sorted((c for c in venue.courts if c.area and c.area.strip().casefold() == area), key=lambda c: c.label)
+    if not courts:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No courts in that area")
+    event = db.get(Event, venue.event_id)
+    notices = [_post_delay(db, request, principal, event, court, body) for court in courts]
+    db.commit()
+    return {"data": [{**P.delay_notice_public(n), "court": P.court_public(n.court)} for n in notices]}
 
 
 @router.get("/events/{event_id}/delay-notices")
