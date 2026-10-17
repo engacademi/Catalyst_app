@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Clock, MapPin } from "lucide-react";
+import { ArrowLeft, Clock, Hourglass, MapPin } from "lucide-react";
 import type { Change, Participant } from "@/lib/api";
-import { courtPlace, formatDay, formatRelative, formatTime } from "@/lib/format";
+import { courtPlace, estimateLine, formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { StatusBadge } from "../match-card";
@@ -51,7 +51,9 @@ export function MatchView({ eventId, matchId }: { eventId: string; matchId: stri
   if (query.isPending) return <Loading label="Loading match" />;
   if (query.error) return <ErrorState error={query.error} />;
   const m = query.data.data;
-  const start = m.estimated_start ?? m.scheduled_start;
+  const start = m.scheduled_start;
+  const estimate = estimateLine(m);
+  const notice = m.delay_notice;
 
   return (
     <div>
@@ -69,9 +71,18 @@ export function MatchView({ eventId, matchId }: { eventId: string; matchId: stri
       <Card className="mt-4 space-y-2">
         <p className="flex items-center gap-2">
           <Clock aria-hidden className="h-4 w-4 text-brand" />
-          {start ? `${formatDay(start, m.timezone)}, ${formatTime(start, m.timezone)}` : "Time to be confirmed"}
-          {m.estimated_start && <span className="text-sm text-muted">(estimated)</span>}
+          {start ? `${formatDay(start, m.timezone)}, ${estimate ? "Official " : ""}${formatTime(start, m.timezone)}` : "Time to be confirmed"}
+          {estimate && <span className="text-warn">· {estimate}</span>}
         </p>
+        {notice && (
+          <p className="flex items-start gap-2 text-sm">
+            <Hourglass aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <span>
+              {m.court?.label ?? "This court"} is running about {notice.minutes} minutes late. Posted by {notice.posted_by} at{" "}
+              {formatTime(notice.posted_at, m.timezone)}, until {formatTime(notice.expires_at, m.timezone)}.
+            </span>
+          </p>
+        )}
         <p className="flex items-center gap-2">
           <MapPin aria-hidden className="h-4 w-4 text-brand" />
           {m.court ? (

@@ -59,7 +59,7 @@ export type Participant = {
 
 export type Change = {
   id: number;
-  entity_type: "match" | "announcement";
+  entity_type: "match" | "announcement" | "delay_notice";
   entity_id: string;
   entity_revision: number;
   event_type: string;
@@ -70,6 +70,16 @@ export type Change = {
   occurred_at: string;
 };
 
+export type DelayNotice = {
+  id: string;
+  court_id: string;
+  minutes: number;
+  posted_by: string;
+  posted_at: string;
+  expires_at: string;
+  cleared_at: string | null;
+};
+
 export type Match = {
   id: string;
   revision: number;
@@ -78,7 +88,11 @@ export type Match = {
   round_label: string | null;
   division: Division | null;
   scheduled_start: string | null;
+  /** The source's own estimate when it publishes one, otherwise official start plus the court's delay. */
   estimated_start: string | null;
+  estimated_start_by: "source" | "ova_staff" | null;
+  /** The court's active delay notice, shown only while the match hasn't started. */
+  delay_notice: DelayNotice | null;
   timezone: string;
   court: { id: string; label: string; area: string | null; venue_id: string; venue_name: string } | null;
   home: Participant;

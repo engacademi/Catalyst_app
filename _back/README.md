@@ -69,6 +69,8 @@ Staff, with a role grant: events, venues, sources, imports, announcements (draft
 
 With `DEMO_MODE=true`, staff can also set an event's demo time (`PUT /v1/admin/events/{id}/demo-clock`), jump it ahead (`POST .../demo-clock/jump`, 15 minutes by default) and clear it (`DELETE .../demo-clock`). Demo time ticks forward with real time from the moment it is set. Event responses carry `now` (the event's current time) and `demo_time` (true while demo time is on), and My Day picks the next match by that time. Without demo mode, setting demo time is refused and `now` is the real time.
 
+Staff can post a delay notice for a court (`POST /v1/admin/courts/{id}/delay-notices` with `minutes` and an optional `duration_minutes`, 60 by default), list the active ones (`GET /v1/admin/events/{id}/delay-notices`) and clear one early (`POST /v1/admin/delay-notices/{id}/clear`). Posting and clearing are audited, and each writes a change event for followers of teams still to play on that court. A notice expires by the event's current time, so demo time counts. While it is active, every match on the court that hasn't started keeps its official `scheduled_start` and gets an `estimated_start` of official start plus the delay, with `estimated_start_by: "ova_staff"` and the notice in `delay_notice`. When the source publishes its own estimated start, that time is used instead (`estimated_start_by: "source"`) and the notice is still shown.
+
 Staff roles are granted only from the CLI:
 
 ```sh

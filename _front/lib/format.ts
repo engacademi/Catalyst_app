@@ -1,4 +1,4 @@
-import type { Venue } from "./api";
+import type { Match, Venue } from "./api";
 
 export function formatTime(iso: string | null, timeZone: string): string {
   if (!iso) return "Time to be confirmed";
@@ -50,4 +50,12 @@ export function courtsByArea(courts: Venue["courts"]): [string | null, Venue["co
     groups.set(c.area, [...(groups.get(c.area) ?? []), c]);
   }
   return [...groups];
+}
+
+const ESTIMATE_BY: Record<NonNullable<Match["estimated_start_by"]>, string> = { source: "source", ova_staff: "OVA staff" };
+
+/** "Est. ~10:20, OVA staff", or null when the match has no estimated start. */
+export function estimateLine(match: Match): string | null {
+  if (!match.estimated_start || !match.estimated_start_by) return null;
+  return `Est. ~${formatTime(match.estimated_start, match.timezone)}, ${ESTIMATE_BY[match.estimated_start_by]}`;
 }
