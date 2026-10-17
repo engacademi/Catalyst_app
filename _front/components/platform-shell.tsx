@@ -134,6 +134,8 @@ export function PlatformShell({ children }: { children: ReactNode }) {
         <Volleyball strokeWidth={1} />
         <Volleyball strokeWidth={1} />
         <Volleyball strokeWidth={1} />
+        <Volleyball strokeWidth={1} />
+        <Volleyball strokeWidth={1} />
       </div>
       <header className="platform-header">
         <Link

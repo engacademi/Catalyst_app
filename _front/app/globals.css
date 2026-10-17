@@ -2580,7 +2580,7 @@ select:focus-visible {
   width: clamp(36px, 8vw, 82px);
   height: auto;
   color: #457e65;
-  opacity: 0.065;
+  opacity: 0.13;
   animation: ball-drift 32s ease-in-out infinite alternate;
 }
 .volleyball-background svg:nth-child(1) {
@@ -2757,4 +2757,52 @@ select:focus-visible {
   flex-direction: column;
   gap: 8px;
   font-size: 11px;
+}
+
+/* Let rounded card shadows finish inside the horizontal scroll area. */
+.event-carousel {
+  padding: 24px 12px 32px;
+  margin: -20px -12px -16px;
+}
+.compact-pick .event-tile-body > .flex {
+  min-height: 32px;
+  padding-right: 42px;
+  align-items: center;
+}
+.volleyball-background svg:nth-child(4) {
+  left: 22%;
+  top: 48%;
+  animation-delay: -8s;
+}
+.volleyball-background svg:nth-child(5) {
+  left: 72%;
+  top: 87%;
+  animation-delay: -18s;
+}
+select,
+select[class] {
+  padding: 10px 38px 10px 14px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  line-height: 1.35;
+  text-align: start;
+  text-indent: 0;
+  vertical-align: middle;
+}
+@supports (appearance: base-select) {
+  select,
+  select[class] {
+    padding: 10px 14px;
+    gap: 12px;
+    align-items: center;
+  }
+  select::picker-icon {
+    align-self: center;
+    flex-shrink: 0;
+  }
+  option {
+    text-align: start;
+    align-items: center;
+  }
 }

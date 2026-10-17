@@ -33,3 +33,7 @@ The frontend needs `API_BASE_URL` (or the supported `NEXT_PUBLIC_API_BASE_URL` f
 ## Validation
 
 Frontend lint, TypeScript and production build pass; 27 mobile/browser checks pass, including accessibility and the new discovery flows. All 54 backend/unit contract checks pass against disposable PGlite. New contract checks exercise search, idempotent fixtures, profile/follower privacy, self-escalation denial, scoped grants/revocation, draft-content revision conflicts, courts and scores. Contract database checks use disposable PGlite with autocommit and prepared statements disabled for its socket multiplexer; they do not verify production PostgreSQL transaction isolation or concurrent write behavior. Run the committed API suite against disposable PostgreSQL before production release. Clerk's real signed-in flow requires an account session; no user credentials were supplied or read during implementation.
+
+## Follow-up production setup
+
+The deployment now explicitly runs `alembic upgrade head` followed by `python -m app.cli seed-testing` in the existing Railway API service. This inserts two test tournaments without resetting existing data. The UI follow-up moves saved-card hearts to the whole card’s top-right corner, gives carousels enough padding for rounded shadows, aligns select text consistently, removes direction-link arrow glyphs, and doubles decorative volleyball opacity from 0.065 to 0.13. Three background balls become five (the 50% increase rounds up to a whole ball).

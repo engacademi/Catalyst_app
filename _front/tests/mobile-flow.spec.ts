@@ -542,6 +542,11 @@ test("compact saved picks, sponsor ribbon and profile saved-team lists", async (
     .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) });
   await expect(pick).toBeVisible();
   const small = await pick.boundingBox();
+  const heart = await pick
+    .getByRole("button", { name: "Unsave tournament" })
+    .boundingBox();
+  expect(small!.x + small!.width - heart!.x - heart!.width).toBeLessThan(12);
+  expect(heart!.y - small!.y).toBeLessThan(12);
   const full = await nearby.locator(".event-tile").first().boundingBox();
   expect(small!.height).toBeLessThan(full!.height * 0.65);
   const sponsor = page.getByRole("region", { name: "Our sponsors" });

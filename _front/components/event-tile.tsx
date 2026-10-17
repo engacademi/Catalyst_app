@@ -52,8 +52,8 @@ export function EventTile({
         ) : (
           <Volleyball size={66} strokeWidth={1} aria-hidden />
         )}
-        <SaveEventButton slug={e.slug} />
       </div>
+      <SaveEventButton slug={e.slug} />
       <div className="event-tile-body">
         <div className="flex flex-wrap gap-2">
           <Badge tone="brand">{e.kind === "beach" ? "Beach" : "Indoor"}</Badge>
@@ -79,7 +79,7 @@ export function EventTile({
                   rel="noreferrer"
                   aria-label={`Directions to ${venue}`}
                 >
-                  {venue} ↗
+                  {venue}
                 </a>
               ))}
             </span>
