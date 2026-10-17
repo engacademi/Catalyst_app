@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Upload } from "lucide-react";
 import { API_BASE, apiGet, apiSend, type Match } from "@/lib/api";
-import { formatRelative, formatTime } from "@/lib/format";
+import { formatDay, formatRelative, formatTime } from "@/lib/format";
 import { Badge, Card, EmptyState, ErrorState, Loading, SectionTitle } from "../ui";
 import type { AdminEventData } from "./admin-event";
 import { useAdminAuth } from "./auth";
@@ -278,6 +278,59 @@ export function RostersPanel({ event }: { event: AdminEventData }) {
           </ul>
         ))}
       <FormError error={publish.error ?? withdraw.error} />
+    </div>
+  );
+}
+
+export function DemoClockPanel({ event }: { event: AdminEventData }) {
+  const base = `/v1/admin/events/${event.id}/demo-clock`;
+  const set = useAdminMutation<{ demo_time: string }>("PUT", base);
+  const jump = useAdminMutation<{ minutes: number }>("POST", `${base}/jump`);
+  const clear = useAdminMutation("DELETE", base);
+  const [value, setValue] = useState("");
+  const error = set.error ?? jump.error ?? clear.error;
+
+  return (
+    <div>
+      <p className="mb-3 text-sm text-muted">
+        Present the event as if it were happening at another time. The clock runs forward from the time you set, and every attendee
+        screen shows a &quot;Demo time&quot; banner until you clear it. It only works when the API runs in demo mode.
+      </p>
+      <Card>
+        <p className="text-sm">
+          {event.demo_time ? (
+            <>
+              <Badge tone="info">Demo time on</Badge>{" "}
+              {formatDay(event.now, event.timezone)}, {formatTime(event.now, event.timezone)} when this page loaded
+            </>
+          ) : (
+            "Demo time is off. Screens use the real time."
+          )}
+        </p>
+        <form
+          className="mt-3 flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (value) set.mutate({ demo_time: new Date(value).toISOString() });
+          }}
+        >
+          <Field label="Demo time" hint="In this device's time zone, for example Sat April 19, 9:40 am">
+            <input type="datetime-local" required value={value} onChange={(e) => setValue(e.target.value)} className={inputClass} />
+          </Field>
+          <PrimaryButton pending={set.isPending}>Set demo time</PrimaryButton>
+        </form>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <SmallButton tone="brand" disabled={!event.demo_time || jump.isPending} onClick={() => jump.mutate({ minutes: 15 })}>
+            +15 min
+          </SmallButton>
+          <SmallButton tone="danger" disabled={!event.demo_time || clear.isPending} onClick={() => clear.mutate(undefined)}>
+            Clear demo time
+          </SmallButton>
+        </div>
+        <div className="mt-3">
+          <FormError error={error} />
+        </div>
+      </Card>
     </div>
   );
 }

@@ -26,6 +26,7 @@ from app.models import (
 )
 from app.modules import projections as P
 from app.modules.calendar import build_ics
+from app.modules.clock import event_now
 from app.modules.matches import (
     STATUS_GROUPS,
     latest_changes,
@@ -186,7 +187,8 @@ def my_day(
         if followed
         else []
     )
-    summary = build_my_day(matches, set(followed), settings.assumed_match_minutes)
+    now = event_now(event)
+    summary = build_my_day(matches, set(followed), settings.assumed_match_minutes, now=now)
     divisions = (
         db.scalars(
             select(Division)

@@ -1,7 +1,7 @@
 """AES sources: event key and failed-check health
 
 Revision ID: 0002_t8_aes_source
-Revises: 0002_t14_work_team
+Revises: 0002_t7_demo_clock
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0002_t8_aes_source"
-down_revision: str | None = "0002_t14_work_team"
+down_revision: str | None = "0002_t7_demo_clock"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

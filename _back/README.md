@@ -70,6 +70,8 @@ Every schedule response carries a `sources` list with a freshness value. A CSV s
 
 Staff, with a role grant: events, venues, sources, imports, announcements (draft, publish, archive), guide items, partner cards, roster publish and withdraw, audit log, and `simulate-change` for demo events.
 
+With `DEMO_MODE=true`, staff can also set an event's demo time (`PUT /v1/admin/events/{id}/demo-clock`), jump it ahead (`POST .../demo-clock/jump`, 15 minutes by default) and clear it (`DELETE .../demo-clock`). Demo time ticks forward with real time from the moment it is set. Event responses carry `now` (the event's current time) and `demo_time` (true while demo time is on), and My Day picks the next match by that time. Without demo mode, setting demo time is refused and `now` is the real time.
+
 Staff roles are granted only from the CLI:
 
 ```sh

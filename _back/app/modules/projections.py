@@ -17,6 +17,7 @@ from app.models import (
     Source,
     Venue,
 )
+from app.modules.clock import demo_time_on, event_now
 
 SNAPSHOT_MODES = {"manual_import", "demo_fixture"}
 
@@ -98,6 +99,9 @@ def event_public(event: Event) -> dict[str, Any]:
         "status": event.status,
         "is_demo": event.is_demo,
         "revision": event.revision,
+        # Screens use this instead of the device clock; demo_time says it isn't the real time.
+        "now": iso(event_now(event)),
+        "demo_time": demo_time_on(event),
     }
 
 

@@ -295,6 +295,88 @@ def test_change_feed_names_the_division_of_each_change(client, db, demo):
     ]
 
 
+DEMO_TIME = "2026-04-19T09:40:00-04:00"
+
+
+@pytest.fixture
+def demo_mode(monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "demo_mode", True)
+
+
+def test_demo_time_is_refused_outside_demo_mode(client, demo):
+    refused = client.put(f"/v1/admin/events/{demo.id}/demo-clock", json={"demo_time": DEMO_TIME}, headers=ADMIN)
+    assert refused.status_code == 409
+    event = client.get("/v1/events/demo-championships").json()["data"]
+    assert event["demo_time"] is False
+
+
+class FakeClock:
+    def __init__(self, start: datetime):
+        self.now = start
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+@pytest.fixture
+def real_clock(monkeypatch):
+    clock = FakeClock(datetime(2026, 10, 18, 14, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr("app.modules.clock.real_now", clock)
+    return clock
+
+
+def event_now(client) -> tuple[datetime, bool]:
+    event = client.get("/v1/events/demo-championships").json()["data"]
+    return datetime.fromisoformat(event["now"]), event["demo_time"]
+
+
+def test_demo_clock_ticks_jumps_and_clears(client, demo, demo_mode, real_clock):
+    clock = f"/v1/admin/events/{demo.id}/demo-clock"
+    assert client.put(clock, json={"demo_time": DEMO_TIME}, headers=ADMIN).status_code == 200
+    assert event_now(client) == (datetime.fromisoformat(DEMO_TIME), True)
+
+    real_clock.now += timedelta(minutes=5)
+    assert event_now(client)[0] == datetime.fromisoformat("2026-04-19T09:45:00-04:00")
+
+    jumped = client.post(f"{clock}/jump", json={}, headers=ADMIN).json()["data"]
+    assert datetime.fromisoformat(jumped["now"]) == datetime.fromisoformat("2026-04-19T10:00:00-04:00")
+    assert event_now(client)[0] == datetime.fromisoformat("2026-04-19T10:00:00-04:00")
+
+    client.delete(clock, headers=ADMIN)
+    assert event_now(client) == (real_clock.now, False)
+    assert client.post(f"{clock}/jump", json={}, headers=ADMIN).status_code == 409
+
+
+APRIL_MATCHES = b"""external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,round,status
+APR-1,15U Boys D1,2026-04-19T08:00:00-04:00,Hall A,Court 1,15UB-D1-1,15UB-D1-2,Pool B,scheduled
+APR-2,15U Boys D1,2026-04-19T10:00:00-04:00,Hall A,Court 1,15UB-D1-1,15UB-D1-3,Pool B,scheduled
+"""
+
+
+def test_my_day_picks_next_match_by_demo_time(client, db, demo, demo_mode):
+    source = client.get(f"/v1/admin/events/{demo.id}", headers=ADMIN).json()["data"]["sources"][0]["id"]
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": source, "kind": "matches"},
+        files={"file": ("matches.csv", APRIL_MATCHES, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+    team = entry_id(db, "Lakeshore Thunder")
+    april = {str(m.external_id): str(m.id) for m in db.scalars(select(Match).where(Match.external_id.like("APR-%")))}
+
+    def next_match() -> str | None:
+        return client.get("/v1/events/demo-championships/my-day", params={"entry_ids": team}).json()["data"]["next_match_id"]
+
+    clock = f"/v1/admin/events/{demo.id}/demo-clock"
+    client.put(clock, json={"demo_time": "2026-04-19T07:30:00-04:00"}, headers=ADMIN)
+    assert next_match() == april["APR-1"]
+    client.put(clock, json={"demo_time": DEMO_TIME}, headers=ADMIN)
+    assert next_match() == april["APR-2"]
+
+
 def aes_source(client, fetch) -> str:
     from app.api.admin import aes_fetch
     from app.main import app
