@@ -44,6 +44,8 @@ from app.models import (
 from app.modules import projections as P
 from app.modules.clock import clear_demo_time, event_now, jump_demo_time, set_demo_time
 from app.modules.delays import (
+    DELAY_CLEARED,
+    DELAY_POSTED,
     active_notices,
     clear_notice,
     is_active,
@@ -255,7 +257,7 @@ def _post_delay(db: Session, request: Request, principal: Principal, event: Even
         court=court.label, minutes=notice.minutes, expires_at=P.iso(notice.expires_at),
         replaced=str(replaced.id) if replaced else None,
     )
-    record_change(db, notice, "delay_posted", 1)
+    record_change(db, notice, DELAY_POSTED)
     return notice
 
 
@@ -303,7 +305,7 @@ def clear_delay_notice(notice_id: str, request: Request, db: DB, principal: Curr
     if is_active(notice, now):
         clear_notice(notice, principal.user.id, now)
         audit(db, request, principal, "delay_notice.clear", event.id, notice, court=notice.court.label, minutes=notice.minutes)
-        record_change(db, notice, "delay_cleared", 2)
+        record_change(db, notice, DELAY_CLEARED)
         db.commit()
     return {"data": P.delay_notice_public(notice)}
 
