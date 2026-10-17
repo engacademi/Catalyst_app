@@ -1,0 +1,4 @@
+external_entry_id,jersey,display_name,position,photo_url,photo_approved,team_photo_url,team_photo_approved
+EX-15UB-1,1,Avery A.,Setter,,,,
+EX-15UB-1,2,Jordan B.,Outside,https://example.org/photos/jb.jpg,no,,
+EX-15UB-1,3,Riley C.,Middle,,,,
