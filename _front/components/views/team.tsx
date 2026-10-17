@@ -4,6 +4,7 @@ import Image from "next/image";
 import { UserRound } from "lucide-react";
 import { useEntry } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
+import { useLabels } from "@/lib/labels";
 import { FollowButton } from "../follow-button";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
@@ -12,6 +13,7 @@ import { Card, EmptyState, ErrorState, Loading, SectionTitle } from "../ui";
 export function TeamView({ eventId, entryId }: { eventId: string; entryId: string }) {
   const query = useEntry(entryId);
   const { ids } = useFollows(eventId);
+  const { labels } = useLabels(eventId);
   if (query.isPending) return <Loading label="Loading team" />;
   if (query.error) return <ErrorState error={query.error} />;
   const team = query.data.data;
@@ -37,7 +39,7 @@ export function TeamView({ eventId, entryId }: { eventId: string; entryId: strin
         <ul className="space-y-2">
           {team.matches.map((m) => (
             <li key={m.id}>
-              <MatchCard match={m} eventId={eventId} followed={[...ids, team.id]} showDay />
+              <MatchCard match={m} eventId={eventId} followed={[...ids, team.id]} labels={labels} showDay />
             </li>
           ))}
         </ul>

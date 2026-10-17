@@ -41,7 +41,20 @@ export function TeamsView({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <PageTitle subtitle={ids.length ? `Following ${ids.length}` : "Tap Follow on every team you care about."}>
+      <PageTitle
+        subtitle={
+          ids.length ? (
+            <>
+              Following {ids.length} ·{" "}
+              <Link href={`/events/${eventId}/my-teams`} className="font-semibold text-brand underline">
+                My teams
+              </Link>
+            </>
+          ) : (
+            "Tap Follow on every team you care about."
+          )
+        }
+      >
         Teams
       </PageTitle>
       <div className="space-y-2">
