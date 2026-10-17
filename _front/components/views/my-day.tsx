@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AlertTriangle, CalendarPlus, HelpCircle } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 import { useFollows } from "@/lib/follows";
+import { useLabels } from "@/lib/labels";
 import { dayKey, formatDay } from "@/lib/format";
 import { useMyDay } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
@@ -12,6 +13,7 @@ import { Card, EmptyState, ErrorState, Loading, PageTitle, SectionTitle } from "
 
 export function MyDayView({ eventId }: { eventId: string }) {
   const { ids } = useFollows(eventId);
+  const { labels, labelFor } = useLabels(eventId);
   const query = useMyDay(eventId, ids);
 
   if (ids.length === 0) {
@@ -45,14 +47,26 @@ export function MyDayView({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <PageTitle subtitle={`Following ${day.entries.map((e) => e.team_name).join(", ")}`}>My Day</PageTitle>
+      <PageTitle
+        subtitle={
+          <>
+            Following {day.entries.map((e) => (labelFor(e.id) ? `${labelFor(e.id)} (${e.team_name})` : e.team_name)).join(", ")}
+            {" · "}
+            <Link href={`/events/${eventId}/my-teams`} className="font-semibold text-brand underline">
+              My teams
+            </Link>
+          </>
+        }
+      >
+        My Day
+      </PageTitle>
 
       <section aria-labelledby="next-match">
         <h2 id="next-match" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
           Next match
         </h2>
         {next ? (
-          <MatchCard match={next} eventId={eventId} followed={ids} showDay />
+          <MatchCard match={next} eventId={eventId} followed={ids} labels={labels} showDay />
         ) : (
           <EmptyState title="No upcoming matches with a confirmed time" />
         )}
@@ -72,7 +86,8 @@ export function MyDayView({ eventId }: { eventId: string }) {
                 {c.match_ids
                   .map((id) => {
                     const x = m(id);
-                    return `${x.home.team_name ?? x.home.placeholder} vs ${x.away.team_name ?? x.away.placeholder}`;
+                    const side = (p: typeof x.home) => labelFor(p.entry_id) ?? p.team_name ?? p.placeholder;
+                    return `${side(x.home)} vs ${side(x.away)}`;
                   })
                   .join("; ")}
                 . This assumes each match takes about {day.assumed_match_minutes} minutes.
@@ -88,7 +103,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
           <ul className="space-y-2">
             {matchIds.map((id) => (
               <li key={id} className={conflictIds.has(id) ? "rounded-xl ring-2 ring-warn/50" : ""}>
-                <MatchCard match={m(id)} eventId={eventId} followed={ids} />
+                <MatchCard match={m(id)} eventId={eventId} followed={ids} labels={labels} />
               </li>
             ))}
           </ul>
@@ -105,7 +120,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
           <ul className="space-y-2">
             {day.awaiting_schedule_ids.map((id) => (
               <li key={id}>
-                <MatchCard match={m(id)} eventId={eventId} followed={ids} />
+                <MatchCard match={m(id)} eventId={eventId} followed={ids} labels={labels} />
               </li>
             ))}
           </ul>
@@ -118,7 +133,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
           <ul className="space-y-2">
             {day.completed_ids.map((id) => (
               <li key={id}>
-                <MatchCard match={m(id)} eventId={eventId} followed={ids} showDay />
+                <MatchCard match={m(id)} eventId={eventId} followed={ids} labels={labels} showDay />
               </li>
             ))}
           </ul>
@@ -146,7 +161,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
 function DeviceNote() {
   return (
     <p className="mt-4 text-xs text-muted">
-      Your followed teams are saved on this device only. Following a team doesn&apos;t make you a verified coach or guardian.
+      Your followed teams and labels are saved on this device only. Following a team doesn&apos;t make you a verified coach or guardian.
     </p>
   );
 }
