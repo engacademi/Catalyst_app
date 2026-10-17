@@ -1,12 +1,20 @@
 "use client";
 
+import { useHydrated } from "@/lib/hydration";
+
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFollows } from "@/lib/follows";
 import { dayKey, formatDay } from "@/lib/format";
 import { useEvent, useMatches } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
-import { EmptyState, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
+import {
+  EmptyState,
+  ErrorState,
+  Loading,
+  PageTitle,
+  SectionTitle,
+} from "../ui";
 
 const STATUS_TABS = [
   { value: "upcoming", label: "Upcoming" },
@@ -14,9 +22,16 @@ const STATUS_TABS = [
   { value: "results", label: "Results" },
   { value: "all", label: "All" },
 ];
-const FILTERS = ["status", "venue_id", "court_id", "division_id", "mine"] as const;
+const FILTERS = [
+  "status",
+  "venue_id",
+  "court_id",
+  "division_id",
+  "mine",
+] as const;
 
 export function MatchesView({ eventId }: { eventId: string }) {
+  const hydrated = useHydrated();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -42,7 +57,9 @@ export function MatchesView({ eventId }: { eventId: string }) {
   };
   const hasFilters = FILTERS.some((f) => f !== "status" && params.get(f));
   const venues = event.data?.data.venues ?? [];
-  const courts = venues.find((v) => v.id === params.get("venue_id"))?.courts ?? venues.flatMap((v) => v.courts);
+  const courts =
+    venues.find((v) => v.id === params.get("venue_id"))?.courts ??
+    venues.flatMap((v) => v.courts);
 
   const groups = new Map<string, NonNullable<typeof matches.data>["data"]>();
   for (const m of matches.data?.data ?? []) {
@@ -50,15 +67,18 @@ export function MatchesView({ eventId }: { eventId: string }) {
     groups.set(key, [...(groups.get(key) ?? []), m]);
   }
 
+  if (!hydrated) return <Loading />;
+
   return (
     <div>
-      <PageTitle>Matches</PageTitle>
-      <div role="tablist" aria-label="Match status" className="grid grid-cols-4 gap-1 rounded-full border border-border bg-surface p-1">
+      <PageTitle subtitle="Every court. Every team. The latest published schedule and results.">
+        Match centre
+      </PageTitle>
+      <div role="group" aria-label="Match status" className="status-tabs">
         {STATUS_TABS.map((t) => (
           <button
             key={t.value}
-            role="tab"
-            aria-selected={status === t.value}
+            aria-pressed={status === t.value}
             onClick={() => set("status", t.value)}
             className={`min-h-10 rounded-full text-sm ${status === t.value ? "bg-brand font-semibold text-white" : "text-muted"}`}
           >
@@ -67,23 +87,47 @@ export function MatchesView({ eventId }: { eventId: string }) {
         ))}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Select label="Venue" value={params.get("venue_id") ?? ""} onChange={(v) => set("venue_id", v)} options={venues.map((v) => [v.id, v.name])} all="All venues" />
-        <Select label="Court" value={params.get("court_id") ?? ""} onChange={(v) => set("court_id", v)} options={courts.map((c) => [c.id, c.label])} all="All courts" />
+      <div className="filter-panel mt-4">
+        <Select
+          label="Venue"
+          value={params.get("venue_id") ?? ""}
+          onChange={(v) => set("venue_id", v)}
+          options={venues.map((v) => [v.id, v.name])}
+          all="All venues"
+        />
+        <Select
+          label="Court"
+          value={params.get("court_id") ?? ""}
+          onChange={(v) => set("court_id", v)}
+          options={courts.map((c) => [c.id, c.label])}
+          all="All courts"
+        />
         <Select
           label="Division"
           value={params.get("division_id") ?? ""}
           onChange={(v) => set("division_id", v)}
-          options={(event.data?.data.divisions ?? []).map((d) => [d.id, d.name])}
+          options={(event.data?.data.divisions ?? []).map((d) => [
+            d.id,
+            d.name,
+          ])}
           all="All divisions"
         />
         <label className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm">
-          <input type="checkbox" checked={mine} disabled={!ids.length} onChange={(e) => set("mine", e.target.checked ? "1" : "")} className="h-4 w-4 accent-[var(--brand)]" />
+          <input
+            type="checkbox"
+            checked={mine}
+            disabled={!ids.length}
+            onChange={(e) => set("mine", e.target.checked ? "1" : "")}
+            className="h-4 w-4 accent-[var(--brand)]"
+          />
           My teams only
         </label>
       </div>
       {hasFilters && (
-        <button onClick={() => router.replace(`${pathname}?status=${status}`)} className="mt-2 text-sm font-semibold text-brand underline">
+        <button
+          onClick={() => router.replace(`${pathname}?status=${status}`)}
+          className="mt-2 text-sm font-semibold text-brand underline"
+        >
           Reset filters
         </button>
       )}
@@ -104,8 +148,15 @@ export function MatchesView({ eventId }: { eventId: string }) {
         ) : (
           [...groups.entries()].map(([key, list]) => (
             <section key={key}>
-              <SectionTitle>{key === "tbd" ? "Time to be confirmed" : formatDay(list[0].estimated_start ?? list[0].scheduled_start, list[0].timezone)}</SectionTitle>
-              <ul className="space-y-2">
+              <SectionTitle>
+                {key === "tbd"
+                  ? "Time to be confirmed"
+                  : formatDay(
+                      list[0].estimated_start ?? list[0].scheduled_start,
+                      list[0].timezone,
+                    )}
+              </SectionTitle>
+              <ul className="match-list">
                 {list.map((m) => (
                   <li key={m.id}>
                     <MatchCard match={m} eventId={eventId} followed={ids} />
@@ -137,7 +188,11 @@ function Select({
   return (
     <label className="block">
       <span className="sr-only">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-sm">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-sm"
+      >
         <option value="">{all}</option>
         {options.map(([id, name]) => (
           <option key={id} value={id}>

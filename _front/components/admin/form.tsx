@@ -1,8 +1,17 @@
 import type { ReactNode } from "react";
 
-export const inputClass = "min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-base";
+export const inputClass =
+  "min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-base";
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
   return (
     <label className="block text-sm">
       <span className="mb-1 block font-medium">{label}</span>
@@ -12,7 +21,15 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
-export function PrimaryButton({ children, pending, disabled }: { children: ReactNode; pending?: boolean; disabled?: boolean }) {
+export function PrimaryButton({
+  children,
+  pending,
+  disabled,
+}: {
+  children: ReactNode;
+  pending?: boolean;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="submit"
@@ -41,7 +58,12 @@ export function SmallButton({
     danger: "border-danger/40 text-danger",
   };
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={`min-h-9 rounded-full border px-3 text-sm font-medium disabled:opacity-50 ${tones[tone]}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`min-h-11 rounded-full border px-4 text-sm font-medium disabled:opacity-50 ${tones[tone]}`}
+    >
       {children}
     </button>
   );
@@ -50,7 +72,10 @@ export function SmallButton({
 export function FormError({ error }: { error: unknown }) {
   if (!error) return null;
   return (
-    <p role="alert" className="mb-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+    <p
+      role="alert"
+      className="mb-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger"
+    >
       {error instanceof Error ? error.message : "Something went wrong"}
     </p>
   );

@@ -1,21 +1,36 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, Manrope } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const bodyFont = DM_Sans({
+  variable: "--font-body",
+  subsets: ["latin"],
+  display: "swap",
+});
+const headingFont = Manrope({
+  variable: "--font-heading",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: { default: "Courtside Connected", template: "%s · Courtside Connected" },
+  title: { default: "Olley Catalyst", template: "%s · Olley Catalyst" },
   description: "Your teams, your next match, your event, in one place.",
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#2f6b1f" };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#164c3b",
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en-CA" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html
+      lang="en-CA"
+      className={`${bodyFont.variable} ${headingFont.variable} h-full antialiased`}
+    >
       <body className="min-h-full flex flex-col">
         <a
           href="#main"
