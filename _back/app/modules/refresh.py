@@ -35,7 +35,7 @@ def refresh_source(
     if not source.external_key:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Add the AES event key to this source first")
 
-    reader = AesEvent(source.external_key, fetch)
+    reader = AesEvent(source.external_key, fetch, event.timezone)
     try:
         upstream = reader.updated_at()
         parsed = reader.parse(kind)
@@ -63,12 +63,14 @@ def refresh_source(
         file_hash=hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(),
         options={"upstream_updated_at": upstream.isoformat()},
         actor_id=actor_id,
-        summary={"found": _found(parsed)} if kind == "entries" else None,
+        summary={"found": _found(kind, parsed)},
     )
 
 
-def _found(parsed) -> dict[str, int]:
+def _found(kind: str, parsed) -> dict[str, int]:
     data = [r.data for r in parsed.rows]
+    if kind == "matches":
+        return {"matches": len(data), "courts": len({d["court_external_id"] for d in data if d.get("court_external_id")})}
     return {
         "divisions": len({d["division_external_id"] for d in data}),
         "clubs": len({d["club_external_id"] for d in data if d.get("club_external_id")}),

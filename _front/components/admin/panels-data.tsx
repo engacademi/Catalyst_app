@@ -25,7 +25,7 @@ type Batch = {
     warnings?: string[];
     identical_to_batch?: string | null;
     change_events?: number;
-    found?: { divisions: number; clubs: number; teams: number };
+    found?: { divisions?: number; clubs?: number; teams?: number; matches?: number; courts?: number };
   };
   error_count: number;
   created_at: string;
@@ -48,13 +48,14 @@ export function ImportsPanel({ event }: { event: AdminEventData }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const live = event.sources.find((s) => s.id === sourceId)?.mode === "aes";
+  const [liveKind, setLiveKind] = useState<"entries" | "matches">("entries");
 
   const refresh = async () => {
     setUploading(true);
     setError(null);
     setPreview(null);
     try {
-      const json = await apiSend<{ data: Batch }>(auth, "POST", `/v1/admin/sources/${sourceId}/refresh`, { kind: "entries" });
+      const json = await apiSend<{ data: Batch }>(auth, "POST", `/v1/admin/sources/${sourceId}/refresh`, { kind: liveKind });
       setPreview(json.data);
     } catch (err) {
       setError(err);
@@ -106,7 +107,12 @@ export function ImportsPanel({ event }: { event: AdminEventData }) {
             </select>
           </Field>
           {live ? (
-            <p className="self-end text-sm text-muted">Reads divisions, clubs and teams from AES. You&apos;ll see a preview before anything changes.</p>
+            <Field label="What to read from AES" hint="Refresh teams first; matches need them. You'll see a preview before anything changes.">
+              <select value={liveKind} onChange={(e) => setLiveKind(e.target.value as "entries" | "matches")} className={inputClass}>
+                <option value="entries">Divisions, clubs and teams</option>
+                <option value="matches">Pool matches, courts and set scores</option>
+              </select>
+            </Field>
           ) : (
             <>
               <Field label="What's in the file">
@@ -149,9 +155,14 @@ export function ImportsPanel({ event }: { event: AdminEventData }) {
               <Badge>{preview.summary.unchanged} unchanged</Badge>
               <Badge tone="danger">{preview.error_count} with errors</Badge>
             </div>
-            {preview.summary.found && (
+            {preview.summary.found?.teams !== undefined && (
               <p className="mt-2 text-sm">
                 Found {preview.summary.found.divisions} divisions, {preview.summary.found.clubs} clubs and {preview.summary.found.teams} teams.
+              </p>
+            )}
+            {preview.summary.found?.matches !== undefined && (
+              <p className="mt-2 text-sm">
+                Found {preview.summary.found.matches} pool matches on {preview.summary.found.courts} courts.
               </p>
             )}
             {preview.summary.identical_to_batch && <p className="mt-2 text-sm text-muted">This exact data was already committed. Committing again changes nothing.</p>}

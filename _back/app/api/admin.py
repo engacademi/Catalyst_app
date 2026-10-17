@@ -302,7 +302,7 @@ def aes_fetch() -> Fetch:
 
 
 class RefreshIn(BaseModel):
-    kind: Literal["entries"] = "entries"
+    kind: Literal["entries", "matches"] = "entries"
 
 
 @router.post("/sources/{source_id}/refresh", status_code=201)
