@@ -23,6 +23,7 @@ const CHANGE_LABELS: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Teams confirmed",
+  next_match_set: "Next match set",
 };
 
 export function StatusBadge({ status }: { status: Match["status"] }) {

@@ -16,6 +16,7 @@ const LABELS: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Teams confirmed",
+  next_match_set: "Next match set",
 };
 
 function describe(change: Change, timeZone: string): string {
@@ -27,6 +28,10 @@ function describe(change: Change, timeZone: string): string {
       return `${formatTime(d.scheduled_start?.[0] as string | null, timeZone)} → ${formatTime(d.scheduled_start?.[1] as string | null, timeZone)}`;
     case "status_changed":
       return `${d.status?.[0]} → ${d.status?.[1]}`;
+    case "next_match_set": {
+      const filled = (change.diff.filled ?? []) as { placeholder: string | null; team_name: string }[];
+      return filled.map((f) => `${f.placeholder ?? "TBD"} → ${f.team_name}`).join(", ");
+    }
     default:
       return "";
   }
