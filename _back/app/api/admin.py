@@ -102,6 +102,8 @@ def get_owned(db: Session, principal: Principal, model, obj_id: str):
         event_id = db.get(EventEntry, obj.entry_id).event_id
     if model is Venue or model is Source:
         event_id = obj.event_id
+    if model is Court:
+        event_id = obj.venue.event_id
     require_event_role(principal, event_id, STAFF)
     return obj
 
@@ -232,10 +234,7 @@ class CourtIn(BaseModel):
 
 @router.patch("/courts/{court_id}")
 def update_court(court_id: str, body: CourtIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
-    court = db.get(Court, parse_uuid(court_id))
-    if court is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    require_event_role(principal, court.venue.event_id, STAFF)
+    court = get_owned(db, principal, Court, court_id)
     before = court.area
     court.area = (body.area or "").strip() or None
     audit(db, request, principal, "court.update", court.venue.event_id, court, area=[before, court.area])
@@ -265,10 +264,7 @@ def _post_delay(db: Session, request: Request, principal: Principal, event: Even
 
 @router.post("/courts/{court_id}/delay-notices", status_code=201)
 def post_delay_notice(court_id: str, body: DelayNoticeIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
-    court = db.get(Court, parse_uuid(court_id))
-    if court is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    require_event_role(principal, court.venue.event_id, STAFF)
+    court = get_owned(db, principal, Court, court_id)
     notice = _post_delay(db, request, principal, db.get(Event, court.venue.event_id), court, body)
     db.commit()
     return {"data": P.delay_notice_public(notice)}
