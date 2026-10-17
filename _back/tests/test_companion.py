@@ -273,6 +273,13 @@ def test_delay_never_changes_official_start_and_expires_with_demo_clock(
     data = client.get(f"/v1/matches/{match.id}").json()["data"]
     assert data["scheduled_start"] == original.isoformat()
     assert data["estimate_source"] == "OVA staff" and "Hall C" in data["court"]["label"]
+    match.status = "final"
+    db.commit()
+    completed = client.get(f"/v1/matches/{match.id}").json()["data"]
+    assert completed["delay_notice"] is None
+    assert completed["estimated_start"] is None
+    match.status = "scheduled"
+    db.commit()
     assert (
         client.post(
             f"/v1/admin/events/{demo.id}/clock",

@@ -31,11 +31,12 @@ def event_now(event):
 
 def match_timing(match, event):
     now = event_now(event)
-    estimate = match.estimated_start
+    upcoming = match.status in ("scheduled", "postponed")
+    estimate = match.estimated_start if upcoming else None
     origin = "Competition source" if estimate else None
     notice = None
     delay = match.court.delay if match.court else {}
-    if delay and datetime.fromisoformat(delay["expires_at"]) > now:
+    if upcoming and delay and datetime.fromisoformat(delay["expires_at"]) > now:
         notice = delay
         newer_source = (
             match.source_updated_at
