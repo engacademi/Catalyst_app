@@ -180,6 +180,10 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
             if ext and entry_id is None:
                 errors.append(f"unknown {slot}_entry_id '{ext}'; import entries first")
             slots[slot] = str(entry_id) if entry_id else None
+        work_ext = d.get("work_entry_id")
+        work_id = _mapping(db, source.id, "entry", work_ext) if work_ext else None
+        if work_ext and work_id is None:
+            errors.append(f"unknown work_entry_id '{work_ext}'; import entries first")
 
         existing = db.scalar(select(Match).where(Match.source_id == source.id, Match.external_id == parsed.external_id))
         extra = {
@@ -189,6 +193,7 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
             "new_court": bool(venue and d["court"] and court is None),
             "home_canonical": slots["home"],
             "away_canonical": slots["away"],
+            "work_canonical": str(work_id) if work_id else None,
         }
         if errors or existing is None:
             out.append(_row(parsed, "add", extra_errors=errors, **extra))
@@ -216,6 +221,7 @@ def _match_state(data: dict, court_id: uuid.UUID | None) -> MatchState:
         home=slot("home"),
         away=slot("away"),
         sets=[tuple(s) for s in data.get("sets", [])],
+        work_entry_id=uuid.UUID(data["work_canonical"]) if data.get("work_canonical") else None,
         source_revision=data.get("source_revision"),
         source_updated_at=_dt(data.get("source_updated_at")),
     )

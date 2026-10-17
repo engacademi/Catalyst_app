@@ -29,8 +29,14 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
     """Return ids grouped for the My Day screen.
 
     matches may contain duplicates (one per followed participant); each match appears once.
+    A match a followed entry only works (referees) is a work duty, not one of its matches.
     """
-    unique = list({m.id: m for m in matches}.values())
+    everything = list({m.id: m for m in matches}.values())
+    unique = [m for m in everything if _followed_in(m, followed)]
+    duties = sorted(
+        (m for m in everything if m.work_entry_id in followed and m.status in OPEN_STATUSES),
+        key=lambda m: (_start(m) or datetime.max.replace(tzinfo=timezone.utc), m.external_id),
+    )
     open_matches = [m for m in unique if m.status in OPEN_STATUSES]
     timed = sorted((m for m in open_matches if _start(m)), key=lambda m: (_start(m), m.external_id))
     awaiting = [m for m in open_matches if not _start(m)]
@@ -70,6 +76,7 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
             )
         ],
         "conflicts": conflicts,
+        "work_duties": [{"match_id": str(m.id), "entry_id": str(m.work_entry_id)} for m in duties],
         "assumed_match_minutes": assumed_minutes,
     }
 

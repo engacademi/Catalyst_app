@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from app.models import (
     ChangeEvent,
     Event,
+    EventEntry,
     Match,
     Organization,
     RosterPublication,
@@ -151,3 +152,19 @@ T1,2,Jordan B.,https://example.org/b.jpg,no
     commit(db, run(db, event, source, "rosters", roster, consent_review_ref="REVIEW-1"))
     published = db.scalar(select(RosterPublication).where(RosterPublication.state == "published"))
     assert [p["photo_url"] for p in published.public_players] == ["https://example.org/a.jpg", None]
+
+
+WORK_HEADER = "external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,work_entry_id,status\n"
+
+
+def test_work_team_is_imported_and_must_be_a_known_entry(db, setup):
+    event, source = setup
+    commit(db, run(db, event, source, "entries", ENTRIES))
+    commit(db, run(db, event, source, "matches", (WORK_HEADER + "M1,15U Boys D1,2027-04-08T09:00,Hall A,Court 1,T1,T2,T3,scheduled\n").encode()))
+    match = db.scalar(select(Match))
+    summit = db.scalar(select(EventEntry).where(EventEntry.team_name == "Summit Strikers"))
+    assert match.work_entry_id == summit.id
+
+    unknown = run(db, event, source, "matches", (WORK_HEADER + "M1,15U Boys D1,2027-04-08T09:00,Hall A,Court 1,T1,T2,T9,scheduled\n").encode())
+    assert unknown.rows[0]["action"] == "error"
+    assert "unknown work_entry_id 'T9'" in unknown.rows[0]["errors"][0]

@@ -83,6 +83,7 @@ export type Match = {
   sets_won: { home: number; away: number } | null;
   source: { id: string; name: string; mode: string; observed_at: string; source_updated_at: string | null; freshness: Freshness };
   latest_change: Change | null;
+  work_entry: { entry_id: string; team_name: string } | null;
 };
 
 export type Announcement = {
@@ -124,6 +125,8 @@ export type Partner = {
 
 export type RosterPlayer = { jersey: number | null; display_name: string; position: string | null; photo_url: string | null };
 
+export type WorkDuty = { match_id: string; entry_id: string };
+
 export type MyDay = {
   next_match_id: string | null;
   next_by_entry: Record<string, string>;
@@ -132,6 +135,7 @@ export type MyDay = {
   completed_ids: string[];
   conflicts: { match_ids: string[]; different_venues: boolean }[];
   assumed_match_minutes: number;
+  work_duties: WorkDuty[];
   entries: Entry[];
   matches: Record<string, Match>;
 };
