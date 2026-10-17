@@ -83,6 +83,7 @@ function DevBridge({ children }: { children: ReactNode }) {
       >
         <option value="dev-admin">dev-admin</option>
         <option value="dev-official">dev-official</option>
+        <option value="dev-coach">dev-coach</option>
         <option value="guest">guest (no roles)</option>
       </select>
     </label>

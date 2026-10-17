@@ -1,152 +1,299 @@
 "use client";
-
 import Link from "next/link";
-import { AlertTriangle, CalendarPlus, HelpCircle } from "lucide-react";
-import { API_BASE } from "@/lib/api";
-import { useFollows } from "@/lib/follows";
-import { dayKey, formatDay } from "@/lib/format";
-import { useMyDay } from "@/lib/queries";
-import { FreshnessNote } from "../freshness";
+import { API_BASE, type Match } from "@/lib/api";
+import { useFollows, useTeamLabel } from "@/lib/follows";
+import { useEvent, useMyDay } from "@/lib/queries";
 import { MatchCard } from "../match-card";
-import { Card, EmptyState, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
+import { FreshnessNote } from "../freshness";
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  Loading,
+  PageTitle,
+  SectionTitle,
+} from "../ui";
 
 export function MyDayView({ eventId }: { eventId: string }) {
-  const { ids } = useFollows(eventId);
-  const query = useMyDay(eventId, ids);
-
-  if (ids.length === 0) {
+  const { directTeamIds, divisionIds } = useFollows(eventId);
+  const query = useMyDay(eventId, directTeamIds);
+  const event = useEvent(eventId);
+  if (!directTeamIds.length && !divisionIds.length)
     return (
-      <div>
+      <>
         <PageTitle>My Day</PageTitle>
-        <EmptyState title="You aren't following any teams yet">
-          <p>Follow one or more teams and their matches show up here in one schedule.</p>
-          <Link href={`/events/${eventId}/teams`} className="mt-3 inline-block font-semibold text-brand underline">
-            Find teams
+        <EmptyState title="Make the event yours">
+          <p>Follow your teams or a division to see what happens next.</p>
+          <Link
+            href={`/events/${eventId}/teams`}
+            className="mt-3 inline-flex min-h-11 items-center font-semibold text-brand underline"
+          >
+            Find teams & divisions →
           </Link>
         </EmptyState>
-        <DeviceNote />
-      </div>
+      </>
     );
-  }
-  if (query.isPending) return <Loading label="Building your day" />;
-  if (query.error) return <ErrorState error={query.error} />;
-
-  const day = query.data.data;
-  const m = (id: string) => day.matches[id];
-  const next = day.next_match_id ? m(day.next_match_id) : null;
-  const conflictIds = new Set(day.conflicts.flatMap((c) => c.match_ids));
-  const upcoming = day.upcoming_ids.filter((id) => id !== day.next_match_id);
-  const byDay = new Map<string, string[]>();
-  for (const id of upcoming) {
-    const match = m(id);
-    const key = dayKey(match.estimated_start ?? match.scheduled_start, match.timezone);
-    byDay.set(key, [...(byDay.get(key) ?? []), id]);
-  }
-
+  const day = query.data?.data;
+  const next = day?.next_match_id ? day.matches[day.next_match_id] : null;
   return (
     <div>
-      <PageTitle subtitle={`Following ${day.entries.map((e) => e.team_name).join(", ")}`}>My Day</PageTitle>
-
-      <section aria-labelledby="next-match">
-        <h2 id="next-match" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-          Next match
-        </h2>
-        {next ? (
-          <MatchCard match={next} eventId={eventId} followed={ids} showDay />
+      <PageTitle subtitle="Your teams first. The wider competition just below.">
+        My Day
+      </PageTitle>
+      <Link
+        href={`/events/${eventId}/my-teams`}
+        className="mb-4 inline-flex min-h-11 items-center rounded-full border border-border bg-surface px-4 text-sm font-semibold text-brand"
+      >
+        Manage my teams & labels →
+      </Link>
+      {!!directTeamIds.length &&
+        (query.isPending ? (
+          <Loading label="Building your day" />
+        ) : query.error ? (
+          <ErrorState error={query.error} />
         ) : (
-          <EmptyState title="No upcoming matches with a confirmed time" />
-        )}
-      </section>
-
-      {day.conflicts.length > 0 && (
-        <section aria-labelledby="overlaps" className="mt-6">
-          <h2 id="overlaps" className="sr-only">
-            Overlapping matches
-          </h2>
-          {day.conflicts.map((c) => (
-            <div key={c.match_ids.join()} role="note" className="mb-2 flex gap-2 rounded-xl border border-warn/40 bg-warn-soft p-3 text-sm text-warn">
-              <AlertTriangle aria-hidden className="h-5 w-5 shrink-0" />
-              <p>
-                {c.match_ids.length} of your matches may overlap
-                {c.different_venues ? " and are in different venues" : ""}:{" "}
-                {c.match_ids
-                  .map((id) => {
-                    const x = m(id);
-                    return `${x.home.team_name ?? x.home.placeholder} vs ${x.away.team_name ?? x.away.placeholder}`;
-                  })
-                  .join("; ")}
-                . This assumes each match takes about {day.assumed_match_minutes} minutes.
-              </p>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {[...byDay.entries()].map(([key, matchIds]) => (
-        <section key={key}>
-          <SectionTitle>{formatDay(m(matchIds[0]).scheduled_start ?? m(matchIds[0]).estimated_start, m(matchIds[0]).timezone)}</SectionTitle>
-          <ul className="space-y-2">
-            {matchIds.map((id) => (
-              <li key={id} className={conflictIds.has(id) ? "rounded-xl ring-2 ring-warn/50" : ""}>
-                <MatchCard match={m(id)} eventId={eventId} followed={ids} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-
-      {day.awaiting_schedule_ids.length > 0 && (
+          day && (
+            <>
+              <section aria-labelledby="next-match">
+                <h2
+                  id="next-match"
+                  className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted"
+                >
+                  Next match
+                </h2>
+                {next ? (
+                  <LabelledMatch
+                    match={next}
+                    eventId={eventId}
+                    followed={directTeamIds}
+                  />
+                ) : (
+                  <EmptyState title="No upcoming matches with a confirmed time" />
+                )}
+              </section>
+              {day.conflicts.map((c) => (
+                <div
+                  key={c.match_ids.join()}
+                  role="note"
+                  className="mt-4 rounded-xl border border-warn/40 bg-warn-soft p-4 text-sm text-warn"
+                >
+                  <p className="font-semibold">
+                    {c.match_ids.length} matches may overlap
+                    {c.different_venues ? " across different venues" : ""}
+                  </p>
+                  <p className="mt-1">
+                    {c.match_ids
+                      .map((id) => {
+                        const m = day.matches[id];
+                        return `${m.home.team_name ?? m.home.placeholder} vs ${m.away.team_name ?? m.away.placeholder}`;
+                      })
+                      .join("; ")}
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Assumes {day.assumed_match_minutes} minutes per match, using
+                    estimated starts where available.
+                  </p>
+                </div>
+              ))}
+              <MatchSection
+                title="Coming up"
+                ids={day.upcoming_ids.filter((id) => id !== day.next_match_id)}
+                matches={day.matches}
+                eventId={eventId}
+                followed={directTeamIds}
+              />
+              {!!day.work_duties?.length && (
+                <section>
+                  <SectionTitle>Work duties</SectionTitle>
+                  <p className="mb-2 text-xs text-muted">
+                    Your team is assigned to officiate these matches by the
+                    competition source.
+                  </p>
+                  <ul className="space-y-2">
+                    {day.work_duties.map((m) => (
+                      <li key={m.id}>
+                        <Card className="border-info/30">
+                          <p className="mb-2 text-sm font-semibold text-info">
+                            Work duty · referee / scorekeeping
+                          </p>
+                          <MatchCard match={m} eventId={eventId} showDay />
+                        </Card>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              <MatchSection
+                title="Awaiting schedule"
+                ids={day.awaiting_schedule_ids}
+                matches={day.matches}
+                eventId={eventId}
+                followed={directTeamIds}
+              />
+              <MatchSection
+                title="Results"
+                ids={day.completed_ids}
+                matches={day.matches}
+                eventId={eventId}
+                followed={directTeamIds}
+              />
+              <FreshnessNote sources={query.data?.sources} />
+            </>
+          )
+        ))}
+      {divisionIds.length > 0 && (
         <section>
-          <SectionTitle>
-            <span className="flex items-center gap-2">
-              <HelpCircle aria-hidden className="h-4 w-4 text-muted" /> Awaiting schedule
-            </span>
-          </SectionTitle>
-          <ul className="space-y-2">
-            {day.awaiting_schedule_ids.map((id) => (
-              <li key={id}>
-                <MatchCard match={m(id)} eventId={eventId} followed={ids} />
-              </li>
+          <SectionTitle>Divisions you follow</SectionTitle>
+          <div className="space-y-3">
+            {divisionIds.map((id) => (
+              <DivisionDay
+                key={id}
+                eventId={eventId}
+                id={id}
+                name={
+                  event.data?.data.divisions.find((d) => d.id === id)?.name ??
+                  "Followed division"
+                }
+              />
             ))}
-          </ul>
+          </div>
         </section>
       )}
-
-      {day.completed_ids.length > 0 && (
-        <section>
-          <SectionTitle>Results</SectionTitle>
-          <ul className="space-y-2">
-            {day.completed_ids.map((id) => (
-              <li key={id}>
-                <MatchCard match={m(id)} eventId={eventId} followed={ids} showDay />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       <Card className="mt-6">
         <a
-          href={`${API_BASE}/v1/events/${eventId}/calendar.ics?entry_ids=${ids.slice(0, 20).join(",")}`}
-          className="inline-flex min-h-11 items-center gap-2 font-semibold text-brand underline"
+          href={`${API_BASE}/v1/events/${eventId}/calendar.ics?entry_ids=${directTeamIds.join(",")}&division_ids=${divisionIds.join(",")}`}
+          className="inline-flex min-h-11 items-center font-semibold text-brand underline"
         >
-          <CalendarPlus aria-hidden className="h-4 w-4" /> Add these matches to your calendar
+          Download matches to calendar
         </a>
-        <p className="mt-1 text-xs text-muted">
-          This is a one-time snapshot. If times change, the calendar won&apos;t update, so check here on the day.
+        <p className="text-xs text-muted">
+          One-time snapshot. Times will not update automatically.
         </p>
       </Card>
-
-      <DeviceNote />
-      <FreshnessNote sources={query.data.sources} />
+      <p className="mt-4 text-xs text-muted">
+        Your follows and labels stay on this device. Following grants no coach
+        or guardian access.
+      </p>
     </div>
   );
 }
-
-function DeviceNote() {
+function LabelledMatch({
+  match,
+  eventId,
+  followed,
+}: {
+  match: Match;
+  eventId: string;
+  followed: string[];
+}) {
+  const home = useTeamLabel(eventId, match.home.entry_id ?? "");
+  const away = useTeamLabel(eventId, match.away.entry_id ?? "");
+  const labels = [
+    followed.includes(match.home.entry_id ?? "") ? home.label : "",
+    followed.includes(match.away.entry_id ?? "") ? away.label : "",
+  ].filter(Boolean);
   return (
-    <p className="mt-4 text-xs text-muted">
-      Your followed teams are saved on this device only. Following a team doesn&apos;t make you a verified coach or guardian.
-    </p>
+    <div>
+      {labels.length > 0 && (
+        <p className="mb-1 px-1 text-sm font-semibold text-brand">
+          {labels.join(" · ")}
+        </p>
+      )}
+      <MatchCard match={match} eventId={eventId} followed={followed} showDay />
+    </div>
+  );
+}
+function MatchSection({
+  title,
+  ids,
+  matches,
+  eventId,
+  followed,
+}: {
+  title: string;
+  ids: string[];
+  matches: Record<string, Match>;
+  eventId: string;
+  followed: string[];
+}) {
+  return ids.length ? (
+    <section>
+      <SectionTitle>{title}</SectionTitle>
+      <ul className="space-y-3">
+        {ids.map((id) => (
+          <li key={id}>
+            <LabelledMatch
+              match={matches[id]}
+              eventId={eventId}
+              followed={followed}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
+  ) : null;
+}
+function DivisionDay({
+  eventId,
+  id,
+  name,
+}: {
+  eventId: string;
+  id: string;
+  name: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+      className="rounded-xl border border-border bg-surface"
+    >
+      <summary className="min-h-12 cursor-pointer p-4 text-sm font-semibold">
+        {name}
+      </summary>
+      {open && <DivisionContents eventId={eventId} id={id} />}
+    </details>
+  );
+}
+import { useState } from "react";
+function DivisionContents({ eventId, id }: { eventId: string; id: string }) {
+  const query = useMyDay(eventId, [], [id]);
+  const day = query.data?.data;
+  return (
+    <div className="px-4 pb-4">
+      {query.isPending ? (
+        <Loading />
+      ) : query.error ? (
+        <ErrorState error={query.error} />
+      ) : day ? (
+        <>
+          <MatchSection
+            title="Division schedule"
+            ids={[...day.upcoming_ids, ...day.awaiting_schedule_ids]}
+            matches={day.matches}
+            eventId={eventId}
+            followed={[]}
+          />
+          <MatchSection
+            title="Division results"
+            ids={day.completed_ids}
+            matches={day.matches}
+            eventId={eventId}
+            followed={[]}
+          />
+          {!day.upcoming_ids.length &&
+            !day.awaiting_schedule_ids.length &&
+            !day.completed_ids.length && (
+              <EmptyState title="No matches published yet" />
+            )}
+        </>
+      ) : null}
+      <Link
+        href={`/events/${eventId}/pathway`}
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline"
+      >
+        Open pool & playoff path →
+      </Link>
+    </div>
   );
 }

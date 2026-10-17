@@ -32,6 +32,7 @@ from app.models import (
     Venue,
     utcnow,
 )
+from app.modules.operations import stage_assignments, commit_assignments
 from app.modules.matches import (
     MatchState,
     Slot,
@@ -41,7 +42,9 @@ from app.modules.matches import (
 )
 
 
-def _mapping(db: Session, source_id: uuid.UUID, entity_type: str, external_id: str) -> uuid.UUID | None:
+def _mapping(
+    db: Session, source_id: uuid.UUID, entity_type: str, external_id: str
+) -> uuid.UUID | None:
     return db.scalar(
         select(ExternalMapping.canonical_id).where(
             ExternalMapping.source_id == source_id,
@@ -52,15 +55,21 @@ def _mapping(db: Session, source_id: uuid.UUID, entity_type: str, external_id: s
 
 
 def _division(db: Session, event_id: uuid.UUID, name: str) -> Division | None:
-    return db.scalar(select(Division).where(Division.event_id == event_id, Division.name == name))
+    return db.scalar(
+        select(Division).where(Division.event_id == event_id, Division.name == name)
+    )
 
 
 def _venue(db: Session, event_id: uuid.UUID, name: str) -> Venue | None:
-    return db.scalar(select(Venue).where(Venue.event_id == event_id, Venue.name == name))
+    return db.scalar(
+        select(Venue).where(Venue.event_id == event_id, Venue.name == name)
+    )
 
 
 def _court(db: Session, venue_id: uuid.UUID, label: str) -> Court | None:
-    return db.scalar(select(Court).where(Court.venue_id == venue_id, Court.label == label))
+    return db.scalar(
+        select(Court).where(Court.venue_id == venue_id, Court.label == label)
+    )
 
 
 def _dt(value: str | None) -> datetime | None:
@@ -80,21 +89,33 @@ def stage_import(
 ) -> ImportBatch:
     settings = get_settings()
     if len(content) > settings.import_max_bytes:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File is larger than 5 MB")
-    adapter = ADAPTERS.get(source.mode)
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "File is larger than 5 MB"
+        )
+    adapter = ADAPTERS.get("manual_import")
     if adapter is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Source mode {source.mode} has no import adapter")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Source mode {source.mode} has no import adapter",
+        )
 
-    parsed = adapter.parse(kind, content, timezone=event.timezone, strict=options.get("strict", True))
+    parsed = adapter.parse(
+        kind, content, timezone=event.timezone, strict=options.get("strict", True)
+    )
     errors = list(parsed.errors)
     if len(parsed.rows) > settings.import_max_rows:
         errors.append(f"File has more than {settings.import_max_rows} rows")
 
     staged: list[dict[str, Any]] = []
     if not errors:
-        staged = {"entries": _stage_entries, "matches": _stage_matches, "rosters": _stage_rosters}[kind](
-            db, event, source, parsed.rows
-        )
+        staged = {
+            "entries": _stage_entries,
+            "matches": _stage_matches,
+            "rosters": lambda db, event, source, rows: _stage_rosters(
+                db, event, source, rows, options
+            ),
+            "assignments": stage_assignments,
+        }[kind](db, event, source, parsed.rows)
 
     file_hash = hashlib.sha256(content).hexdigest()
     previous = db.scalar(
@@ -130,7 +151,13 @@ def stage_import(
     return batch
 
 
-def _row(parsed, action: str, changes: list[str] | None = None, extra_errors: list[str] | None = None, **data):
+def _row(
+    parsed,
+    action: str,
+    changes: list[str] | None = None,
+    extra_errors: list[str] | None = None,
+    **data,
+):
     errs = parsed.errors + (extra_errors or [])
     return {
         "row": parsed.row,
@@ -157,7 +184,14 @@ def _stage_entries(db: Session, event: Event, source: Source, rows) -> list[dict
             changes.append("club_name")
         if (entry.division.name if entry.division else None) != parsed.data["division"]:
             changes.append("division")
-        out.append(_row(parsed, "change" if changes else "unchanged", changes, entry_id=str(entry.id)))
+        out.append(
+            _row(
+                parsed,
+                "change" if changes else "unchanged",
+                changes,
+                entry_id=str(entry.id),
+            )
+        )
     return out
 
 
@@ -171,7 +205,9 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
             errors.append(f"unknown division '{d['division']}'; import entries first")
         venue = _venue(db, event.id, d["venue"]) if d["venue"] else None
         if d["venue"] and venue is None:
-            errors.append(f"unknown venue '{d['venue']}'; add it in Event content first")
+            errors.append(
+                f"unknown venue '{d['venue']}'; add it in Event content first"
+            )
         court = _court(db, venue.id, d["court"]) if venue and d["court"] else None
         slots = {}
         for slot in ("home", "away"):
@@ -181,7 +217,15 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
                 errors.append(f"unknown {slot}_entry_id '{ext}'; import entries first")
             slots[slot] = str(entry_id) if entry_id else None
 
-        existing = db.scalar(select(Match).where(Match.source_id == source.id, Match.external_id == parsed.external_id))
+        if d.get("work_entry_id") and not _mapping(
+            db, source.id, "entry", d["work_entry_id"]
+        ):
+            errors.append("Unknown work_entry_id; import entries first")
+        existing = db.scalar(
+            select(Match).where(
+                Match.source_id == source.id, Match.external_id == parsed.external_id
+            )
+        )
         extra = {
             "division_id": str(division.id) if division else None,
             "venue_id": str(venue.id) if venue else None,
@@ -193,18 +237,51 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
         if errors or existing is None:
             out.append(_row(parsed, "add", extra_errors=errors, **extra))
             continue
+        incoming_time = _dt(d.get("source_updated_at"))
+        if (
+            incoming_time
+            and existing.source_updated_at
+            and incoming_time < existing.source_updated_at
+        ):
+            out.append(
+                _row(
+                    parsed,
+                    "error",
+                    extra_errors=["Older source payload; current match preserved"],
+                    **extra,
+                )
+            )
+            continue
         after = _match_state({**d, **extra}, court_id=court.id if court else None)
         changes = changed_fields(current_state(existing), after)
+        if existing.work_entry_id != (
+            _mapping(db, source.id, "entry", d["work_entry_id"])
+            if d.get("work_entry_id")
+            else None
+        ):
+            changes.append("work_team")
+        if d.get("court_area") and court and court.area_label != d["court_area"]:
+            changes.append("court_area")
         if extra["new_court"]:
             changes.append("court_id")
-        out.append(_row(parsed, "change" if changes else "unchanged", sorted(set(changes)), match_id=str(existing.id), **extra))
+        out.append(
+            _row(
+                parsed,
+                "change" if changes else "unchanged",
+                sorted(set(changes)),
+                match_id=str(existing.id),
+                **extra,
+            )
+        )
     return out
 
 
 def _match_state(data: dict, court_id: uuid.UUID | None) -> MatchState:
     def slot(name: str) -> Slot:
         canonical = data.get(f"{name}_canonical")
-        return Slot(uuid.UUID(canonical) if canonical else None, data.get(f"{name}_placeholder"))
+        return Slot(
+            uuid.UUID(canonical) if canonical else None, data.get(f"{name}_placeholder")
+        )
 
     return MatchState(
         division_id=uuid.UUID(data["division_id"]) if data.get("division_id") else None,
@@ -221,14 +298,18 @@ def _match_state(data: dict, court_id: uuid.UUID | None) -> MatchState:
     )
 
 
-def _latest_roster(db: Session, entry_id: uuid.UUID, published_only: bool = True) -> RosterPublication | None:
+def _latest_roster(
+    db: Session, entry_id: uuid.UUID, published_only: bool = True
+) -> RosterPublication | None:
     stmt = select(RosterPublication).where(RosterPublication.entry_id == entry_id)
     if published_only:
         stmt = stmt.where(RosterPublication.state == "published")
     return db.scalar(stmt.order_by(RosterPublication.version.desc()).limit(1))
 
 
-def _stage_rosters(db: Session, event: Event, source: Source, rows) -> list[dict]:
+def _stage_rosters(
+    db: Session, event: Event, source: Source, rows, options=None
+) -> list[dict]:
     groups: dict[str, list] = {}
     for parsed in rows:
         groups.setdefault(parsed.external_id, []).append(parsed)
@@ -238,18 +319,39 @@ def _stage_rosters(db: Session, event: Event, source: Source, rows) -> list[dict
         jerseys = [p.data["jersey"] for p in members if p.data["jersey"] is not None]
         if len(jerseys) != len(set(jerseys)):
             errors.append("jersey numbers repeat within the team")
-        entry_id = _mapping(db, source.id, "entry", external_id) if external_id else None
+        mapped = (options or {}).get("team_mapping", {}).get(external_id)
+        entry_id = (
+            uuid.UUID(mapped)
+            if mapped
+            else (
+                _mapping(db, source.id, "entry", external_id) if external_id else None
+            )
+        )
+        if entry_id and not db.scalar(
+            select(EventEntry.id).where(
+                EventEntry.id == entry_id, EventEntry.event_id == event.id
+            )
+        ):
+            entry_id = None
         if external_id and entry_id is None:
-            errors.append(f"unknown external_entry_id '{external_id}'; import entries first")
+            errors.append(
+                f"unknown external_entry_id '{external_id}'; import entries first"
+            )
         players = sorted(
             (
-                {k: p.data[k] for k in ("jersey", "display_name", "position", "photo_url")}
+                {
+                    k: p.data[k]
+                    for k in ("jersey", "display_name", "position", "photo_url")
+                }
                 for p in members
                 if not p.errors
             ),
             key=lambda p: (p["jersey"] is None, p["jersey"]),
         )
-        team_photo = next((p.data["team_photo_url"] for p in members if p.data.get("team_photo_url")), None)
+        team_photo = next(
+            (p.data["team_photo_url"] for p in members if p.data.get("team_photo_url")),
+            None,
+        )
         withheld = sum(1 for p in members if p.data.get("photo_withheld"))
         row = {
             "row": members[0].row,
@@ -267,15 +369,22 @@ def _stage_rosters(db: Session, event: Event, source: Source, rows) -> list[dict
         if not errors:
             current = _latest_roster(db, entry_id)
             if current:
-                same = current.public_players == players and current.team_photo_url == team_photo
+                same = (
+                    current.public_players == players
+                    and current.team_photo_url == team_photo
+                )
                 row["action"] = "unchanged" if same else "change"
                 row["changes"] = [] if same else ["players"]
         out.append(row)
     return out
 
 
-def commit_import(db: Session, batch_id: uuid.UUID, actor_id: uuid.UUID | None, request_id: str | None) -> ImportBatch:
-    batch = db.scalar(select(ImportBatch).where(ImportBatch.id == batch_id).with_for_update())
+def commit_import(
+    db: Session, batch_id: uuid.UUID, actor_id: uuid.UUID | None, request_id: str | None
+) -> ImportBatch:
+    batch = db.scalar(
+        select(ImportBatch).where(ImportBatch.id == batch_id).with_for_update()
+    )
     if batch is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Import not found")
     if batch.state == "committed":
@@ -283,25 +392,44 @@ def commit_import(db: Session, batch_id: uuid.UUID, actor_id: uuid.UUID | None, 
     if batch.state != "staged":
         raise HTTPException(status.HTTP_409_CONFLICT, f"Import is {batch.state}")
     if batch.errors or any(r["action"] == "error" for r in batch.rows):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Fix the errors and upload again before committing")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Fix the errors and upload again before committing",
+        )
 
-    source = db.scalar(select(Source).where(Source.id == batch.source_id).with_for_update())
+    source = db.scalar(
+        select(Source).where(Source.id == batch.source_id).with_for_update()
+    )
     if source.generation != batch.expected_source_generation:
         batch.state = "rejected"
-        batch.summary = {**batch.summary, "rejected_reason": "source changed since preview"}
+        batch.summary = {
+            **batch.summary,
+            "rejected_reason": "source changed since preview",
+        }
         db.commit()
-        raise HTTPException(status.HTTP_409_CONFLICT, "The source changed since this preview. Upload the file again.")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "The source changed since this preview. Upload the file again.",
+        )
     event = db.get(Event, batch.event_id)
 
-    changes = {"entries": _commit_entries, "matches": _commit_matches, "rosters": _commit_rosters}[batch.kind](
-        db, event, source, batch, actor_id
-    )
+    changes = {
+        "entries": _commit_entries,
+        "matches": _commit_matches,
+        "rosters": _commit_rosters,
+        "assignments": commit_assignments,
+    }[batch.kind](db, event, source, batch, actor_id)
 
     now = utcnow()
+    source.config = {**source.config, "last_sync_success": False}
     source.generation += 1
     source.last_import_at = now
     source.last_successful_check_at = now
-    upstream = [r["data"].get("source_updated_at") for r in batch.rows if r["data"].get("source_updated_at")]
+    upstream = [
+        r["data"].get("source_updated_at")
+        for r in batch.rows
+        if r["data"].get("source_updated_at")
+    ]
     if upstream:
         source.upstream_updated_at = max(datetime.fromisoformat(u) for u in upstream)
     event.revision += 1
@@ -318,28 +446,47 @@ def commit_import(db: Session, batch_id: uuid.UUID, actor_id: uuid.UUID | None, 
             old_revision=batch.expected_source_generation,
             new_revision=source.generation,
             request_id=request_id,
-            summary={k: batch.summary.get(k) for k in ("add", "change", "unchanged", "change_events")},
+            summary={
+                k: batch.summary.get(k)
+                for k in ("add", "change", "unchanged", "change_events")
+            },
         )
     )
     db.commit()
     return batch
 
 
-def _commit_entries(db: Session, event: Event, source: Source, batch: ImportBatch, actor_id) -> int:
+def _commit_entries(
+    db: Session, event: Event, source: Source, batch: ImportBatch, actor_id
+) -> int:
     for row in batch.rows:
         if row["action"] == "unchanged":
             continue
         d = row["data"]
         division = _division(db, event.id, d["division"])
         if division is None:
-            division = Division(event_id=event.id, name=d["division"], code=d.get("division_code"))
+            division = Division(
+                event_id=event.id, name=d["division"], code=d.get("division_code")
+            )
             db.add(division)
             db.flush()
         if row["action"] == "add":
-            entry = EventEntry(event_id=event.id, team_name=d["team_name"], club_name=d["club_name"], division_id=division.id)
+            entry = EventEntry(
+                event_id=event.id,
+                team_name=d["team_name"],
+                club_name=d["club_name"],
+                division_id=division.id,
+            )
             db.add(entry)
             db.flush()
-            db.add(ExternalMapping(source_id=source.id, entity_type="entry", external_id=row["external_id"], canonical_id=entry.id))
+            db.add(
+                ExternalMapping(
+                    source_id=source.id,
+                    entity_type="entry",
+                    external_id=row["external_id"],
+                    canonical_id=entry.id,
+                )
+            )
             continue
         entry = db.get(EventEntry, uuid.UUID(d["entry_id"]))
         entry.team_name = d["team_name"]
@@ -348,7 +495,9 @@ def _commit_entries(db: Session, event: Event, source: Source, batch: ImportBatc
     return 0
 
 
-def _commit_matches(db: Session, event: Event, source: Source, batch: ImportBatch, actor_id) -> int:
+def _commit_matches(
+    db: Session, event: Event, source: Source, batch: ImportBatch, actor_id
+) -> int:
     emitted = 0
     for row in batch.rows:
         if row["action"] == "unchanged":
@@ -364,18 +513,48 @@ def _commit_matches(db: Session, event: Event, source: Source, batch: ImportBatc
                 db.flush()
             court_id = court.id
         state = _match_state(d, court_id)
+        if court_id and d.get("court_area"):
+            db.get(Court, court_id).area_label = d["court_area"]
         if row["action"] == "add":
-            match = Match(event_id=event.id, source_id=source.id, external_id=row["external_id"])
+            match = Match(
+                event_id=event.id, source_id=source.id, external_id=row["external_id"]
+            )
             db.add(match)
             db.flush()
             apply_match_state(db, match, state, is_new=True)
         else:
             match = db.get(Match, uuid.UUID(d["match_id"]))
             emitted += len(apply_match_state(db, match, state, simulated=event.is_demo))
+        work_id = (
+            _mapping(db, source.id, "entry", d["work_entry_id"])
+            if d.get("work_entry_id")
+            else None
+        )
+        if match.work_entry_id != work_id:
+            match.work_entry_id = work_id
+            if row["action"] != "add":
+                from app.models import ChangeEvent
+
+                match.revision += 1
+                db.add(
+                    ChangeEvent(
+                        event_id=event.id,
+                        entity_type="match",
+                        entity_id=match.id,
+                        entity_revision=match.revision,
+                        event_type="work_assigned",
+                        entry_ids=[str(work_id)] if work_id else [],
+                        diff={"work_entry_id": str(work_id) if work_id else None},
+                        simulated=event.is_demo,
+                    )
+                )
+                emitted += 1
     return emitted
 
 
-def _commit_rosters(db: Session, event: Event, source: Source, batch: ImportBatch, actor_id) -> int:
+def _commit_rosters(
+    db: Session, event: Event, source: Source, batch: ImportBatch, actor_id
+) -> int:
     review_ref = batch.options.get("consent_review_ref")
     for row in batch.rows:
         if row["action"] == "unchanged":
@@ -383,12 +562,15 @@ def _commit_rosters(db: Session, event: Event, source: Source, batch: ImportBatc
         d = row["data"]
         entry_id = uuid.UUID(d["entry_id"])
         latest_version = db.scalar(
-            select(func.max(RosterPublication.version)).where(RosterPublication.entry_id == entry_id)
+            select(func.max(RosterPublication.version)).where(
+                RosterPublication.entry_id == entry_id
+            )
         )
         if review_ref:
             for old in db.scalars(
                 select(RosterPublication).where(
-                    RosterPublication.entry_id == entry_id, RosterPublication.state == "published"
+                    RosterPublication.entry_id == entry_id,
+                    RosterPublication.state == "published",
                 )
             ):
                 old.state = "superseded"
@@ -397,10 +579,19 @@ def _commit_rosters(db: Session, event: Event, source: Source, batch: ImportBatc
                 entry_id=entry_id,
                 version=(latest_version or 0) + 1,
                 # Without a recorded consent review the roster stays a draft and isn't public.
-                state="published" if review_ref else "draft",
+                state="published"
+                if review_ref and not batch.options.get("require_review")
+                else "draft",
                 public_players=d["players"],
                 team_photo_url=d.get("team_photo_url"),
                 consent_review_ref=review_ref,
+                review={
+                    "source": source.name,
+                    "import_batch": str(batch.id),
+                    "photos_withheld": d.get("photos_withheld", 0),
+                    "state": "pending",
+                    "required": batch.options.get("require_review", False),
+                },
                 reviewed_by=actor_id if review_ref else None,
                 published_at=utcnow() if review_ref else None,
             )

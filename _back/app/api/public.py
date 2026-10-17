@@ -1,7 +1,7 @@
 """Public read endpoints. No token needed; only approved projections leave this module."""
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -46,11 +46,39 @@ def load_event(db: Session, ref: str, *, include_unpublished: bool = False) -> E
     event = db.scalar(
         select(Event)
         .where(clause)
-        .options(selectinload(Event.venues).selectinload(Venue.courts), selectinload(Event.sources))
+        .options(
+            selectinload(Event.venues).selectinload(Venue.courts),
+            selectinload(Event.sources),
+        )
     )
     if event is None or (not include_unpublished and event.status != "published"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Event not found")
     return event
+
+
+def selection(
+    db: Session, event: Event, entry_ids: str | None, division_ids: str | None
+):
+    entries = parse_uuid_list(entry_ids) or []
+    divisions = parse_uuid_list(division_ids) or []
+    if not entries and not divisions:
+        return [], []
+    selected = list(
+        db.scalars(
+            select(EventEntry.id).where(
+                EventEntry.event_id == event.id,
+                or_(EventEntry.id.in_(entries), EventEntry.division_id.in_(divisions)),
+            )
+        )
+    )
+    valid_divisions = list(
+        db.scalars(
+            select(Division.id).where(
+                Division.event_id == event.id, Division.id.in_(divisions)
+            )
+        )
+    )
+    return selected, valid_divisions
 
 
 def sources_envelope(event: Event) -> list[dict]:
@@ -65,7 +93,10 @@ def project_matches(db: Session, event: Event, matches: list[Match]) -> list[dic
 @router.get("/events")
 def list_events(request: Request, db: DB) -> Response:
     events = db.scalars(
-        select(Event).where(Event.status == "published").order_by(Event.start_date.desc()).options(selectinload(Event.venues))
+        select(Event)
+        .where(Event.status == "published")
+        .order_by(Event.start_date.desc())
+        .options(selectinload(Event.venues))
     )
     data = [{**P.event_public(e), "venues": [v.name for v in e.venues]} for e in events]
     return json_response(request, {"data": data}, max_age=60)
@@ -74,9 +105,13 @@ def list_events(request: Request, db: DB) -> Response:
 @router.get("/events/{event_ref}")
 def get_event(event_ref: str, request: Request, db: DB) -> Response:
     event = load_event(db, event_ref)
-    divisions = db.scalars(select(Division).where(Division.event_id == event.id).order_by(Division.name))
+    divisions = db.scalars(
+        select(Division).where(Division.event_id == event.id).order_by(Division.name)
+    )
     counts = {
-        "entries": db.scalar(select(func.count()).where(EventEntry.event_id == event.id)),
+        "entries": db.scalar(
+            select(func.count()).where(EventEntry.event_id == event.id)
+        ),
         "matches": db.scalar(select(func.count()).where(Match.event_id == event.id)),
     }
     payload = {
@@ -121,8 +156,12 @@ def search_teams(
     if division_id:
         stmt = stmt.where(EventEntry.division_id == parse_uuid(division_id, "division"))
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
-    entries = db.scalars(stmt.order_by(Division.name, EventEntry.team_name).limit(limit).offset(offset))
-    return json_response(request, {"data": [P.entry_public(e) for e in entries], "total": total})
+    entries = db.scalars(
+        stmt.order_by(Division.name, EventEntry.team_name).limit(limit).offset(offset)
+    )
+    return json_response(
+        request, {"data": [P.entry_public(e) for e in entries], "total": total}
+    )
 
 
 @router.get("/events/{event_ref}/matches")
@@ -131,7 +170,10 @@ def list_matches(
     request: Request,
     db: DB,
     entry_ids: str | None = None,
-    status_group: str = Query("all", alias="status", pattern="^(all|upcoming|in_progress|results)$"),
+    division_ids: str | None = None,
+    status_group: str = Query(
+        "all", alias="status", pattern="^(all|upcoming|in_progress|results)$"
+    ),
     court_id: str | None = None,
     venue_id: str | None = None,
     division_id: str | None = None,
@@ -142,7 +184,10 @@ def list_matches(
     event = load_event(db, event_ref)
     stmt = match_query(
         event.id,
-        entry_ids=parse_uuid_list(entry_ids),
+        entry_ids=selection(db, event, entry_ids, division_ids)[0]
+        if entry_ids is not None or division_ids is not None
+        else None,
+        division_ids=selection(db, event, entry_ids, division_ids)[1],
         status_group=status_group,
         court_id=parse_uuid(court_id, "court") if court_id else None,
         venue_id=parse_uuid(venue_id, "venue") if venue_id else None,
@@ -169,10 +214,21 @@ def my_day(
     db: DB,
     settings: Annotated[Settings, Depends(get_settings)],
     entry_ids: str = "",
+    division_ids: str = "",
 ) -> Response:
     event = load_event(db, event_ref)
-    followed = parse_uuid_list(entry_ids) or []
-    matches = list(db.scalars(match_query(event.id, entry_ids=followed))) if followed else []
+    followed, followed_divisions = selection(db, event, entry_ids, division_ids)
+    matches = (
+        list(
+            db.scalars(
+                match_query(
+                    event.id, entry_ids=followed, division_ids=followed_divisions
+                )
+            )
+        )
+        if followed or followed_divisions
+        else []
+    )
     entries = (
         db.scalars(
             select(EventEntry)
@@ -182,10 +238,30 @@ def my_day(
         if followed
         else []
     )
-    summary = build_my_day(matches, set(followed), settings.assumed_match_minutes)
+    playing = [
+        m
+        for m in matches
+        if any(p.entry_id in followed for p in m.participants)
+        or m.division_id in followed_divisions
+    ]
+    starts = {
+        m.id: datetime.fromisoformat(P.match_timing(m, event)["estimated_start"])
+        if P.match_timing(m, event)["estimated_start"]
+        else m.scheduled_start
+        for m in playing
+    }
+    summary = build_my_day(
+        playing, set(followed), settings.assumed_match_minutes, start_times=starts
+    )
     payload = {
         "data": {
             **summary,
+            "work_duties": [
+                P.match_public(m, event)
+                for m in matches
+                if m.work_entry_id in followed
+                and m.status not in ("completed", "cancelled")
+            ],
             "entries": [P.entry_public(e) for e in entries],
             "matches": {m["id"]: m for m in project_matches(db, event, matches)},
         },
@@ -201,6 +277,7 @@ def change_feed(
     request: Request,
     db: DB,
     after: int = Query(0, ge=0),
+    before: int | None = Query(None, ge=1),
     limit: int = Query(100, ge=1, le=200),
 ) -> Response:
     """Public change feed. Guests filter it on the device by their followed entries."""
@@ -208,24 +285,69 @@ def change_feed(
     rows = list(
         db.scalars(
             select(ChangeEvent)
-            .where(ChangeEvent.event_id == event.id, ChangeEvent.id > after)
+            .where(
+                ChangeEvent.event_id == event.id,
+                ChangeEvent.id > after,
+                ChangeEvent.id < before if before else True,
+            )
             .order_by(ChangeEvent.id.desc())
-            .limit(limit)
+            .limit(limit + 1)
         )
     )
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_before = rows[-1].id if has_more and rows else None
+    latest_id = rows[0].id if rows else after
     match_ids = [r.entity_id for r in rows if r.entity_type == "match"]
     matches = (
-        db.scalars(select(Match).where(Match.id.in_(match_ids)).options(*match_load_options())) if match_ids else []
+        list(
+            db.scalars(
+                select(Match)
+                .where(Match.id.in_(match_ids))
+                .options(*match_load_options())
+            )
+        )
+        if match_ids
+        else []
     )
     announcement_ids = [r.entity_id for r in rows if r.entity_type == "announcement"]
-    announcements = (
-        db.scalars(select(Announcement).where(Announcement.id.in_(announcement_ids))) if announcement_ids else []
+    now = P.event_now(event)
+    notices = (
+        list(
+            db.scalars(
+                select(Announcement).where(Announcement.id.in_(announcement_ids))
+            )
+        )
+        if announcement_ids
+        else []
     )
+    visible = {
+        a.id: a
+        for a in notices
+        if a.state == "published"
+        and (not a.publish_at or a.publish_at <= now)
+        and (not a.expire_at or a.expire_at > now)
+    }
+    rows = [
+        r for r in rows if r.entity_type != "announcement" or r.entity_id in visible
+    ]
     payload = {
-        "data": [P.change_public(r) for r in rows],
+        "data": [
+            {
+                **P.change_public(r),
+                "division_id": str(visible[r.entity_id].division_id)
+                if r.entity_id in visible and visible[r.entity_id].division_id
+                else None,
+            }
+            for r in rows
+        ],
         "matches": {str(m.id): P.match_public(m, event) for m in matches},
-        "announcements": {str(a.id): P.announcement_public(a) for a in announcements if a.state == "published"},
-        "latest_id": rows[0].id if rows else after,
+        "announcements": {
+            str(a.id): P.announcement_public(a) for a in visible.values()
+        },
+        "next_before": next_before,
+        "divisions": {str(m.id): str(m.division_id) for m in matches if m.division_id},
+        "latest_id": latest_id,
         "sources": sources_envelope(event),
     }
     return json_response(request, payload)
@@ -234,7 +356,7 @@ def change_feed(
 @router.get("/events/{event_ref}/announcements")
 def announcements(event_ref: str, request: Request, db: DB) -> Response:
     event = load_event(db, event_ref)
-    now = datetime.now(timezone.utc)
+    now = P.event_now(event)
     rows = db.scalars(
         select(Announcement)
         .where(
@@ -251,7 +373,11 @@ def announcements(event_ref: str, request: Request, db: DB) -> Response:
 @router.get("/events/{event_ref}/guide")
 def guide(event_ref: str, request: Request, db: DB) -> Response:
     event = load_event(db, event_ref)
-    items = db.scalars(select(GuideItem).where(GuideItem.event_id == event.id).order_by(GuideItem.sort, GuideItem.title))
+    items = db.scalars(
+        select(GuideItem)
+        .where(GuideItem.event_id == event.id)
+        .order_by(GuideItem.sort, GuideItem.title)
+    )
     partners = db.scalars(
         select(PartnerCard)
         .where(PartnerCard.event_id == event.id, PartnerCard.active.is_(True))
@@ -273,18 +399,32 @@ def calendar(
     db: DB,
     settings: Annotated[Settings, Depends(get_settings)],
     entry_ids: str = "",
+    division_ids: str = "",
 ) -> Response:
     event = load_event(db, event_ref)
-    followed = parse_uuid_list(entry_ids, limit=20)
+    followed, followed_divisions = selection(db, event, entry_ids, division_ids)
     if not followed:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose at least one team")
-    matches = list(db.scalars(match_query(event.id, entry_ids=followed)))
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose at least one team"
+        )
+    matches = list(
+        db.scalars(
+            match_query(event.id, entry_ids=followed, division_ids=followed_divisions)
+        )
+    )
     domain = urlparse(settings.public_web_url).hostname or "courtside.local"
-    body = build_ics(event, matches, uid_domain=domain, assumed_minutes=settings.assumed_match_minutes)
+    body = build_ics(
+        event,
+        matches,
+        uid_domain=domain,
+        assumed_minutes=settings.assumed_match_minutes,
+    )
     return Response(
         body,
         media_type="text/calendar; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{event.slug}-snapshot.ics"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{event.slug}-snapshot.ics"'
+        },
     )
 
 
@@ -300,7 +440,10 @@ def get_entry(entry_id: str, request: Request, db: DB) -> Response:
     event = load_event(db, str(entry.event_id))
     roster = db.scalar(
         select(RosterPublication)
-        .where(RosterPublication.entry_id == entry.id, RosterPublication.state == "published")
+        .where(
+            RosterPublication.entry_id == entry.id,
+            RosterPublication.state == "published",
+        )
         .order_by(RosterPublication.version.desc())
         .limit(1)
     )
@@ -320,7 +463,11 @@ def get_entry(entry_id: str, request: Request, db: DB) -> Response:
 
 @router.get("/matches/{match_id}")
 def get_match(match_id: str, request: Request, db: DB) -> Response:
-    match = db.scalar(select(Match).where(Match.id == parse_uuid(match_id, "match")).options(*match_load_options()))
+    match = db.scalar(
+        select(Match)
+        .where(Match.id == parse_uuid(match_id, "match"))
+        .options(*match_load_options())
+    )
     if match is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Match not found")
     event = load_event(db, str(match.event_id))
@@ -340,3 +487,37 @@ def get_match(match_id: str, request: Request, db: DB) -> Response:
         "sources": sources_envelope(event),
     }
     return json_response(request, payload)
+
+
+@router.get("/events/{event_ref}/selection")
+def followed_selection(
+    event_ref: str, request: Request, db: DB, division_ids: str = ""
+):
+    event = load_event(db, event_ref)
+    entries, _ = selection(db, event, "", division_ids)
+    return json_response(request, {"data": [str(e) for e in entries]})
+
+
+@router.get("/events/{event_ref}/pathway")
+def pathway(event_ref: str, request: Request, db: DB, division_id: str):
+    event = load_event(db, event_ref)
+    division = db.get(Division, parse_uuid(division_id))
+    if not division or division.event_id != event.id:
+        raise HTTPException(404, "Division not found")
+    rows = list(db.scalars(match_query(event.id, division_id=division.id)))
+    rounds = {}
+    for match in rows:
+        rounds.setdefault(match.round_label or "Round to be confirmed", []).append(
+            match
+        )
+    return json_response(
+        request,
+        {
+            "data": [
+                {"label": label, "matches": project_matches(db, event, matches)}
+                for label, matches in rounds.items()
+            ],
+            "sources": sources_envelope(event),
+            "note": "Official source progression. Positions and winner/loser labels are displayed as supplied; this app does not calculate seeds or tie-breaks.",
+        },
+    )

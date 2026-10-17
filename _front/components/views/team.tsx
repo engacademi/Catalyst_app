@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import Image from "next/image";
 import { UserRound } from "lucide-react";
 import { useEntry } from "@/lib/queries";
@@ -32,6 +33,7 @@ export function TeamView({ eventId, entryId }: { eventId: string; entryId: strin
         </div>
       )}
 
+      <Link href={`/events/${eventId}/pathway`} className="mt-4 inline-flex min-h-11 items-center font-semibold text-brand underline">Follow this division’s pool & playoff path →</Link>
       <SectionTitle>Matches</SectionTitle>
       {team.matches.length ? (
         <ul className="space-y-2">

@@ -1,6 +1,14 @@
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+export const API_BASE = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+).replace(/\/$/, "");
 
-export type Freshness = "current" | "stale" | "unavailable" | "imported_snapshot" | "no_data" | "unknown";
+export type Freshness =
+  | "current"
+  | "stale"
+  | "unavailable"
+  | "imported_snapshot"
+  | "no_data"
+  | "unknown";
 
 export type SourceInfo = {
   id: string;
@@ -23,7 +31,7 @@ export type Venue = {
   accessible_entrance: string | null;
   directions: string | null;
   map_url: string | null;
-  courts: { id: string; label: string }[];
+  courts: { id: string; label: string; area_label?: string | null }[];
 };
 
 export type EventSummary = {
@@ -37,6 +45,8 @@ export type EventSummary = {
   status: string;
   is_demo: boolean;
   revision: number;
+  demo_now?: string | null;
+  server_now?: string;
 };
 
 export type EventDetail = EventSummary & {
@@ -45,7 +55,12 @@ export type EventDetail = EventSummary & {
   counts: { entries: number; matches: number };
 };
 
-export type Entry = { id: string; team_name: string; club_name: string | null; division: Division | null };
+export type Entry = {
+  id: string;
+  team_name: string;
+  club_name: string | null;
+  division: Division | null;
+};
 
 export type Participant = {
   entry_id: string | null;
@@ -57,6 +72,7 @@ export type Participant = {
 export type Change = {
   id: number;
   entity_type: "match" | "announcement";
+  division_id?: string | null;
   entity_id: string;
   entity_revision: number;
   event_type: string;
@@ -68,6 +84,7 @@ export type Change = {
 
 export type Match = {
   id: string;
+  source_match_id: string;
   revision: number;
   status: "scheduled" | "in_progress" | "completed" | "cancelled" | "postponed";
   result_state: string;
@@ -75,13 +92,33 @@ export type Match = {
   division: Division | null;
   scheduled_start: string | null;
   estimated_start: string | null;
+  estimate_source?: string | null;
+  delay_notice?: {
+    minutes: number;
+    posted_by: string;
+    posted_at: string;
+    expires_at: string;
+  } | null;
+  expected_start_soon?: boolean;
   timezone: string;
-  court: { id: string; label: string; venue_id: string; venue_name: string } | null;
+  court: {
+    id: string;
+    label: string;
+    venue_id: string;
+    venue_name: string;
+  } | null;
   home: Participant;
   away: Participant;
   sets: { set_number: number; home: number | null; away: number | null }[];
   sets_won: { home: number; away: number } | null;
-  source: { id: string; name: string; mode: string; observed_at: string; source_updated_at: string | null; freshness: Freshness };
+  source: {
+    id: string;
+    name: string;
+    mode: string;
+    observed_at: string;
+    source_updated_at: string | null;
+    freshness: Freshness;
+  };
   latest_change: Change | null;
 };
 
@@ -122,9 +159,15 @@ export type Partner = {
   revision: number;
 };
 
-export type RosterPlayer = { jersey: number | null; display_name: string; position: string | null; photo_url: string | null };
+export type RosterPlayer = {
+  jersey: number | null;
+  display_name: string;
+  position: string | null;
+  photo_url: string | null;
+};
 
 export type MyDay = {
+  work_duties?: Match[];
   next_match_id: string | null;
   next_by_entry: Record<string, string>;
   upcoming_ids: string[];
@@ -150,7 +193,10 @@ async function parse<T>(response: Response): Promise<T> {
     let message = response.statusText;
     try {
       const body = await response.json();
-      message = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      message =
+        typeof body.detail === "string"
+          ? body.detail
+          : JSON.stringify(body.detail);
     } catch {}
     throw new ApiError(response.status, message);
   }
@@ -175,12 +221,23 @@ export async function apiSend<T>(
   return parse<T>(
     await fetch(`${API_BASE}${path}`, {
       method,
-      headers: isForm ? headers : { ...headers, "Content-Type": "application/json" },
-      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
+      headers: isForm
+        ? headers
+        : { ...headers, "Content-Type": "application/json" },
+      body:
+        body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     }),
   );
 }
 
-export async function apiAuthGet<T>(auth: AuthHeaders, path: string): Promise<T> {
-  return parse<T>(await fetch(`${API_BASE}${path}`, { headers: await auth(), cache: "no-store" }));
+export async function apiAuthGet<T>(
+  auth: AuthHeaders,
+  path: string,
+): Promise<T> {
+  return parse<T>(
+    await fetch(`${API_BASE}${path}`, {
+      headers: await auth(),
+      cache: "no-store",
+    }),
+  );
 }

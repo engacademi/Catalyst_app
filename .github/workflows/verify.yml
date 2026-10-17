@@ -1,0 +1,76 @@
+name: Verify companion
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: courtside_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U postgres'
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/courtside_test
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/courtside_test
+      APP_ENV: test
+      AUTH_MODE: dev
+      CORS_ALLOWED_ORIGINS: http://127.0.0.1:3000
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: _front/package-lock.json
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          version: '0.12.23'
+      - run: uv sync --frozen
+        working-directory: _back
+      - run: uv run pytest -q
+        working-directory: _back
+      - run: npm ci
+        working-directory: _front
+      - run: npm run lint && npm run typecheck && npm run build
+        working-directory: _front
+      - run: npx playwright install --with-deps chromium
+        working-directory: _front
+      - name: Run phone journeys and accessibility checks
+        run: |
+          uv run --directory _back python -m app.cli seed
+          uv run --directory _back uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/api.log 2>&1 &
+          API_PID=$!
+          (cd _front && npm run start -- --hostname 127.0.0.1 --port 3000) > /tmp/web.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill "$API_PID" "$WEB_PID" 2>/dev/null || true' EXIT
+          uv run --directory _back python - <<'PY'
+          import httpx, time
+          for port in (8000, 3000):
+              for _ in range(100):
+                  try:
+                      if httpx.get(f'http://127.0.0.1:{port}'+('/health/ready' if port == 8000 else '/')).status_code == 200:
+                          break
+                  except httpx.HTTPError:
+                      pass
+                  time.sleep(.2)
+              else:
+                  raise RuntimeError(f'Service {port} did not start')
+          PY
+          cd _front
+          npm run test:e2e

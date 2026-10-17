@@ -25,15 +25,24 @@ def _venue_id(match: Match) -> uuid.UUID | None:
     return match.court.venue_id if match.court else None
 
 
-def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes: int) -> dict:
+def build_my_day(
+    matches: list[Match],
+    followed: set[uuid.UUID],
+    assumed_minutes: int,
+    start_times=None,
+) -> dict:
     """Return ids grouped for the My Day screen.
 
     matches may contain duplicates (one per followed participant); each match appears once.
     """
+    start_at = lambda m: start_times.get(m.id) if start_times is not None else _start(m)
     unique = list({m.id: m for m in matches}.values())
     open_matches = [m for m in unique if m.status in OPEN_STATUSES]
-    timed = sorted((m for m in open_matches if _start(m)), key=lambda m: (_start(m), m.external_id))
-    awaiting = [m for m in open_matches if not _start(m)]
+    timed = sorted(
+        (m for m in open_matches if start_at(m)),
+        key=lambda m: (start_at(m), m.external_id),
+    )
+    awaiting = [m for m in open_matches if not start_at(m)]
 
     next_by_entry: dict[str, str] = {}
     for m in timed:
@@ -45,7 +54,7 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
     group: list[Match] = []
     group_end: datetime | None = None
     for m in timed:
-        start = _start(m)
+        start = start_at(m)
         if group and group_end and start < group_end:
             group.append(m)
             group_end = max(group_end, start + window)
@@ -65,7 +74,7 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
             str(m.id)
             for m in sorted(
                 (m for m in unique if m.status == "completed"),
-                key=lambda m: _start(m) or EPOCH,
+                key=lambda m: start_at(m) or EPOCH,
                 reverse=True,
             )
         ],
@@ -76,4 +85,7 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
 
 def _conflict(group: list[Match]) -> dict:
     venues = {_venue_id(m) for m in group if _venue_id(m)}
-    return {"match_ids": [str(m.id) for m in group], "different_venues": len(venues) > 1}
+    return {
+        "match_ids": [str(m.id) for m in group],
+        "different_venues": len(venues) > 1,
+    }

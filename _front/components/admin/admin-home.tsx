@@ -20,6 +20,7 @@ export function AdminHome() {
 
   return (
     <div>
+      <p className="mb-4 text-sm"><Link className="text-brand underline" href="/admin/roster-reviews">Review my team’s imported roster →</Link></p>
       <PageTitle subtitle="Publish announcements, import schedules and rosters, and keep event content current.">Events</PageTitle>
       {isOfficial && (
         <p className="mb-4 text-sm">

@@ -68,6 +68,7 @@ class RoleGrant(UUIDPk, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
     event_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(String(20))
+    entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id", ondelete="CASCADE"))
     granted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     expires_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
@@ -87,6 +88,7 @@ class Event(UUIDPk, Base):
     end_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | published | archived
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    demo_clock: Mapped[dict[str, Any]] = mapped_column(default=dict)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
@@ -117,6 +119,8 @@ class Court(UUIDPk, Base):
 
     venue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("venues.id", ondelete="CASCADE"))
     label: Mapped[str] = mapped_column(String(50))
+    area_label: Mapped[str | None] = mapped_column(String(150))
+    delay: Mapped[dict[str, Any]] = mapped_column(default=dict)
 
     venue: Mapped[Venue] = relationship(back_populates="courts")
 
@@ -156,6 +160,9 @@ class Source(UUIDPk, Base):
     name: Mapped[str] = mapped_column(String(200))
     mode: Mapped[str] = mapped_column(String(30), default="manual_import")
     official_url: Mapped[str | None] = mapped_column(String(500))
+    config: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    last_attempt_at: Mapped[datetime | None]
+    last_error: Mapped[str | None] = mapped_column(String(500))
     expected_check_interval_minutes: Mapped[int] = mapped_column(Integer, default=15)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | paused | unavailable
     # Bumped on every committed import so a stale preview can't be committed.
@@ -188,8 +195,11 @@ class Match(UUIDPk, Base):
     division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id", ondelete="SET NULL"))
     court_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courts.id", ondelete="SET NULL"))
     round_label: Mapped[str | None] = mapped_column(String(100))
+    work_entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id", ondelete="SET NULL"))
+    work_entry: Mapped["EventEntry | None"] = relationship()
     scheduled_start: Mapped[datetime | None]
     estimated_start: Mapped[datetime | None]
+    official_time_revised_at: Mapped[datetime | None]
     # scheduled | in_progress | completed | cancelled | postponed. Only the source sets in_progress.
     status: Mapped[str] = mapped_column(String(20), default="scheduled")
     result_state: Mapped[str] = mapped_column(String(20), default="none")  # none | provisional | final | corrected
@@ -303,6 +313,7 @@ class RosterPublication(UUIDPk, Base):
     public_players: Mapped[list[Any]] = mapped_column(default=list)
     team_photo_url: Mapped[str | None] = mapped_column(String(500))
     consent_review_ref: Mapped[str | None] = mapped_column(String(200))
+    review: Mapped[dict[str, Any]] = mapped_column(default=dict)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     published_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
