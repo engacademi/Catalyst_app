@@ -260,8 +260,8 @@ def _match_venue(db: Session, event: Event, d: dict) -> tuple[Venue | None, str 
     if not d.get("court_external_id"):
         return None, None
     venue = db.scalar(select(Venue).where(Venue.event_id == event.id).order_by(Venue.sort, Venue.name).limit(1))
-    if venue is None and d.get("aes_location"):
-        return None, d["aes_location"]
+    if venue is None and d.get("source_location"):
+        return None, d["source_location"]
     return venue, None
 
 

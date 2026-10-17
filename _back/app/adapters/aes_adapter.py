@@ -134,7 +134,7 @@ class AesEvent:
                             "division": division["Name"],
                             "division_external_id": str(division["DivisionId"]),
                             "venue": None,
-                            "aes_location": location,
+                            "source_location": location,
                             "court": court.get("Name") or "",
                             "court_external_id": str(court["CourtId"]) if court.get("CourtId") is not None else None,
                             "round": " · ".join(x for x in (pool.get("FullName"), m.get("MatchFullName")) if x) or None,

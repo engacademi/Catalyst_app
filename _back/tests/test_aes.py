@@ -288,7 +288,7 @@ def test_aes_courts_go_under_the_events_venue_and_keep_their_ids(db, aes_teams):
     assert batch.summary["change"] == 0
 
 
-def test_without_a_venue_the_aes_location_becomes_the_venue(db, aes):
+def test_without_a_venue_the_source_location_becomes_the_venue(db, aes):
     event, source = aes
     commit_import(db, refresh(db, event, source).id, None, "test")
     commit_import(db, refresh_matches(db, event, source).id, None, "test")
