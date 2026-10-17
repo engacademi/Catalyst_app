@@ -120,7 +120,12 @@ Priority: **Must** is needed for the demo script in section 9, **Should** is bui
 
 - **R-01** (Must) Open an event from a QR code or link and browse it without an account. [brief §04; catalogue CC-01]
 - **R-02** (Must) Search teams by name, club or division in an event with hundreds of teams, and follow any number of teams and divisions. Follows stay on the device. [B-02; resources: AES; tech §6]
-- **R-03** (Must) My Day shows a Next Match card (team, opponent, time, venue, court, freshness) and a combined schedule for everything followed, with a warning when two followed matches overlap. [B-02; research §13.3; catalogue CC-02]
+- **R-03** (Must) My Day shows a Next Match card (team, opponent, time, venue, court, freshness) and a combined schedule for followed teams, with a warning when two followed matches overlap. Next Match ordering and overlap warnings use a match's estimated start when it has one, labelled as an estimate. When an estimated start passes and the source hasn't marked the match started, the card says "Expected to start soon", never "In progress". Each followed division gets its own collapsible section below, so a 32-team division doesn't bury the user's own teams. [B-02; research §13.3; catalogue CC-02; grilling Q6]
+- **R-32** (Must) Give a followed team a private label, such as "Maya's team", stored only on the device; My Day shows the label. There is no search or following of individual players. [B-08; research §13.4; grilling Q9; Org Q-12]
+- **R-35** (Must) A "My teams" page lists every followed team with its label. Following is the only way to save a team; there is no separate favourite or saved list. Follows apply to one event. [grilling Q13]
+- **R-33** (Must) When the source fills a placeholder with a followed team, Updates says so ("Next match set: Gold medal vs Venom Havoc, Court 12, 2:00 pm") and My Day shows the match straight away. [grilling Q12]
+- **R-28** (Must) When the source assigns a followed team a work duty, My Day shows it as its own item ("Work duty: referee Match 5, Court 53, 9:00"), separate from the team's matches. Nothing shows when the source has none. [resources: AES; grilling Q7; Org Q-10]
+- **R-29** (Must) Every court shows its area label next to its number ("Court 53 · Hall C"), and the guide lists courts by area. [research §3.4; grilling Q8; Org Q-11]
 - **R-04** (Must) Match centre with Upcoming, In progress and Results tabs and filters by division, venue and court. "In progress" appears only when the source says so. [brief §04; tech §8]
 - **R-05** (Must) Results show set scores as published by the source; a missing score shows as pending, never 0-0. [resources: TIMU; catalogue CC-03]
 - **R-06** (Must) A changed time or court shows the old and new values, on the match and in the Updates feed. [resources: TIMU; catalogue CC-04]
@@ -144,9 +149,12 @@ Priority: **Must** is needed for the demo script in section 9, **Should** is bui
 
 - **R-16** (Must) Staff sign in to a console; attendees never need to. [B-08; tech §6]
 - **R-17** (Must) Publish, schedule and expire announcements, targeted to the event or a division, without a developer. [B-06; catalogue CC-12]
+- **R-30** (Must) Mark a court as running late by about N minutes. Every match on that court shows the delay notice beside its unchanged official time, with who posted it and when; the notice expires, and followers of affected teams get it in Updates. The app never moves an official time itself. Each affected match that hasn't started also shows an estimated start ("Official 9:00 · Est. ~9:20, OVA staff"), worked out as its official time plus the posted delay. Staff can post one notice for a single court or for every court in an area at once. A notice lasts as long as staff choose when posting (default 60 minutes), can be cleared early, and disappears when it expires. If the source publishes its own revised time for a match, the source's time replaces the staff estimate for that match while the notice text stays visible. [grilling Q5, Q11, Q15, Q16; ADR 0002; Org Q-09]
+- **R-31** (Must) Give each court an area label, such as "Hall C, north side". [grilling Q8]
 - **R-18** (Must) Edit venue, parking, food and sponsor content. [B-06; brief §04]
-- **R-19** (Must) Connect an event to its source by configuration: the AES event key, or a CSV import. [B-04; tech §9]
+- **R-19** (Must) Connect an event to its source by configuration: the AES event key, or a CSV import. The AES connector reads divisions, teams, pools, matches, courts, set scores, work teams and the update timestamp; brackets are included if they share the pool format. [B-04; tech §9; grilling Q4; ADR 0003]
 - **R-20** (Must) CSV import shows a preview of added, changed and errored rows before commit; a missing row never cancels a match. [tech §9; catalogue CC-12]
+- **R-34** (Must) Demo mode lets staff set the event's current time, shown in a "Demo time" banner on every screen; My Day, Next Match, delay notices and freshness use it. The clock ticks forward from the set time, and a "+15 min" control jumps it ahead. It's unavailable outside demo mode. [grilling Q10, Q14]
 - **R-21** (Must) Source health: last successful check per source, and a visible warning to attendees when a source is stale or down. [catalogue §9; tech §7]
 - **R-22** (Should) Import a roster export from the registration system and publish approved fields. [B-05; research §3.3]
 - **R-23** (Should) See view and click counts per sponsor card. [J7; catalogue CC-11]
@@ -169,7 +177,7 @@ Priority: **Must** is needed for the demo script in section 9, **Should** is bui
 
 | Source | What it supplies | How the build reads it | Status |
 | ------ | ---------------- | ---------------------- | ------ |
-| AES | Events, divisions, clubs; pools, matches, courts and results | JSON from `results.advancedeventsystems.com/api/event/<key>` | Event summary confirmed open [resources: AES]. Match-level endpoints still to check (A-04). |
+| AES | Events, divisions, clubs, teams; pools with matches, courts, scheduled starts, set scores and work teams; last-update timestamp | JSON from `results.advancedeventsystems.com/api/event/<key>` and its division, pool and poolsheet paths | Confirmed open without sign-in on Event 2 (October 17). Team rosters returned empty for that event. |
 | TIMU | Pools, playoffs, courts, set scores, venue notes | HTML only, no feed found [resources: TIMU] | Demo uses a CSV export standing in for TIMU. |
 | MyTeam.click | Schedules (beach, per the research) | Unknown [resources: MyTeam.click] | Demo uses a CSV export standing in for it. |
 | OVA registration (MRS) | Rosters, jersey numbers, positions, photos | CSV export [research S5] | Demo uses a synthetic export. |
@@ -183,15 +191,16 @@ Use fictional players throughout and label simulated data as simulated [catalogu
 
 | Step | What the judges see | Outcomes |
 | ---- | ------------------- | -------- |
-| 1 | A parent scans a QR code, finds two teams and a division in a few taps and follows them, with no account. | J1, J2 |
-| 2 | My Day shows the next match with its court and venue, and warns that two followed matches overlap. | J1, J2 |
-| 3 | The schedule includes an indoor event pulled from AES and a beach event from a CSV export, on the same screens, each with its source and check time. | J3, J6 |
-| 4 | Staff import an updated file. The preview shows one court change; they commit it, and the parent's Updates feed shows old and new courts. | J3, J4 |
-| 5 | Staff publish a parking announcement in under a minute, with no developer. | J4 |
-| 6 | A coach reviews a roster imported from the registration export; one photo isn't approved, so the public team page leaves it out. | J4, B-08 |
-| 7 | The guide shows sponsor cards, a merchandise link and the 50/50 draw; the staff console shows views and clicks per sponsor. | J7 |
-| 8 | The AES source is switched off; the app keeps the last schedule and shows a "source unavailable since…" warning. | J3, J1 |
-| 9 | My Day is used with a screen reader and at 200% zoom. | J5 |
+| 1 | A parent scans a QR code, finds their child's team and a division in a few taps, follows both and labels the team "Maya's team", with no account. | J1, J2 |
+| 2 | My Day (demo time Sat April 19, 9:40 am) shows Maya's next match with "Court 53 · Hall C", a work duty later that morning, and the division in its own section. | J1, J2 |
+| 3 | The data on screen is real Ontario Championships Event 2 data pulled live from AES, next to a second event imported from CSV, on the same screens, each with its source and check time. | J3, J6 |
+| 4 | Staff post "Hall C courts ~20 min late". Maya's card shows "Official 10:00 · Est. ~10:20, OVA staff", and My Day now warns that it overlaps another followed match. | J1, J4 |
+| 5 | Jump the demo clock ahead. A playoff slot fills in, and Updates shows "Next match set: Gold medal, Court 12, 2:00 pm". | J1, J2 |
+| 6 | Staff import an updated CSV for the second event; the preview shows one court change, they commit it, and followers see old and new courts. Staff also publish a parking announcement in under a minute. | J3, J4 |
+| 7 | A coach reviews a roster imported from the registration export; one photo isn't approved, so the public team page leaves it out. | J4, B-08 |
+| 8 | The guide shows sponsor cards, a merchandise link and the 50/50 draw; the staff console shows views and clicks per sponsor. | J7 |
+| 9 | The AES source is switched off; the app keeps the last schedule and shows a "source unavailable since…" warning. | J3, J1 |
+| 10 | My Day is used with a screen reader and at 200% zoom. | J5 |
 
 ## 10. Build plan
 
@@ -230,19 +239,19 @@ Suggested order, so a working demo exists early:
 - **A-01** A mobile web app satisfies "mobile-first"; the brief doesn't require a native app.
 - **A-02** Guests can follow teams with follows stored on the device, which fits B-08 though the brief doesn't say it.
 - **A-03** Real club and team names from AES can appear in the demo; all player names are fictional.
-- **A-04** The AES API serves pools, matches and courts for each division, as its web app shows them. Only the event summary has been fetched.
+- **A-04** The AES paths the AES web app uses (`division/<id>/playdays`, `division/<id>/pools/<date>`, `poolsheet/<playId>`, `timestamp`) stay open and stable through the hackathon. They were confirmed working on October 17 but aren't a documented public API.
 - **A-05** A CSV export is a fair stand-in for TIMU and MyTeam.click in the demo, since neither offers a feed we could find.
 - **A-06** "W7 vs W8" in TIMU playoffs means the winners of matches 7 and 8.
 - **A-07** The team's research figures (1,338 teams, 58 courts, MRS roster submission) are accurate; they weren't re-checked for this plan.
 
-## 13. Open questions
+## 13. Open questions for the team
 
-For the team:
+- **Q-01** ~~How long is the hackathon?~~ It ends October 18 at 12:30 pm. Still open: how long the demo is, and whether there's a rubric beyond brief §07.
+- **Q-02** ~~Do we agree to the three stack simplifications in section 10?~~ Settled in code by ADR 0001: Clerk sign-in is for staff only, and accounts and the background worker are deferred.
 
-- **Q-01** How long is the hackathon, how long is the demo, and is there a rubric beyond brief §07?
-- **Q-02** Do we agree to the three stack simplifications in section 10? Each becomes an ADR.
+## 14. Org questions
 
-For OVA:
+Only OVA can answer these. Nothing in the build should guess at them.
 
 - **Q-03** May the companion read and re-display AES, TIMU and MyTeam.click data, and is there an approved feed for each?
 - **Q-04** Can MRS export rosters, and which fields may be shown publicly?
@@ -250,8 +259,12 @@ For OVA:
 - **Q-06** Which channels carry announcements today, and does OVA want push or email later?
 - **Q-07** What sponsor tiers exist, and what placements do sponsors expect?
 - **Q-08** What does "TLS" mean in "TLS Girls"?
+- **Q-09** When courts run late, does the tournament director update start times or courts in AES during the day, or are delays only announced on site?
+- **Q-10** Are work-team duties (teams refereeing other matches) used at the Ontario Championships? The Event 2 match we checked showed "No Work Team".
+- **Q-12** Would OVA ever allow attendees to search for or follow individual players by name, and what consent would that need? Until then the app only supports private labels on followed teams (R-32).
+- **Q-11** Is there a court layout map for the Enercare Centre showing which hall or area each of the 58 courts is in?
 
-## 14. Success criteria
+## 15. Success criteria
 
 The demo succeeds if every step in section 9 runs live on a phone, and each of J1 to J7 is shown at least once. For the pitch, the research proposes measurable pilot targets OVA could judge a real rollout by [research §11]:
 
