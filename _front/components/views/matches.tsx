@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFollows } from "@/lib/follows";
-import { dayKey, formatDay } from "@/lib/format";
+import { courtPlace, dayKey, formatDay } from "@/lib/format";
 import { useEvent, useMatches } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
@@ -69,7 +69,7 @@ export function MatchesView({ eventId }: { eventId: string }) {
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Select label="Venue" value={params.get("venue_id") ?? ""} onChange={(v) => set("venue_id", v)} options={venues.map((v) => [v.id, v.name])} all="All venues" />
-        <Select label="Court" value={params.get("court_id") ?? ""} onChange={(v) => set("court_id", v)} options={courts.map((c) => [c.id, c.label])} all="All courts" />
+        <Select label="Court" value={params.get("court_id") ?? ""} onChange={(v) => set("court_id", v)} options={courts.map((c) => [c.id, courtPlace(c)])} all="All courts" />
         <Select
           label="Division"
           value={params.get("division_id") ?? ""}

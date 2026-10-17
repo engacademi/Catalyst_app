@@ -117,6 +117,7 @@ class Court(UUIDPk, Base):
 
     venue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("venues.id", ondelete="CASCADE"))
     label: Mapped[str] = mapped_column(String(50))
+    area: Mapped[str | None] = mapped_column(String(100))
 
     venue: Mapped[Venue] = relationship(back_populates="courts")
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
-import { formatDay, formatTime } from "@/lib/format";
+import { courtPlace, formatDay, formatTime } from "@/lib/format";
 import type { Labels } from "@/lib/labels";
 import { useNow } from "@/lib/now";
 import { Badge } from "./ui";
@@ -119,7 +119,7 @@ export function MatchCard({
         </span>
         <span className="flex items-center gap-1 text-muted">
           <MapPin aria-hidden className="h-4 w-4" />
-          {match.court ? `${match.court.label}, ${match.court.venue_name}` : "Court to be confirmed"}
+          {match.court ? `${courtPlace(match.court)}, ${match.court.venue_name}` : "Court to be confirmed"}
         </span>
       </div>
       <div className="space-y-1">

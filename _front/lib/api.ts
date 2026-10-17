@@ -23,7 +23,7 @@ export type Venue = {
   accessible_entrance: string | null;
   directions: string | null;
   map_url: string | null;
-  courts: { id: string; label: string }[];
+  courts: { id: string; label: string; area: string | null }[];
 };
 
 export type EventSummary = {
@@ -76,7 +76,7 @@ export type Match = {
   scheduled_start: string | null;
   estimated_start: string | null;
   timezone: string;
-  court: { id: string; label: string; venue_id: string; venue_name: string } | null;
+  court: { id: string; label: string; area: string | null; venue_id: string; venue_name: string } | null;
   home: Participant;
   away: Participant;
   sets: { set_number: number; home: number | null; away: number | null }[];

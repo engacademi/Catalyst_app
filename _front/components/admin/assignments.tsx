@@ -1,7 +1,7 @@
 "use client";
 
 import type { Match } from "@/lib/api";
-import { formatDay, formatTime } from "@/lib/format";
+import { courtPlace, formatDay, formatTime } from "@/lib/format";
 import { Card, EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 import { useAdminQuery } from "./hooks";
 
@@ -10,7 +10,7 @@ type Assignment = {
   role: string;
   reporting_time: string | null;
   revision: number;
-  court: { label: string; venue_name: string } | null;
+  court: { label: string; area: string | null; venue_name: string } | null;
   match: Match | null;
 };
 
@@ -33,7 +33,7 @@ export function Assignments() {
                   <p className="font-semibold">{a.role}</p>
                   <p className="text-sm">
                     Report {a.reporting_time ? `${formatDay(a.reporting_time, tz)} at ${formatTime(a.reporting_time, tz)}` : "time to be confirmed"}
-                    {a.court && ` to ${a.court.label}, ${a.court.venue_name}`}
+                    {a.court && ` to ${courtPlace(a.court)}, ${a.court.venue_name}`}
                   </p>
                   {a.match && (
                     <p className="mt-1 text-sm text-muted">
