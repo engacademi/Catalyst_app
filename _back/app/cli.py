@@ -3,18 +3,25 @@
     python -m app.cli seed [--reset]
     python -m app.cli grant --subject user_2abc --role admin
     python -m app.cli grant --subject user_2abc --role staff --event demo-championships
+    python -m app.cli aes-load <event_key>
 
 Staff privileges are only ever granted here, never through a public endpoint.
 """
 
 import argparse
+import json
+import re
 import sys
+from datetime import date
+from urllib.parse import quote
 
 from sqlalchemy import select
 
+from app.adapters.aes import aes_event_url
+from app.adapters.live import fetch_text
 from app.core.db import get_sessionmaker
-from app.models import Event, Organization, RoleGrant, User
-from app.seed import seed
+from app.models import Event, Organization, RoleGrant, Source, User, Venue
+from app.seed import TZ, seed
 
 
 def grant(
@@ -62,6 +69,71 @@ def grant(
         )
 
 
+def aes_load(event_key: str, get=fetch_text) -> Event:
+    """Create or refresh an event from AES by its key."""
+    from app.modules.sync import sync_source
+
+    url = aes_event_url(event_key)
+    key = quote(event_key, safe="")
+    data = json.loads(get(url))
+    slug = re.sub(r"[^a-z0-9]+", "-", data["Name"].lower()).strip("-")[:100]
+    with get_sessionmaker()() as db:
+        # The vendor key is the identity; titles can change or share a slug.
+        sources = list(db.scalars(select(Source).where(Source.mode == "aes")))
+        matching = [s for s in sources if s.config.get("event_key") == event_key]
+        if len(matching) > 1:
+            raise ValueError(
+                "Multiple AES sources use this key; resolve them before loading"
+            )
+        source = matching[0] if matching else None
+        event = db.get(Event, source.event_id) if source else None
+        if event is None and db.scalar(select(Event.id).where(Event.slug == slug)):
+            raise ValueError(
+                "Event slug already belongs to another source; connect AES in the staff workspace"
+            )
+        if event is None:
+            org = db.scalar(select(Organization).limit(1))
+            if org is None:
+                org = Organization(name="Ontario Volleyball Association")
+                db.add(org)
+                db.flush()
+            venue, _, address = (data.get("Location") or "").partition(" (")
+            event = Event(
+                organization_id=org.id,
+                slug=slug,
+                title=data["Name"],
+                kind="indoor",
+                timezone=TZ,
+                start_date=date.fromisoformat(data["StartDate"][:10]),
+                end_date=date.fromisoformat(data["EndDate"][:10]),
+                status="published",
+            )
+            db.add(event)
+            db.flush()
+            if venue:
+                db.add(
+                    Venue(
+                        event_id=event.id,
+                        name=venue.strip(),
+                        address=address.rstrip(")") or None,
+                    )
+                )
+            source = Source(
+                event_id=event.id,
+                name="AES",
+                mode="aes",
+                official_url=f"https://results.advancedeventsystems.com/event/{key}",
+                config={"authorized": True, "event_key": event_key},
+            )
+            db.add(source)
+        db.commit()
+        result = sync_source(source.id)
+        if not result["ok"]:
+            sys.exit(result["message"])
+        db.refresh(event)
+        return event
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -84,6 +156,8 @@ def main() -> None:
     grant_cmd.add_argument(
         "--event", help="Event slug; required for staff and official"
     )
+    aes_cmd = sub.add_parser("aes-load", help="Create or refresh an event from AES")
+    aes_cmd.add_argument("event_key", help="The key in the AES event URL")
     args = parser.parse_args()
 
     if args.command == "seed-testing":
@@ -100,6 +174,9 @@ def main() -> None:
         if args.role != "admin" and not args.event:
             sys.exit("--event is required for staff and official grants")
         grant(args.subject, args.role, args.event, args.entry)
+    elif args.command == "aes-load":
+        event = aes_load(args.event_key)
+        print(f"AES event ready: /events/{event.slug}")
 
 
 if __name__ == "__main__":

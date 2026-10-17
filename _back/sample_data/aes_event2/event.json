@@ -1,0 +1,187 @@
+{
+ "Key": "MjAyNl9PbnRhcmlvX0NoYW1waW9uc2hpcHNfX19FdmVudF8yX182djZHX19UTFNHX18xNVVCXw2",
+ "EventId": -50000,
+ "Name": "2026 Ontario Championships - Event 2 (6v6G, TLSG, 15UB)",
+ "StartDate": "2026-04-19T00:00:00",
+ "EndDate": "2026-04-21T23:59:59.9999999",
+ "Location": "Enercare Centre (100 Princes' Blvd, Toronto, ON M6K 3C3)",
+ "CustomEventType": null,
+ "IsOver": false,
+ "Clubs": [
+  {
+   "ClubId": -53500,
+   "Name": "41SIX Volleyball Club"
+  },
+  {
+   "ClubId": -53674,
+   "Name": "Ancaster Lions Volleyball Club"
+  },
+  {
+   "ClubId": -53352,
+   "Name": "Barrie Elites Volleyball Club"
+  },
+  {
+   "ClubId": -53666,
+   "Name": "Bluewater Ballistix Volleyball Club"
+  },
+  {
+   "ClubId": -53794,
+   "Name": "Centre Hastings Volleyball Academy"
+  },
+  {
+   "ClubId": -53602,
+   "Name": "Chatham Ballhawks Volleyball Club"
+  },
+  {
+   "ClubId": -53382,
+   "Name": "Etobicoke 381"
+  },
+  {
+   "ClubId": -53364,
+   "Name": "Forest City Volleyball Club"
+  },
+  {
+   "ClubId": -53677,
+   "Name": "Georgina Riptide Volleyball Club Association"
+  },
+  {
+   "ClubId": -53474,
+   "Name": "Guelph Youth Volleyball Association"
+  },
+  {
+   "ClubId": -53377,
+   "Name": "Humana Volleyball Academy"
+  },
+  {
+   "ClubId": -53625,
+   "Name": "Kingston Rock Volleyball Club"
+  },
+  {
+   "ClubId": -53825,
+   "Name": "Lanark United Volleyball Club"
+  },
+  {
+   "ClubId": -53618,
+   "Name": "London Volleyball Club"
+  },
+  {
+   "ClubId": -53452,
+   "Name": "Markham Revolution Volleyball Club"
+  },
+  {
+   "ClubId": -53370,
+   "Name": "Maverick Volleyball Club"
+  },
+  {
+   "ClubId": -53393,
+   "Name": "Milton Youth Volleyball Club"
+  },
+  {
+   "ClubId": -54248,
+   "Name": "Mountain Athletic Club"
+  },
+  {
+   "ClubId": -53438,
+   "Name": "Niagara Rapids Volleyball Club"
+  },
+  {
+   "ClubId": -53540,
+   "Name": "Norfolk Volleyball Club"
+  },
+  {
+   "ClubId": -53527,
+   "Name": "North Bay Jr. Lakers Volleyball"
+  },
+  {
+   "ClubId": -53524,
+   "Name": "Northumberland Breakers Volleyball Club"
+  },
+  {
+   "ClubId": -53615,
+   "Name": "Ottawa Valley Vikings"
+  },
+  {
+   "ClubId": -53435,
+   "Name": "Peterborough Thunder Volleyball Club"
+  },
+  {
+   "ClubId": -53537,
+   "Name": "Pioneers Volleyball Club"
+  },
+  {
+   "ClubId": -53660,
+   "Name": "Scorpions Youth Volleyball Club"
+  },
+  {
+   "ClubId": -53789,
+   "Name": "Skopos Volleyball Club"
+  },
+  {
+   "ClubId": -53820,
+   "Name": "Sounders Volleyball Club"
+  },
+  {
+   "ClubId": -53577,
+   "Name": "Southern Shores Volleyball Club"
+  },
+  {
+   "ClubId": -53693,
+   "Name": "St. Thomas EXPRESS VC"
+  },
+  {
+   "ClubId": -53449,
+   "Name": "Storm Volleyball"
+  },
+  {
+   "ClubId": -53425,
+   "Name": "Stratford Volleyball Club"
+  },
+  {
+   "ClubId": -53415,
+   "Name": "Thundercats Volleyball"
+  },
+  {
+   "ClubId": -54290,
+   "Name": "Toronto West Volleyball Club"
+  },
+  {
+   "ClubId": -53608,
+   "Name": "Twin Bridges Volleyball Club"
+  },
+  {
+   "ClubId": -53534,
+   "Name": "Waterloo Volleyball Club"
+  },
+  {
+   "ClubId": -53807,
+   "Name": "Woodstock Warriors"
+  },
+  {
+   "ClubId": -53558,
+   "Name": "York Region Volleyball"
+  }
+ ],
+ "Divisions": [
+  {
+   "IsFinished": true,
+   "DivisionId": -50021,
+   "Name": "15U Boys Division 2",
+   "TeamCount": 26,
+   "CodeAlias": "15UB D2",
+   "ColorHex": "#FF7F7F"
+  },
+  {
+   "IsFinished": true,
+   "DivisionId": -50019,
+   "Name": "TLS Girls Division 7",
+   "TeamCount": 20,
+   "CodeAlias": "TLSG D7",
+   "ColorHex": "#FF5F7F"
+  }
+ ],
+ "HasNotes": false,
+ "HasFlowCharts": false,
+ "IsUsavQualifierEvent": false,
+ "BallerTvIntegrationEnabled": false,
+ "SePlayIntegrationEnabled": false
+}

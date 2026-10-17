@@ -1,43 +1,47 @@
-"""Read-only AES hierarchy. Unsupported shapes fail visibly, preserving previous data."""
+"""Read-only AES hierarchy. Unsupported shapes fail visibly, preserving previous data.
+
+Reads the JSON paths the AES results site uses: event, division playdays, pools per day,
+poolsheet per pool, timestamp. Pool play only; AES times are local to the event.
+"""
 
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from urllib.parse import quote
+
 from app.adapters.live import Snapshot, fetch_text
 
 
-def pick(obj, *keys, default=None):
-    if not isinstance(obj, dict):
-        return default
-    values = {re.sub("[^a-z0-9]", "", k.lower()): v for k, v in obj.items()}
-    return next(
-        (values[k.lower()] for k in keys if values.get(k.lower()) is not None), default
-    )
+def aes_event_url(event_key):
+    key = str(event_key)
+    if not re.fullmatch("[A-Za-z0-9_=-]{1,300}", key):
+        raise ValueError("Enter the AES event key from the official event URL")
+    return "https://results.advancedeventsystems.com/api/event/" + quote(key, safe="")
 
 
-def items(obj, *keys):
-    if isinstance(obj, list):
-        return obj
-    value = pick(obj, *keys, "data", default=[])
-    if isinstance(value, dict):
-        return items(value, *keys)
-    if not isinstance(value, list):
-        raise ValueError("AES collection format changed")
+def collection(value):
+    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
+        raise ValueError("AES collection format changed; previous data retained")
     return value
 
 
 def read_aes(config, get=fetch_text):
-    key = str(config.get("event_key", ""))
-    if not re.fullmatch("[A-Za-z0-9_=-]{1,300}", key):
-        raise ValueError("Enter the AES event key from the official event URL")
-    base = "https://results.advancedeventsystems.com/api/event/" + quote(key, safe="")
+    base = aes_event_url(config.get("event_key", ""))
 
     def read(path=""):
         return json.loads(get(base + path))
 
-    divisions = items(read(), "divisions", "eventdivisions")
+    try:
+        return _read(config, read)
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(
+            "AES data has an unexpected shape; previous data retained"
+        ) from exc
+
+
+def _read(config, read):
+    event = read()
+    divisions = event.get("Divisions") if isinstance(event, dict) else None
     if not divisions:
         raise ValueError("AES division collection missing; previous data retained")
     out = Snapshot()
@@ -48,197 +52,93 @@ def read_aes(config, get=fetch_text):
     ):
         out.unchanged = True
         return out
+    venue = (event.get("Location") or "").split(" (")[0].strip() or config.get(
+        "venue", "Venue to be confirmed by organizer"
+    )
     selected = {str(x) for x in config.get("division_ids", [])}
-    jobs = []
-    for d in divisions:
-        did, name = pick(d, "id", "divisionid"), pick(d, "name", "divisionname")
-        if did is None or not name:
-            raise ValueError("AES division identity missing")
-        if selected and str(did) not in selected:
+    entries, jobs = {}, []
+    for d in collection(divisions):
+        did = str(d["DivisionId"])
+        if selected and did not in selected:
             continue
         out.divisions.append(
-            {
-                "name": str(name),
-                "code": pick(d, "code", "shortname"),
-                "external_id": str(did),
-            }
+            {"name": d["Name"], "code": d.get("CodeAlias"), "external_id": did}
         )
-        for day in items(
-            read(f"/division/{quote(str(did), safe='')}/playdays"), "playdays", "dates"
-        ):
-            date = (
-                pick(day, "date", "playdate", "playday")
-                if isinstance(day, dict)
-                else day
-            )
-            if not date:
-                raise ValueError("AES playday missing")
-            for pool in items(
-                read(
-                    f"/division/{quote(str(did), safe='')}/pools/{quote(str(date), safe='')}"
-                ),
-                "pools",
-                "plays",
+        for day in collection(read(f"/division/{quote(did, safe='')}/playdays")):
+            if not isinstance(day["HasPools"], bool):
+                raise TypeError("AES pool flag format changed")
+            if not day["HasPools"]:
+                continue
+            date = day["DateTime"][:10]
+            for pool in collection(
+                read(f"/division/{quote(did, safe='')}/pools/{date}")
             ):
-                pid = pick(pool, "playid", "id", "poolid")
-                if pid is None:
-                    raise ValueError("AES pool identity missing")
-                jobs.append(
-                    (
-                        str(pid),
-                        str(name),
-                        str(date),
-                        str(pick(pool, "name", "poolname", default="Pool / playoff")),
+                for t in collection(pool["Teams"]):
+                    club = t.get("Club") or {}
+                    entries.setdefault(
+                        str(t["TeamId"]),
+                        {
+                            "external_entry_id": str(t["TeamId"]),
+                            "team_name": t["TeamName"],
+                            "division": d["Name"],
+                            "division_code": d.get("CodeAlias") or "",
+                            "club_name": club.get("Name") or "",
+                        },
                     )
-                )
+                jobs.append((str(pool["PlayId"]), d["Name"], pool.get("FullName")))
+    if selected and selected != {d["external_id"] for d in out.divisions}:
+        raise ValueError("Selected AES division missing; previous data retained")
     if len(jobs) > 2000:
         raise ValueError(
             "Select fewer AES divisions; one connection supports up to 2000 pools"
         )
-    entries = {}
 
     def sheet(job):
         return job, read("/poolsheet/" + quote(job[0], safe=""))
 
     with ThreadPoolExecutor(max_workers=4) as executor:
-        for (pid, division, date, round_name), data in executor.map(sheet, jobs):
-            names = {}
-            for t in items(data, "teams"):
-                tid, name = (
-                    pick(t, "id", "teamid", "entryid"),
-                    pick(t, "name", "teamname"),
-                )
-                if tid is None or not name:
-                    raise ValueError("AES team identity missing")
-                names[str(tid)] = str(name)
-                entries[str(tid)] = {
-                    "external_entry_id": str(tid),
-                    "team_name": str(name),
-                    "division": division,
-                    "club_name": pick(t, "clubname", default=""),
-                }
-            matches = items(data, "matches", "games")
-            if pick(data, "matches", "games") is None:
-                raise ValueError("AES poolsheet match collection missing")
-            for m in matches:
-                mid = pick(m, "id", "matchid", "gameid")
-                if mid is None:
-                    raise ValueError("AES match identity missing")
-                court = pick(
-                    m,
-                    "court",
-                    "courtname",
-                    "courtnumber",
-                    default="Court to be confirmed",
-                )
-                venue = pick(
-                    m,
-                    "venuename",
-                    "facilityname",
-                    default=pick(
-                        data,
-                        "venuename",
-                        "facilityname",
-                        default=config.get("venue")
-                        or "Venue to be confirmed by organizer",
-                    ),
-                )
-                if isinstance(court, dict):
-                    venue = pick(court, "venuename", "facilityname", default=venue)
-                    court = pick(
-                        court,
-                        "name",
-                        "label",
-                        "number",
-                        default="Court to be confirmed",
-                    )
+        for (_, division, pool_name), data in executor.map(sheet, jobs):
+            for m in collection(data["Matches"]):
+                sets = [
+                    f"{s['FirstTeamScore']}-{s['SecondTeamScore']}"
+                    for s in m.get("Sets") or []
+                    if s.get("FirstTeamScore") is not None
+                    and s.get("SecondTeamScore") is not None
+                ]
+                if m.get("FirstTeamWon") or m.get("SecondTeamWon"):
+                    status = "completed"
+                else:
+                    # Published set scores alone do not confirm a match is live.
+                    status = "scheduled"
                 row = {
-                    "external_match_id": str(mid),
+                    "external_match_id": str(m["MatchId"]),
                     "division": division,
-                    "venue": str(venue),
-                    "court": str(court),
-                    "court_area": str(pick(m, "courtarea", "hall", default="")),
-                    "round": str(pick(m, "roundname", "round", default=round_name)),
-                    "scheduled_start": "",
-                    "status": "scheduled",
-                    "set_scores": "",
+                    "venue": venue,
+                    "court": (m.get("Court") or {}).get("Name")
+                    or "Court to be confirmed",
+                    "round": " · ".join(
+                        x for x in (pool_name, m.get("MatchFullName")) if x
+                    ),
+                    # Naive local time; the importer reads it in the event's timezone.
+                    "scheduled_start": m.get("ScheduledStartDateTime") or "",
+                    "status": status,
+                    "set_scores": " ".join(sets),
+                    "work_entry_id": "",
                 }
-                for side in ("home", "away"):
-                    team = pick(
-                        m, side, side + "team", "team1" if side == "home" else "team2"
+                for side, prefix in (("home", "First"), ("away", "Second")):
+                    tid = m.get(prefix + "TeamId")
+                    if tid is not None and str(tid) not in entries:
+                        raise ValueError(
+                            "AES match team missing; previous data retained"
+                        )
+                    row[side + "_entry_id"] = str(tid) if tid is not None else ""
+                    row[side + "_placeholder"] = (
+                        ""
+                        if tid is not None
+                        else m.get(prefix + "TeamName") or "To be decided"
                     )
-                    tid = (
-                        pick(team, "id", "teamid", "entryid")
-                        if isinstance(team, dict)
-                        else pick(m, side + "teamid", side + "id")
-                    )
-                    name = (
-                        pick(team, "name", "teamname")
-                        if isinstance(team, dict)
-                        else names.get(str(tid))
-                    )
-                    if tid is not None and name:
-                        entries[str(tid)] = {
-                            "external_entry_id": str(tid),
-                            "team_name": str(name),
-                            "division": division,
-                            "club_name": pick(team, "clubname", default=""),
-                        }
-                        row[side + "_entry_id"] = str(tid)
-                    else:
-                        row[side + "_entry_id"] = ""
-                    row[side + "_placeholder"] = str(
-                        pick(m, side + "placeholder", side + "seed", default="")
-                        or (name if tid is None else "")
-                        or "To be decided"
-                    )
-                start = pick(m, "scheduledstart", "startdatetime", "starttime", "time")
-                if start:
-                    start = str(start)
-                    if re.fullmatch(r"\d{1,2}:\d\d(?::\d\d)?", start):
-                        start = date[:10] + "T" + start
-                    try:
-                        datetime.fromisoformat(start)
-                    except ValueError as exc:
-                        raise ValueError("AES match start format changed") from exc
-                    row["scheduled_start"] = start
-                status = (
-                    str(pick(m, "status", "matchstatus", default="scheduled"))
-                    .lower()
-                    .replace(" ", "_")
-                )
-                status = {
-                    "final": "completed",
-                    "finished": "completed",
-                    "playing": "in_progress",
-                    "pending": "scheduled",
-                }.get(status, status)
-                if status not in {
-                    "scheduled",
-                    "in_progress",
-                    "completed",
-                    "postponed",
-                    "cancelled",
-                }:
-                    raise ValueError("AES match status requires mapping review")
-                row["status"] = status
-                scores = []
-                for score in items(m, "sets", "setscores", "scores"):
-                    h, a = (
-                        pick(score, "home", "homescore", "team1score"),
-                        pick(score, "away", "awayscore", "team2score"),
-                    )
-                    if h is not None and a is not None:
-                        scores.append(f"{int(h)}-{int(a)}")
-                row["set_scores"] = " ".join(scores)
-                work = pick(m, "workteam", "refteam")
-                wid = (
-                    pick(work, "id", "teamid")
-                    if isinstance(work, dict)
-                    else pick(m, "workteamid", "refteamid")
-                )
-                if wid and str(wid) in entries:
-                    row["work_entry_id"] = str(wid)
+                if str(m.get("WorkTeamId")) in entries:
+                    row["work_entry_id"] = str(m["WorkTeamId"])
                 out.matches.append(row)
     out.entries = list(entries.values())
     return out
