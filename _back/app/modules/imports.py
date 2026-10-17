@@ -1,4 +1,4 @@
-"""Staged CSV imports: validate and preview, then commit atomically.
+"""Staged imports (CSV uploads and live source refreshes): validate and preview, then commit atomically.
 
 Rules from the implementation spec:
 - Identifiers resolve through external mappings; no team is matched by a similar name.
@@ -16,6 +16,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.adapters.base import ParseResult
 from app.adapters.csv_adapter import ADAPTERS
 from app.core.config import get_settings
 from app.models import (
@@ -86,6 +87,34 @@ def stage_import(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Source mode {source.mode} has no import adapter")
 
     parsed = adapter.parse(kind, content, timezone=event.timezone, strict=options.get("strict", True))
+    return stage_parsed(
+        db,
+        event=event,
+        source=source,
+        kind=kind,
+        parsed=parsed,
+        filename=filename,
+        file_hash=hashlib.sha256(content).hexdigest(),
+        options=options,
+        actor_id=actor_id,
+    )
+
+
+def stage_parsed(
+    db: Session,
+    *,
+    event: Event,
+    source: Source,
+    kind: str,
+    parsed: ParseResult,
+    filename: str | None,
+    file_hash: str,
+    options: dict[str, Any],
+    actor_id: uuid.UUID | None,
+    summary: dict[str, Any] | None = None,
+) -> ImportBatch:
+    """Stage normalized rows from any adapter for preview; nothing changes until commit."""
+    settings = get_settings()
     errors = list(parsed.errors)
     if len(parsed.rows) > settings.import_max_rows:
         errors.append(f"File has more than {settings.import_max_rows} rows")
@@ -96,7 +125,6 @@ def stage_import(
             db, event, source, parsed.rows
         )
 
-    file_hash = hashlib.sha256(content).hexdigest()
     previous = db.scalar(
         select(ImportBatch.id).where(
             ImportBatch.source_id == source.id,
@@ -121,6 +149,7 @@ def stage_import(
         created_by=actor_id,
         summary={
             **counts,
+            **(summary or {}),
             "warnings": parsed.warnings,
             "identical_to_batch": str(previous) if previous else None,
         },
@@ -142,13 +171,27 @@ def _row(parsed, action: str, changes: list[str] | None = None, extra_errors: li
     }
 
 
+def _entry_division(db: Session, event: Event, source: Source, data: dict) -> tuple[Division | None, list[str]]:
+    """A source with its own division ids resolves them through mappings, never by name."""
+    external_id = data.get("division_external_id")
+    if not external_id:
+        return _division(db, event.id, data["division"]), []
+    division_id = _mapping(db, source.id, "division", external_id)
+    if division_id:
+        return db.get(Division, division_id), []
+    if _division(db, event.id, data["division"]):
+        return None, [f"division '{data['division']}' already exists for this event from another source"]
+    return None, []
+
+
 def _stage_entries(db: Session, event: Event, source: Source, rows) -> list[dict]:
     out = []
     for parsed in rows:
+        _, division_errors = _entry_division(db, event, source, parsed.data)
         entry_id = _mapping(db, source.id, "entry", parsed.external_id)
         entry = db.get(EventEntry, entry_id) if entry_id else None
         if entry is None:
-            out.append(_row(parsed, "add"))
+            out.append(_row(parsed, "add", extra_errors=division_errors))
             continue
         changes = []
         if entry.team_name != parsed.data["team_name"]:
@@ -166,13 +209,13 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
     for parsed in rows:
         d = parsed.data
         errors: list[str] = []
-        division = _division(db, event.id, d["division"]) if d["division"] else None
+        division, _ = _entry_division(db, event, source, d) if d["division"] else (None, [])
         if d["division"] and division is None:
             errors.append(f"unknown division '{d['division']}'; import entries first")
-        venue = _venue(db, event.id, d["venue"]) if d["venue"] else None
+        venue, new_venue = _match_venue(db, event, d)
         if d["venue"] and venue is None:
             errors.append(f"unknown venue '{d['venue']}'; add it in Event content first")
-        court = _court(db, venue.id, d["court"]) if venue and d["court"] else None
+        court = _match_court(db, source, venue, d)
         slots = {}
         for slot in ("home", "away"):
             ext = d[f"{slot}_entry_id"]
@@ -190,7 +233,8 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
             "division_id": str(division.id) if division else None,
             "venue_id": str(venue.id) if venue else None,
             "court_id": str(court.id) if court else None,
-            "new_court": bool(venue and d["court"] and court is None),
+            "new_venue": new_venue,
+            "new_court": bool((venue or new_venue) and d["court"] and court is None),
             "home_canonical": slots["home"],
             "away_canonical": slots["away"],
             "work_canonical": str(work_id) if work_id else None,
@@ -204,6 +248,29 @@ def _stage_matches(db: Session, event: Event, source: Source, rows) -> list[dict
             changes.append("court_id")
         out.append(_row(parsed, "change" if changes else "unchanged", sorted(set(changes)), match_id=str(existing.id), **extra))
     return out
+
+
+def _match_venue(db: Session, event: Event, d: dict) -> tuple[Venue | None, str | None]:
+    """A named venue, or for a live source without venue names, the event's own venue.
+
+    If the event has no venue yet, the source's location name becomes one at commit.
+    """
+    if d["venue"]:
+        return _venue(db, event.id, d["venue"]), None
+    if not d.get("court_external_id"):
+        return None, None
+    venue = db.scalar(select(Venue).where(Venue.event_id == event.id).order_by(Venue.sort, Venue.name).limit(1))
+    if venue is None and d.get("aes_location"):
+        return None, d["aes_location"]
+    return venue, None
+
+
+def _match_court(db: Session, source: Source, venue: Venue | None, d: dict) -> Court | None:
+    if d.get("court_external_id"):
+        court_id = _mapping(db, source.id, "court", d["court_external_id"])
+        if court_id:
+            return db.get(Court, court_id)
+    return _court(db, venue.id, d["court"]) if venue and d["court"] else None
 
 
 def _match_state(data: dict, court_id: uuid.UUID | None) -> MatchState:
@@ -308,6 +375,8 @@ def commit_import(db: Session, batch_id: uuid.UUID, actor_id: uuid.UUID | None, 
     source.last_import_at = now
     source.last_successful_check_at = now
     upstream = [r["data"].get("source_updated_at") for r in batch.rows if r["data"].get("source_updated_at")]
+    if batch.options.get("upstream_updated_at"):
+        upstream.append(batch.options["upstream_updated_at"])
     if upstream:
         source.upstream_updated_at = max(datetime.fromisoformat(u) for u in upstream)
     event.revision += 1
@@ -336,11 +405,15 @@ def _commit_entries(db: Session, event: Event, source: Source, batch: ImportBatc
         if row["action"] == "unchanged":
             continue
         d = row["data"]
-        division = _division(db, event.id, d["division"])
+        division, _ = _entry_division(db, event, source, d)
         if division is None:
             division = Division(event_id=event.id, name=d["division"], code=d.get("division_code"))
             db.add(division)
             db.flush()
+            if d.get("division_external_id"):
+                db.add(ExternalMapping(source_id=source.id, entity_type="division", external_id=d["division_external_id"], canonical_id=division.id))
+        elif d.get("division_external_id"):
+            division.name, division.code = d["division"], d.get("division_code")
         if row["action"] == "add":
             entry = EventEntry(event_id=event.id, team_name=d["team_name"], club_name=d["club_name"], division_id=division.id)
             db.add(entry)
@@ -362,13 +435,16 @@ def _commit_matches(db: Session, event: Event, source: Source, batch: ImportBatc
         d = row["data"]
         court_id = uuid.UUID(d["court_id"]) if d.get("court_id") else None
         if d.get("new_court"):
-            venue_id = uuid.UUID(d["venue_id"])
+            venue_id = uuid.UUID(d["venue_id"]) if d.get("venue_id") else _commit_venue(db, event, d["new_venue"]).id
             court = _court(db, venue_id, d["court"])
             if court is None:
                 court = Court(venue_id=venue_id, label=d["court"])
                 db.add(court)
                 db.flush()
             court_id = court.id
+        if court_id and d.get("court_external_id") and not _mapping(db, source.id, "court", d["court_external_id"]):
+            db.add(ExternalMapping(source_id=source.id, entity_type="court", external_id=d["court_external_id"], canonical_id=court_id))
+            db.flush()
         state = _match_state(d, court_id)
         if row["action"] == "add":
             match = Match(event_id=event.id, source_id=source.id, external_id=row["external_id"])
@@ -379,6 +455,15 @@ def _commit_matches(db: Session, event: Event, source: Source, batch: ImportBatc
             match = db.get(Match, uuid.UUID(d["match_id"]))
             emitted += len(apply_match_state(db, match, state, simulated=event.is_demo))
     return emitted
+
+
+def _commit_venue(db: Session, event: Event, name: str) -> Venue:
+    venue = _venue(db, event.id, name)
+    if venue is None:
+        venue = Venue(event_id=event.id, name=name)
+        db.add(venue)
+        db.flush()
+    return venue
 
 
 def _commit_rosters(db: Session, event: Event, source: Source, batch: ImportBatch, actor_id) -> int:

@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 
 from app.models import Division, EventEntry, Match
 from tests.conftest import ADMIN, OFFICIAL
+from tests.test_aes import EVENT_KEY as AES_KEY
+from tests.test_aes import recorded
 
 
 def entry_id(db, name: str) -> str:
@@ -530,3 +532,108 @@ def test_staff_see_active_delay_notices_with_their_court(client, demo, delay_cou
     assert active["id"] == replacement["id"] and active["minutes"] == 35
     assert active["court"]["label"] == "Court 7" and active["court"]["venue_name"] == "Hall A"
     assert client.get(f"/v1/admin/events/{demo.id}/delay-notices", headers=OFFICIAL).status_code == 403
+
+
+def aes_source(client, fetch) -> str:
+    from app.api.admin import aes_fetch
+    from app.main import app
+
+    app.dependency_overrides[aes_fetch] = lambda: fetch
+    created = client.post(
+        "/v1/admin/events",
+        json={"slug": "ontario-2", "title": "Ontario Championships Event 2", "start_date": "2026-04-19", "end_date": "2026-04-21"},
+        headers=ADMIN,
+    ).json()["data"]
+    client.patch(f"/v1/admin/events/{created['id']}", json={"status": "published"}, headers=ADMIN)
+    source = client.post(
+        f"/v1/admin/events/{created['id']}/sources",
+        json={"name": "AES Event 2", "mode": "aes", "external_key": AES_KEY},
+        headers=ADMIN,
+    )
+    assert source.status_code == 201
+    assert source.json()["data"]["official_url"] == f"https://results.advancedeventsystems.com/event/{AES_KEY}"
+    return source.json()["data"]["id"]
+
+
+@pytest.fixture
+def no_overrides():
+    from app.main import app
+
+    yield
+    app.dependency_overrides.clear()
+
+
+def test_aes_source_needs_an_event_key(client, demo):
+    response = client.post(f"/v1/admin/events/{demo.id}/sources", json={"name": "AES", "mode": "aes"}, headers=ADMIN)
+    assert response.status_code == 422
+
+
+def test_aes_refresh_preview_commit_then_search_and_follow(client, demo, no_overrides):
+    source_id = aes_source(client, recorded())
+    staged = client.post(f"/v1/admin/sources/{source_id}/refresh", json={"kind": "entries"}, headers=ADMIN)
+    assert staged.status_code == 201
+    preview = staged.json()["data"]
+    assert preview["state"] == "staged" and preview["summary"]["found"] == {"divisions": 2, "clubs": 38, "teams": 46}
+    assert {r["action"] for r in preview["rows"]} == {"add"}
+    assert client.get("/v1/events/ontario-2/teams", params={"q": "Woodstock"}).json()["total"] == 0
+
+    assert client.post(f"/v1/admin/imports/{preview['id']}/commit", headers=ADMIN).json()["data"]["state"] == "committed"
+    found = client.get("/v1/events/ontario-2/teams", params={"q": "Woodstock"}).json()
+    assert found["total"] == 1 and found["data"][0]["team_name"] == "Woodstock Warriors"
+    assert client.get("/v1/events/ontario-2/teams", params={"q": "TLSG D7"}).json()["total"] == 20
+
+    team = found["data"][0]["id"]
+    assert client.get(f"/v1/entries/{team}").json()["data"]["team_name"] == "Woodstock Warriors"
+    assert client.get("/v1/events/ontario-2/my-day", params={"entry_ids": team}).status_code == 200
+
+    aes = next(s for s in client.get("/v1/events/ontario-2").json()["sources"] if s["mode"] == "aes")
+    upstream = datetime.fromisoformat(aes["upstream_updated_at"])
+    assert upstream == datetime(2026, 4, 28, 13, 43, 1, 963904, tzinfo=timezone.utc), "AES last-update time"
+    assert aes["freshness"] == "current"
+
+
+def test_aes_outage_keeps_teams_and_shows_unavailable(client, demo, no_overrides):
+    from app.api.admin import aes_fetch
+    from app.main import app
+
+    source_id = aes_source(client, recorded())
+    preview = client.post(f"/v1/admin/sources/{source_id}/refresh", json={"kind": "entries"}, headers=ADMIN).json()["data"]
+    client.post(f"/v1/admin/imports/{preview['id']}/commit", headers=ADMIN)
+
+    def down(url: str) -> bytes:
+        raise TimeoutError("timed out")
+
+    app.dependency_overrides[aes_fetch] = lambda: down
+    failed = client.post(f"/v1/admin/sources/{source_id}/refresh", json={"kind": "entries"}, headers=ADMIN)
+    assert failed.status_code == 502 and "AES" in failed.json()["detail"]
+
+    health = client.get(f"/v1/admin/sources/{source_id}/health", headers=ADMIN).json()["data"]
+    assert health["status"] == "unavailable" and health["unavailable_since"] and health["last_check_error"]
+    aes = next(s for s in client.get("/v1/events/ontario-2").json()["sources"] if s["mode"] == "aes")
+    assert aes["freshness"] == "unavailable" and aes["unavailable_since"] == health["unavailable_since"]
+    assert client.get("/v1/events/ontario-2/teams").json()["total"] == 46
+
+
+def test_aes_matches_refresh_shows_in_my_day_and_match_centre(client, demo, no_overrides):
+    source_id = aes_source(client, recorded())
+    teams = client.post(f"/v1/admin/sources/{source_id}/refresh", json={"kind": "entries"}, headers=ADMIN).json()["data"]
+    client.post(f"/v1/admin/imports/{teams['id']}/commit", headers=ADMIN)
+
+    staged = client.post(f"/v1/admin/sources/{source_id}/refresh", json={"kind": "matches"}, headers=ADMIN)
+    assert staged.status_code == 201
+    preview = staged.json()["data"]
+    assert preview["kind"] == "matches" and preview["summary"]["add"] == 148
+    assert preview["summary"]["found"] == {"matches": 148, "courts": 14}
+    assert client.get("/v1/events/ontario-2/matches").json()["data"] == [], "nothing shows before commit"
+    client.post(f"/v1/admin/imports/{preview['id']}/commit", headers=ADMIN)
+
+    team = client.get("/v1/events/ontario-2/teams", params={"q": "Woodstock"}).json()["data"][0]["id"]
+    day = client.get("/v1/events/ontario-2/my-day", params={"entry_ids": team}).json()["data"]
+    shown = [m for m in day["matches"].values() if team in (m["home"]["entry_id"], m["away"]["entry_id"])]
+    assert len(shown) == 6
+    assert all(m["source"]["mode"] == "aes" and m["source"]["freshness"] == "current" for m in shown)
+
+    centre = client.get("/v1/events/ontario-2/matches", params={"entry_ids": team}).json()
+    first = centre["data"][0]
+    assert first["court"]["label"].startswith("Court ") and first["court"]["venue_name"] == "Enercare Centre"
+    assert first["sets"] and first["source"]["name"] == "AES Event 2"

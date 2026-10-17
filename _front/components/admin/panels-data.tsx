@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Upload } from "lucide-react";
-import { API_BASE, apiGet, type Match } from "@/lib/api";
+import { RefreshCw, Upload } from "lucide-react";
+import { API_BASE, apiGet, apiSend, type Match } from "@/lib/api";
 import { formatDay, formatRelative, formatTime } from "@/lib/format";
 import { Badge, Card, EmptyState, ErrorState, Loading, SectionTitle } from "../ui";
 import type { AdminEventData } from "./admin-event";
@@ -17,7 +17,16 @@ type Batch = {
   kind: string;
   filename: string | null;
   state: string;
-  summary: { add: number; change: number; unchanged: number; error: number; warnings?: string[]; identical_to_batch?: string | null; change_events?: number };
+  summary: {
+    add: number;
+    change: number;
+    unchanged: number;
+    error: number;
+    warnings?: string[];
+    identical_to_batch?: string | null;
+    change_events?: number;
+    found?: { divisions?: number; clubs?: number; teams?: number; matches?: number; courts?: number };
+  };
   error_count: number;
   created_at: string;
   committed_at: string | null;
@@ -38,9 +47,27 @@ export function ImportsPanel({ event }: { event: AdminEventData }) {
   const [preview, setPreview] = useState<Batch | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const live = event.sources.find((s) => s.id === sourceId)?.mode === "aes";
+  const [liveKind, setLiveKind] = useState<"entries" | "matches">("entries");
+
+  const refresh = async () => {
+    setUploading(true);
+    setError(null);
+    setPreview(null);
+    try {
+      const json = await apiSend<{ data: Batch }>(auth, "POST", `/v1/admin/sources/${sourceId}/refresh`, { kind: liveKind });
+      setPreview(json.data);
+    } catch (err) {
+      setError(err);
+    } finally {
+      history.refetch();
+      setUploading(false);
+    }
+  };
 
   const upload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (live) return refresh();
     if (!file) return;
     setUploading(true);
     setError(null);
@@ -79,17 +106,28 @@ export function ImportsPanel({ event }: { event: AdminEventData }) {
               {event.sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
-          <Field label="What's in the file">
-            <select value={kind} onChange={(e) => setKind(e.target.value)} className={inputClass}>
-              <option value="entries">Teams (entries)</option>
-              <option value="matches">Matches and results</option>
-              <option value="rosters">Rosters</option>
-            </select>
-          </Field>
-          <Field label="CSV file" hint="UTF-8, up to 5 MB">
-            <input type="file" accept=".csv,text/csv" required onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
-          </Field>
-          {kind === "rosters" && (
+          {live ? (
+            <Field label="What to read from AES" hint="Refresh teams first; matches need them. You'll see a preview before anything changes.">
+              <select value={liveKind} onChange={(e) => setLiveKind(e.target.value as "entries" | "matches")} className={inputClass}>
+                <option value="entries">Divisions, clubs and teams</option>
+                <option value="matches">Pool matches, courts and set scores</option>
+              </select>
+            </Field>
+          ) : (
+            <>
+              <Field label="What's in the file">
+                <select value={kind} onChange={(e) => setKind(e.target.value)} className={inputClass}>
+                  <option value="entries">Teams (entries)</option>
+                  <option value="matches">Matches and results</option>
+                  <option value="rosters">Rosters</option>
+                </select>
+              </Field>
+              <Field label="CSV file" hint="UTF-8, up to 5 MB">
+                <input type="file" accept=".csv,text/csv" required onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
+              </Field>
+            </>
+          )}
+          {!live && kind === "rosters" && (
             <Field label="Consent review reference" hint="Required to publish. Leave blank to save rosters as drafts.">
               <input value={consent} onChange={(e) => setConsent(e.target.value)} className={inputClass} />
             </Field>
@@ -97,7 +135,11 @@ export function ImportsPanel({ event }: { event: AdminEventData }) {
           <div className="sm:col-span-2">
             <FormError error={error} />
             <PrimaryButton pending={uploading}>
-              <span className="inline-flex items-center gap-2"><Upload aria-hidden className="h-4 w-4" /> Upload and preview</span>
+              {live ? (
+                <span className="inline-flex items-center gap-2"><RefreshCw aria-hidden className="h-4 w-4" /> Refresh from AES</span>
+              ) : (
+                <span className="inline-flex items-center gap-2"><Upload aria-hidden className="h-4 w-4" /> Upload and preview</span>
+              )}
             </PrimaryButton>
           </div>
         </form>
@@ -113,7 +155,17 @@ export function ImportsPanel({ event }: { event: AdminEventData }) {
               <Badge>{preview.summary.unchanged} unchanged</Badge>
               <Badge tone="danger">{preview.error_count} with errors</Badge>
             </div>
-            {preview.summary.identical_to_batch && <p className="mt-2 text-sm text-muted">This exact file was already committed. Committing again changes nothing.</p>}
+            {preview.summary.found?.teams !== undefined && (
+              <p className="mt-2 text-sm">
+                Found {preview.summary.found.divisions} divisions, {preview.summary.found.clubs} clubs and {preview.summary.found.teams} teams.
+              </p>
+            )}
+            {preview.summary.found?.matches !== undefined && (
+              <p className="mt-2 text-sm">
+                Found {preview.summary.found.matches} pool matches on {preview.summary.found.courts} courts.
+              </p>
+            )}
+            {preview.summary.identical_to_batch && <p className="mt-2 text-sm text-muted">This exact data was already committed. Committing again changes nothing.</p>}
             {preview.errors?.map((e) => <p key={e} className="mt-2 text-sm text-danger">{e}</p>)}
             {preview.summary.warnings?.map((w) => <p key={w} className="mt-2 text-sm text-warn">{w}</p>)}
             {!!preview.rows?.length && (

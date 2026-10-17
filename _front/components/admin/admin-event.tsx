@@ -90,13 +90,13 @@ export function AdminEvent({ eventId }: { eventId: string }) {
 function SourcesPanel({ event }: { event: AdminEventData }) {
   const patch = useAdminMutation<{ id: string; status: string }>("PATCH", (b) => `/v1/admin/sources/${b.id}`);
   const create = useAdminMutation("POST", `/v1/admin/events/${event.id}/sources`);
-  const [form, setForm] = useState({ name: "", mode: "manual_import", official_url: "" });
+  const [form, setForm] = useState({ name: "", mode: "manual_import", official_url: "", external_key: "" });
 
   return (
     <div>
       <p className="mb-3 text-sm text-muted">
-        A source is where competition data comes from. CSV imports work today. AES, TIMU and MyTeam.click sources are labels until a
-        connector is authorized; their data still arrives by CSV.
+        A source is where competition data comes from. An AES source reads the AES results site by its event key; refresh it from
+        Imports. TIMU and MyTeam.click sources are labels until a connector is authorized; their data still arrives by CSV.
       </p>
       <ul className="space-y-2">
         {event.sources.map((s) => (
@@ -108,6 +108,8 @@ function SourcesPanel({ event }: { event: AdminEventData }) {
                   <p className="text-sm text-muted">
                     {s.mode} · {s.freshness.replace("_", " ")} · last import {formatRelative(s.last_import_at)} · generation {s.generation}
                   </p>
+                  {s.upstream_updated_at && <p className="text-sm text-muted">Source last updated {formatRelative(s.upstream_updated_at)}</p>}
+                  {s.unavailable_since && <p className="text-sm text-danger">Source unavailable since {formatRelative(s.unavailable_since)}</p>}
                 </div>
                 <label className="text-sm">
                   <span className="sr-only">Status for {s.name}</span>
@@ -133,7 +135,7 @@ function SourcesPanel({ event }: { event: AdminEventData }) {
           className="grid gap-3 sm:grid-cols-3"
           onSubmit={(e) => {
             e.preventDefault();
-            create.mutate({ ...form, official_url: form.official_url || null });
+            create.mutate({ ...form, official_url: form.official_url || null, external_key: form.mode === "aes" ? form.external_key : null });
           }}
         >
           <Field label="Name">
@@ -142,7 +144,7 @@ function SourcesPanel({ event }: { event: AdminEventData }) {
           <Field label="Platform">
             <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className={inputClass}>
               <option value="manual_import">CSV import</option>
-              <option value="aes">AES (CSV for now)</option>
+              <option value="aes">AES (live)</option>
               <option value="timu">TIMU (CSV for now)</option>
               <option value="myteam">MyTeam.click (CSV for now)</option>
             </select>
@@ -150,6 +152,11 @@ function SourcesPanel({ event }: { event: AdminEventData }) {
           <Field label="Official results page">
             <input type="url" value={form.official_url} onChange={(e) => setForm({ ...form, official_url: e.target.value })} className={inputClass} />
           </Field>
+          {form.mode === "aes" && (
+            <Field label="AES event key" hint="The long code after /event/ in the AES results address">
+              <input required value={form.external_key} onChange={(e) => setForm({ ...form, external_key: e.target.value.trim() })} className={inputClass} />
+            </Field>
+          )}
           <div className="sm:col-span-3">
             <FormError error={create.error} />
             <PrimaryButton pending={create.isPending}>Add source</PrimaryButton>

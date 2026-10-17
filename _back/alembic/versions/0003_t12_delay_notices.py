@@ -1,7 +1,7 @@
 """delay notices on courts
 
 Revision ID: 0003_t12_delay_notices
-Revises: 0002_t7_demo_clock
+Revises: 0002_t8_aes_source
 """
 from typing import Sequence, Union
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0003_t12_delay_notices"
-down_revision: Union[str, None] = "0002_t7_demo_clock"
+down_revision: Union[str, None] = "0002_t8_aes_source"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
