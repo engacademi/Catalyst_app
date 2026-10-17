@@ -1,163 +1,262 @@
-# Requirements
+# Requirements and app plan
 
-Drafted from [`source/case-brief.md`](source/case-brief.md) and [resources.md](resources.md). Tags in square brackets give the source: `brief §05` is section 05 of the case brief, and `resources: AES` is that resource's entry in resources.md. Items numbered A-NN are assumptions and Q-NN are open questions.
+This is the single plan for the hackathon build. It merges the earlier requirements draft with the team's research and technical documents, and records which features stay, which are added and which are cut.
 
-## Problem statement
+Sources and how they're cited:
 
-Athletes, coaches, families and fans at OVA's major competitions have to piece together schedules, results, rosters and event updates from several websites, apps and channels, and search through hundreds of teams to find the ones they care about [brief §02, §03]. Behind the scenes, OVA staff compile rosters by hand from spreadsheets, emails and forms, and each competition may run on a different tournament platform (AES, TIMU or MyTeam.click), so the experience changes from one event to the next [brief §02, §03].
+- `[brief §05]`: a section of the OVA case brief, [`source/case-brief.md`](source/case-brief.md). This is the authority; where anything below conflicts with it, the brief wins.
+- `[resources: AES]`: an entry in [resources.md](resources.md).
+- `[research S5]`, `[catalogue CC-07]`, `[tech §9]`, `[notes]`: the team's [preliminary research](OVA_Preliminary_Research.md), [product catalogue](OVA_Technical_Product_Catalogue.md), [MVP technical implementation](OVA_MVP_Technical_Implementation.md) and [hackathon notes](Volleyball%20Hackathon_%20Nortes.md). Those documents stay as detailed reference for the longer-term product. Facts quoted from the research weren't re-checked for this plan.
 
-## Users
+## 1. What the judges are looking for
+
+OVA lists seven outcomes in brief §07. Every decision in this plan points back to at least one of them.
+
+| ID | Judging outcome [brief §07] |
+| -- | --------------------------- |
+| J1 | Improve the event experience: intuitive, engaging, information easy to find during busy competitions. |
+| J2 | Meaningful personalization: follow the teams and divisions people care about, without repeated searching. |
+| J3 | Connect existing systems: bring information together from multiple sources without duplicating competition management. |
+| J4 | Reduce administrative work: fewer manual roster submissions, less duplicate entry and staff effort. |
+| J5 | Accessible experiences for athletes, families, coaches and spectators. |
+| J6 | Long-term scalability across competitions and platforms. |
+| J7 | Sustainable value: sponsor engagement or revenue that offsets operating costs. |
+
+The brief closes by saying the strongest solutions balance a great participant experience with technical feasibility, ease of maintenance and long-term value for OVA. Brief §06 asks for a functional prototype or proof of concept, not a production service.
+
+The brief's requirements and considerations [brief §05], used as constraints throughout:
+
+| ID | Requirement [brief §05] |
+| -- | ----------------------- |
+| B-01 | Mobile-first, for phones at or following a live event. |
+| B-02 | Personalization: follow multiple teams or divisions; schedules, results and updates for them. |
+| B-03 | Systems integration: show how data is collected from existing platforms via APIs, feeds, exports, embeds or similar. |
+| B-04 | Flexible architecture: not built around one competition platform. |
+| B-05 | Reduced manual work: rosters, jersey numbers and photos flow from OVA's registration system without duplicate submissions. |
+| B-06 | Simple content management for non-technical staff. |
+| B-07 | Accessibility following AODA/WCAG. |
+| B-08 | Privacy and security: collect only necessary information, respect permissions on participant and team data. |
+| B-09 | Scalability to other major indoor and beach events. |
+| B-10 | Commercial sustainability through sponsorships, partner activations or other revenue. |
+
+## 2. Problem
+
+Athletes, coaches, families and fans at OVA's major competitions piece together schedules, results, rosters and updates from several websites, apps and channels, and search through hundreds of teams to find their own [brief §02, §03]. OVA staff compile rosters by hand, and different competitions run on different tournament platforms (AES, TIMU, MyTeam.click), so no experience stays consistent [brief §02, §03]. The scale is large: the team's research reports 1,338 teams, 58 courts and nine competition days at the Enercare Centre in 2026 [research S1].
+
+OVA already runs an event app, OVAchamps, with schedule links, roster announcements and venue information [brief §02; research S2]. A list of links and sponsors won't stand out against it. The companion has to make personal, changing information faster to find than it is today [research §3.1].
+
+## 3. Product in one line
+
+Follow your teams once, then always know where to go, what changed and what happens next [research §1].
+
+The companion is a mobile web app over the systems OVA already uses. AES, TIMU, MyTeam.click and OVA's registration system stay in charge of their data, and the companion shows where each piece came from and when it was last checked [brief §02; catalogue §1].
+
+## 4. Users
+
+The research makes the parent or guardian following one or more teams the primary persona [research §5], and this plan keeps that focus. The brief names athletes, coaches, families, fans and OVA staff [brief §01, §04].
 
 | User | What they need on tournament day |
 | ---- | -------------------------------- |
-| Organizer (OVA event staff) | Publish announcements and venue changes quickly without a developer, keep event and sponsor content current, and get rosters into the event without collecting them a second time [brief §03, §04, §05]. |
-| Referee or scorekeeper | Scoresheets, the scoring guide and the steps for submitting results [resources: TIMU]. The brief says OVA serves referees [brief §02] but doesn't describe their tournament-day duties, so any need beyond these materials is assumed (A-03). |
-| Coach | Their team's matches with times, courts and opponents, where pool results put them in the playoffs, and a correct roster they didn't have to submit twice [brief §03, §04; resources: TIMU]. |
-| Player | Next match time and court, results, and a team page with the roster and photo [brief §04]. |
-| Spectator or parent | Follow one or more teams, see the next match and live results, and find venue details, parking, announcements, and extras like tickets, merchandise and the 50/50 draw [brief §01, §02, §04]. |
+| Parent or spectator | Find and follow teams in a few taps, see the next match, court and venue, notice changes, find parking, food and entrances [brief §04; research §5]. |
+| Player | Next match and where to report, results, own team page [brief §04]. |
+| Coach | Their team's matches and playoff path, official notices, a roster they didn't have to submit twice [brief §03, §05]. |
+| Referee or scorekeeper | Event briefing, scoresheets and results-submission steps [resources: TIMU]. Assignments only if a source supplies them [research §5]. |
+| OVA event staff | Publish announcements and venue changes without a developer, import data once, see when a source is stale [brief §04, §05]. |
+| Sponsor or vendor | Be discoverable at useful moments, and see how often people engaged [brief §04; research §5]. |
 
-## Goals and non-goals
+## 5. Feature decisions
 
-The hackathon goal is a working, mobile-first prototype that covers the three areas in brief §04:
+Each decision names the judging outcomes (J) and brief requirements (B) behind it.
 
-- A personalized event experience: follow teams and divisions, then see their schedules, results, rosters and updates.
-- Connected systems: data from different tournament platforms shown through one experience, without rebuilding those platforms.
-- Event management and engagement: simple staff tools for announcements and event content, with room for sponsors and partners.
+### Keep or merge
 
-Out of scope:
+| Feature | Merged from | Why |
+| ------- | ----------- | --- |
+| Guest-first entry from a QR code or link; everyone starts as a spectator and roles add permissions | notes ("everyone starts as a spectator"), catalogue CC-01, earlier R-01/R-02 | Value shows before any sign-up, which is the "few taps" goal [brief §04]. No account means no unnecessary personal data (B-08). J1, J2. |
+| My Day: Next Match card, combined schedule for everything followed, overlap warning | notes "My day", research §13.3, catalogue CC-02, earlier R-03 | This is the personalization the judges name first (J2, B-02) and the parent's main job [research §5]. Smoothcomp's next-match card is the proven pattern [research §13]. |
+| Match centre: Upcoming / In progress / Results tabs, set scores, status, changed-field badges | catalogue CC-03, research §13.3, earlier R-04/R-05/R-10 | Answers "what happened and what's next" in one place (J1). Playoff slots stay "TBD" until results fill them [resources: TIMU]. |
+| Freshness and source labels on every schedule and result ("From AES, checked 2 min ago") | catalogue §1 trust contract, tech §7 | This is how the demo shows connected systems honestly (J3). The research found AES posts results after each match, so the app promises "latest published results", not live points [research §3.2, S3]. |
+| Updates feed: one in-app feed for schedule changes, results and announcements, filtered to what you follow, showing old and new values | notes "unified notification center", catalogue CC-04, earlier R-06 | "Receive relevant event updates" [brief §04] (J2, J1). In-app delivery needs no contact details (B-08). |
+| Event guide: parking, food, entrances, accessible routes, help desk, courts listed by venue | catalogue CC-06, earlier R-07 | Event communication is a named problem [brief §03] (J1). Courts belong to a venue, since "Court 3" exists in more than one building [research §3.4]. |
+| Team page with an approved roster (name, jersey number, position) and photo only when approved | catalogue CC-07 (simplified), earlier R-09/R-11 | Rosters are part of the challenge statement. Showing only approved fields covers B-08 for youth athletes [research §8]. |
+| Staff console: announcements, venue content, data import with preview and commit, source health | catalogue CC-12, tech §9, earlier R-14/R-15/R-16 | Non-technical staff publish without a developer (B-06, J4). Preview before commit stops bad data reaching parents. |
+| Sponsors, merchandise links and the 50/50 draw, placed so they never cover schedules or changes | catalogue CC-10/CC-11 (links only), earlier R-08 | Sustainable value (J7, B-10) without disrupting the experience [brief §04]. |
+| Adapter model with one shared data model (event, venue, court, division, team, match, set score) | tech §9, catalogue CC-13, earlier platform section | Lets AES, CSV exports and later TIMU or MyTeam.click feed the same screens (J3, J6, B-04). |
+| Accessibility target WCAG 2.2 AA: text alternatives to maps, status not shown by colour alone, 200% zoom, screen reader | research §8, tech §14, earlier R-20 | J5, B-07. The research sets 2.2 AA above Ontario's 2.0 AA baseline. |
 
-- Replacing AES, TIMU, MyTeam.click or OVA's registration platform. That includes building or editing schedules, scoring matches and entering results, which stay in the tournament platforms [brief §02, §05, §07].
-- Registration and membership.
-- Payments. Tickets, merchandise and 50/50 sales link out to the platforms that already handle them (the 50/50 runs on Ascend Fundraising Solutions) [brief §04; resources: 50/50].
-- Media accreditation, which OVA handles in person at its headquarters [resources: sponsorship].
+### Add
 
-## Functional requirements
+| Feature | Why it's added |
+| ------- | -------------- |
+| A live AES connector in the demo, reading the open AES event API | The technical plan uses CSV imports only and gates real connectors [tech §1]. But AES's event API returns JSON without signing in [resources: AES], so the demo can pull real Ontario Championships divisions and clubs. A real API pull is far stronger evidence for J3 and B-03 than a hand-made file. Reuse rights still need OVA's confirmation (Q-03). |
+| Two sources in the demo: AES for an indoor event and a CSV import for a second event (for example beach, standing in for MyTeam.click or TIMU) | Showing the same screens fed by two different platforms is the clearest proof of B-04 and J6. Beach is named in the scalability requirement (B-09). |
+| Follow divisions, not just teams, in the first version | The technical plan defers divisions [tech §1], but the brief asks for "teams or divisions" in both §05 (B-02) and §07 (J2). |
+| A visible "submitted once" roster flow: import a registration-system roster export, coach reviews it, staff publish it | J4 and B-05 are judged directly. The research found clubs already submit rosters, jersey numbers and positions through MRS for the event app [research §3.3, S5], so the demo shows MRS data flowing in rather than a new form. |
+| Simple sponsor engagement counts (views and clicks per sponsor card) in the staff console | J7 asks for evidence of sponsor value. The catalogue leaves reporting to a later phase [catalogue CC-11, CC-14]; plain aggregate counts are cheap and need no personal data. |
 
-### Spectator or parent
+### Remove or defer
 
-- **R-01** Follow any number of teams and divisions, and change the list at any time. [brief §04, §05]
-- **R-02** Find a team or division in a few taps by name, club or division, in an event with hundreds of teams (AES Event 2 has 446). [brief §03, §04; resources: AES]
-- **R-03** See one schedule for every followed team, with match time, court and opponent. [brief §04, §05; resources: TIMU]
-- **R-04** See results for followed teams as they come in, including set scores. [brief §01, §04; resources: TIMU]
-- **R-05** See clearly when a followed team's match is rescheduled. [resources: TIMU]
-- **R-06** Receive event updates, such as announcements and venue changes, that apply to the event or to followed teams. [brief §04, §05]
-- **R-07** Find venue information: address, parking, food accommodation, doors-open time and on-site services. [brief §02, §03; resources: AES, TIMU]
-- **R-08** See sponsors and partner offers (tickets, merchandise, the 50/50 draw) placed where they don't get in the way of schedules and results. [brief §04, §05; resources: sponsorship, 50/50]
+| Feature | Decision | Why |
+| ------- | -------- | --- |
+| SMS reminders | Remove | Not in the brief, costs per message, and commercial messaging needs consent handling [research §8, S19]. The in-app feed meets "receive relevant updates" for the demo. |
+| Email and push notifications | Defer | iOS only supports web push for Home Screen apps [research §8, S13], and delivery adds failure cases. The in-app feed proves the personalization. |
+| Required attendee login, native accounts, Google sign-in | Defer; sign-in for staff only | Requiring accounts adds friction (J1) and collects data the core journey doesn't need (B-08). Guest follows stay on the device [tech §6]. Optional attendee accounts can come later for cross-device sync. |
+| Location access for "events near you" and "scores near you" | Remove | B-08 says collect only necessary information. Championships are a handful of known events, so location adds a permission prompt without much benefit. |
+| Google Calendar sync | Defer | OAuth and two-way sync are heavy [catalogue CC-05]. A one-time .ics download, labelled as a snapshot, is enough if time allows. |
+| Merchandise checkout, ticket wallet, pickup codes | Remove | Payments are out of scope. Links to the existing merchant and Ascend's 50/50 site cover B-10. |
+| Full consent-record workflow and roster state machine | Simplify | The demo uses an "approved for public view" flag per field and per photo. The full workflow is production work [catalogue CC-07]. |
+| Referee assignment view | Defer | No source supplies assignments [research §5]. Referees get the briefing and scoresheet links instead. |
+| Grounded AI assistant | Remove | Not in the brief; the catalogue already rates it optional [catalogue CC-15]. |
+| Pricing packages, pilot cost model, interview programme | Keep out of the build | Useful for the pitch, not for the prototype. One finding matters for J7: sponsorship alone likely won't cover operating costs, so the pitch should pair sponsor value with staff time saved [research §9]. |
+| Production operations: job leasing, backup drills, MFA, private file buckets, load targets | Defer | Needed for a live pilot, not a demo [tech §10 to §12]. Team logos and venue images can live in the repo [tech §11]. |
+| Lock-screen countdowns, streaming, match recordings, coach coverage boards | Defer | Smoothcomp features that need native apps or new operations [research §13.9]. |
+| Dark mode, haptics, micro-animations | Dark mode optional; haptics removed | Nice polish but not judged. Haptics don't apply to a web app. |
 
-### Player
+## 6. Functional requirements for the hackathon build
 
-Players use R-01 to R-07 as well.
+Priority: **Must** is needed for the demo script in section 9, **Should** is built if time allows, **Later** is out of the hackathon. Tags give the source.
 
-- **R-09** Open a team page with the roster (names and jersey numbers) and the team photo. [brief §02, §04; source: team photo]
+### Parent, spectator or player
+
+- **R-01** (Must) Open an event from a QR code or link and browse it without an account. [brief §04; catalogue CC-01]
+- **R-02** (Must) Search teams by name, club or division in an event with hundreds of teams, and follow any number of teams and divisions. Follows stay on the device. [B-02; resources: AES; tech §6]
+- **R-03** (Must) My Day shows a Next Match card (team, opponent, time, venue, court, freshness) and a combined schedule for everything followed, with a warning when two followed matches overlap. [B-02; research §13.3; catalogue CC-02]
+- **R-04** (Must) Match centre with Upcoming, In progress and Results tabs and filters by division, venue and court. "In progress" appears only when the source says so. [brief §04; tech §8]
+- **R-05** (Must) Results show set scores as published by the source; a missing score shows as pending, never 0-0. [resources: TIMU; catalogue CC-03]
+- **R-06** (Must) A changed time or court shows the old and new values, on the match and in the Updates feed. [resources: TIMU; catalogue CC-04]
+- **R-07** (Must) Updates feed with announcements and changes for followed teams and divisions, plus event-wide notices. [brief §04; notes]
+- **R-08** (Must) Event guide with venue address, parking, food, accessible entrances and routes, help desk and a court list per venue. [brief §02, §03; catalogue CC-06]
+- **R-09** (Should) Team page with roster names, jersey numbers, positions and team photo, showing only approved fields. [brief §02; research S5; B-08]
+- **R-10** (Should) Download followed matches as an .ics file labelled as a snapshot. [catalogue CC-05]
+- **R-11** (Must) Sponsor cards, merchandise links and the 50/50 draw appear in the guide and between sections, never above a schedule change. [B-10; resources: 50/50, sponsorship]
 
 ### Coach
 
-- **R-10** Follow the team's path through the event: pool matches first, then the playoff slot once pool results decide it. TIMU shows unresolved slots as placeholders such as "W7 vs W8". [resources: TIMU]
-- **R-11** Roster details (names, jersey numbers, photos) arrive from OVA's registration platform, so the coach doesn't submit them again. [brief §03, §05]
+- **R-12** (Should) Review the team's imported roster before staff publish it, flagging a missing photo approval. [B-05; catalogue CC-07, CC-08]
+- **R-13** (Later) Verified coach role with team-only notices and acknowledgements. [catalogue CC-08]
 
 ### Referee or scorekeeper
 
-- **R-12** Reach the scoresheets, scoring guide and results-submission steps for the platform the event uses. [resources: TIMU]
-- **R-13** See their court and match assignments, paired with which times they are on their respective courts/matches. [assumed, A-03]
+- **R-14** (Should) Event briefing page with scoresheets, scoring guide and results-submission steps. [resources: TIMU]
+- **R-15** (Later) Personal assignment list, only if an authorized source supplies assignments. [research §5; catalogue CC-09]
 
-### Organizer
+### OVA event staff
 
-- **R-14** Publish announcements and venue updates from a simple screen, with no developer involved. [brief §04, §05]
-- **R-15** Manage event content: venue details, parking, sponsor and partner placements, and links to tickets, merchandise and the 50/50. [brief §04]
-- **R-16** Connect an event to its tournament platform (AES, TIMU, MyTeam.click or another) through configuration, without code changes. [brief §04, §05]
-- **R-17** Bring in rosters, jersey numbers and photos from the registration platform in bulk, without retyping them. [brief §03, §05]
-- **R-18** Set up a new event, indoor or beach, on the same app. [brief §05]
+- **R-16** (Must) Staff sign in to a console; attendees never need to. [B-08; tech §6]
+- **R-17** (Must) Publish, schedule and expire announcements, targeted to the event or a division, without a developer. [B-06; catalogue CC-12]
+- **R-18** (Must) Edit venue, parking, food and sponsor content. [B-06; brief §04]
+- **R-19** (Must) Connect an event to its source by configuration: the AES event key, or a CSV import. [B-04; tech §9]
+- **R-20** (Must) CSV import shows a preview of added, changed and errored rows before commit; a missing row never cancels a match. [tech §9; catalogue CC-12]
+- **R-21** (Must) Source health: last successful check per source, and a visible warning to attendees when a source is stale or down. [catalogue §9; tech §7]
+- **R-22** (Should) Import a roster export from the registration system and publish approved fields. [B-05; research §3.3]
+- **R-23** (Should) See view and click counts per sponsor card. [J7; catalogue CC-11]
 
 ### All users
 
-- **R-19** Work well on a phone in a busy venue. [brief §05]
-- **R-20** Follow AODA and WCAG accessibility principles. [brief §05]
-- **R-21** Collect only the data the app needs, and respect permissions on participant and team data. Many athletes are youth, which OVA's media policy treats with care. [brief §05; resources: sponsorship]
-- **R-22** Get data from each platform by whatever it supports: API, data feed, structured export or embed. [brief §05; resources: AES, TIMU]
+- **R-24** (Must) Works one-handed on a phone, with main navigation in thumb reach: My Day, Teams, Guide, Updates, More. [B-01; notes; catalogue §2]
+- **R-25** (Must) Meets WCAG 2.2 AA on the core journeys. [B-07; research §8]
+- **R-26** (Must) Collects no personal data from attendees; public views show only approved roster fields; no youth contact details, birthdates or locations. [B-08; research §8]
+- **R-27** (Should) Keeps the guide and last-loaded schedule readable on a weak venue connection, labelled with the time it was saved. [catalogue CC-06; notes]
 
-## Schedules, results and connected systems
+## 7. Out of scope
 
-The brief's challenge statement asks for one companion that brings together rosters, schedules, results, event updates, partners and event services "from multiple systems" [brief, challenge statement]. Schedules and results are managed in external tournament platforms such as AES, TIMU and MyTeam.click, and different competitions use different platforms [brief §02, §03]. The companion connects to these platforms and leaves them in charge of the competition.
+- Building or editing schedules, brackets, scoring or official results. The tournament platforms own these, and the brief rules out duplicating competition management [brief §02, §07; tech §1].
+- Registration, membership and eligibility decisions [catalogue §1].
+- Payments of any kind, including tickets, merchandise and 50/50 sales [section 5].
+- Media accreditation, which OVA handles in person [resources: sponsorship].
 
-### What the brief requires
+## 8. How the systems connect
 
-- Work with the existing systems. "The goal is not to replace these existing systems" [brief §02], and a strong solution brings information together "without duplicating competition-management functionality" [brief §07].
-- Stay independent of any one platform. The design should avoid being built around a single competition platform and adapt to different systems "without rebuilding the entire application", with AES, TIMU and MyTeam.click named as examples [brief §04, §05].
-- Use whatever integration each platform allows: APIs, data feeds, structured exports, embeds or other approaches [brief §05].
-- Combine three inputs in one experience: rosters from OVA's registration platform, schedules and results from the tournament systems, and event content from OVA staff [brief §04].
-- Personalize what each person sees. Users follow several teams or divisions and get schedules, results and updates for those, without searching through hundreds of teams each time [brief §03, §04, §05].
-- Handle the size of a major event, with hundreds of teams and multiple venues [brief §03], and carry over to other major indoor and beach events beyond the Ontario Championships [brief §05].
-- Stay practical to maintain, without extensive custom development or ongoing technical support [brief §03].
+| Source | What it supplies | How the build reads it | Status |
+| ------ | ---------------- | ---------------------- | ------ |
+| AES | Events, divisions, clubs; pools, matches, courts and results | JSON from `results.advancedeventsystems.com/api/event/<key>` | Event summary confirmed open [resources: AES]. Match-level endpoints still to check (A-04). |
+| TIMU | Pools, playoffs, courts, set scores, venue notes | HTML only, no feed found [resources: TIMU] | Demo uses a CSV export standing in for TIMU. |
+| MyTeam.click | Schedules (beach, per the research) | Unknown [resources: MyTeam.click] | Demo uses a CSV export standing in for it. |
+| OVA registration (MRS) | Rosters, jersey numbers, positions, photos | CSV export [research S5] | Demo uses a synthetic export. |
+| OVA staff | Announcements, venue content, sponsors | Staff console | Built in the app. |
 
-### What the platforms show today
+Each source goes through an adapter that maps it into the shared data model. Screens only read the shared model, so adding a platform means writing one adapter [tech §9]. Each record keeps its source and the time it was last checked. If a source fails, attendees see the last good data with a warning, never an empty schedule [catalogue §9].
 
-The resources show what the companion would read from each platform.
+## 9. Demo script
 
-- AES Event 2 of the 2026 Ontario Championships ran April 19 to 21 at the Enercare Centre in Toronto, with 446 teams from 90 clubs across 15 divisions (15U Boys D1 and D2, 6v6 Girls D1 to D6, TLS Girls D1 to D7). Its API returns JSON with an ID, name, short code and team count for each division [resources: AES].
-- The TIMU Bugarski Cup ran on one day across Courts 1 to 3. Teams played best-2-of-3 pool matches, then playoffs through gold, bronze and placement matches. Playoff slots stay as placeholders such as "W7 vs W8" until earlier results fill them (A-04), and rescheduled matches are marked in amber. TIMU publishes this as HTML with no export or feed [resources: TIMU].
-- MyTeam.click's content and format are unknown (Q-02).
+Use fictional players throughout and label simulated data as simulated [catalogue §11].
 
-The platforms structure the same things differently: AES uses JSON with numeric IDs, while TIMU uses HTML with text labels. A shared model (event, division, pool, team, match, court, set score) that each platform maps into would let the same screens work for any platform (R-16, R-22).
+| Step | What the judges see | Outcomes |
+| ---- | ------------------- | -------- |
+| 1 | A parent scans a QR code, finds two teams and a division in a few taps and follows them, with no account. | J1, J2 |
+| 2 | My Day shows the next match with its court and venue, and warns that two followed matches overlap. | J1, J2 |
+| 3 | The schedule includes an indoor event pulled from AES and a beach event from a CSV export, on the same screens, each with its source and check time. | J3, J6 |
+| 4 | Staff import an updated file. The preview shows one court change; they commit it, and the parent's Updates feed shows old and new courts. | J3, J4 |
+| 5 | Staff publish a parking announcement in under a minute, with no developer. | J4 |
+| 6 | A coach reviews a roster imported from the registration export; one photo isn't approved, so the public team page leaves it out. | J4, B-08 |
+| 7 | The guide shows sponsor cards, a merchandise link and the 50/50 draw; the staff console shows views and clicks per sponsor. | J7 |
+| 8 | The AES source is switched off; the app keeps the last schedule and shows a "source unavailable since…" warning. | J3, J1 |
+| 9 | My Day is used with a screen reader and at 200% zoom. | J5 |
 
-### Not covered by any source
+## 10. Build plan
 
-Match length, rest between matches, daily time windows, court counts at the Enercare Centre and referee duties don't appear in the brief or the resources (Q-05, Q-06). The tournament platforms own these rules, so the companion only needs to display what the platforms publish.
+The stack is the team's decision in the technical implementation: Next.js on Vercel, FastAPI and PostgreSQL on Railway, Clerk for sign-in [tech §2]. For a hackathon, three simplifications would save time, and each needs the team's agreement and an ADR:
 
-## Data available
+- Use Clerk only for the staff console, since attendees don't sign in.
+- Run update fan-out inside the API request instead of a separate worker service.
+- Keep logos, team images and venue graphics in the repo instead of a file bucket [tech §11].
 
-| Data | Where it lives | Format | Access |
-| ---- | -------------- | ------ | ------ |
-| Event details, divisions, clubs | AES | JSON from `results.advancedeventsystems.com/api/event/<key>` | Open, no sign-in. Pool, match and court data not yet checked (A-08). |
-| Pools, playoffs, courts, results, venue notes | TIMU | Server-rendered HTML | Open. No export or feed found, so it would need scraping. |
-| Schedule | MyTeam.click | Unknown (JavaScript app) | Couldn't read (Q-02). |
-| Rosters, jersey numbers, team photos | OVA registration platform | Not provided. Clubs currently send spreadsheets, emails and forms [brief §02]. | None yet (Q-04). |
-| Sample team photo | `source/Toronto Skyline Volleyball Team Portrait.png` | PNG | In repo. |
-| OVA logos | `source/Full Colour Logo/`, `source/BW Logo/` | PNG, JPG, EPS | In repo. |
-| Sponsor list | OVA sponsorship page | HTML with logo links | Open. Tiers and prices not listed. |
-| 50/50 draws | ova5050.org (Ascend Fundraising Solutions) | HTML | Open. |
-| Accommodations | OVA website | Behind SportsEngine sign-in | Couldn't read (Q-03). |
-| Announcements, parking, venue updates | Separate channels today [brief §02] | No samples provided | None yet (Q-10). |
+Suggested order, so a working demo exists early:
 
-Two past events have public data that could serve as demo data: AES Event 2 (April 2026, all 15 divisions marked finished) and the TIMU Bugarski Cup (March 1, 2026) [resources: AES, TIMU]. Whether they can be shown publicly is open (Q-08).
+1. Shared data model, AES adapter and CSV adapter, seeded with one AES event and one CSV event.
+2. Event page, team search, following and My Day.
+3. Match centre, freshness labels and the Updates feed.
+4. Staff console: import preview and commit, announcements, venue content.
+5. Event guide, sponsors, merchandise and 50/50.
+6. Roster import, coach review and team page.
+7. Accessibility pass, weak-network handling and .ics export.
 
-## Assumptions
+## 11. Data available
 
-These are inferred, not read in any source.
+| Data | Where | Format |
+| ---- | ----- | ------ |
+| Events, divisions, clubs | AES API | JSON, open [resources: AES] |
+| Pools, playoffs, set scores, venue notes | TIMU results page | HTML [resources: TIMU] |
+| Rosters with jersey numbers and positions | MRS | Submitted by clubs for the event app [research S5]; no sample provided |
+| Event scale | OVA championships page | 1,338 teams, 58 courts, nine days at Enercare in 2026 [research S1] |
+| Existing event app content | OVAchamps | Schedule links, check-in, traffic and food information [research S2] |
+| Team photo and OVA logos | `source/` | PNG, JPG, EPS |
+| Sponsors | OVA sponsorship page | Names via logo links [resources: sponsorship] |
+| 50/50 draws | ova5050.org | Draw dates and prizes [resources: 50/50] |
+| Accommodations | OVA site | Behind sign-in, unread [resources: accommodations] |
 
-- **A-01** The prototype can be a mobile web app. The brief asks for mobile-first but doesn't require a native app.
-- **A-02** Fans can follow teams without creating an account, with their follows stored on the device. This follows from the brief's "collect only necessary information" [brief §05], but the brief doesn't say it.
-- **A-03** Referees and scorekeepers have court or match assignments that are worth showing in the app. No source describes their duties.
-- **A-04** In TIMU's playoff labels, "W7 vs W8" means the winners of matches 7 and 8.
-- **A-05** OVA's website runs on SportsEngine, judging by the sign-in page in front of the accommodations page. It's unknown whether rosters live there too.
-- **A-06** Following a whole club is worth offering, since 90 clubs entered 446 teams in Event 2.
-- **A-07** Past AES and TIMU events can be used as demo data.
-- **A-08** The AES API also serves pools, matches and courts for each division, since the AES web app shows them. Only the event summary has been fetched.
+## 12. Assumptions
 
-## Open questions
+- **A-01** A mobile web app satisfies "mobile-first"; the brief doesn't require a native app.
+- **A-02** Guests can follow teams with follows stored on the device, which fits B-08 though the brief doesn't say it.
+- **A-03** Real club and team names from AES can appear in the demo; all player names are fictional.
+- **A-04** The AES API serves pools, matches and courts for each division, as its web app shows them. Only the event summary has been fetched.
+- **A-05** A CSV export is a fair stand-in for TIMU and MyTeam.click in the demo, since neither offers a feed we could find.
+- **A-06** "W7 vs W8" in TIMU playoffs means the winners of matches 7 and 8.
+- **A-07** The team's research figures (1,338 teams, 58 courts, MRS roster submission) are accurate; they weren't re-checked for this plan.
 
-- **Q-01** Hackathon logistics: how long it runs, team size, demo format, and whether there's a judging rubric beyond brief §07.
-- **Q-02** What does the MyTeam.click page contain, and does MyTeam.click offer an API or export?
-- **Q-03** What's on the accommodations page behind the SportsEngine sign-in?
-- **Q-04** Which registration platform holds rosters, and can it export names, jersey numbers and photos?
-- **Q-05** How long are matches, how much rest do teams get between them, what are the daily time windows, and how many courts does the Enercare Centre event use?
-- **Q-06** Who referees matches (assigned officials or teams on work duty), and how are duties scheduled?
-- **Q-07** What does "TLS" stand for in "TLS Girls"?
-- **Q-08** Can real team and player names from past events appear in a public demo, given that many athletes are youth?
-- **Q-09** What are the other numbered Ontario Championships events, and do they use AES as well?
-- **Q-10** Which channels does OVA use for announcements today, and does it want push notifications?
-- **Q-11** Does TIMU give organizers a feed or export that isn't visible on the public page?
-- **Q-12** What sponsor tiers exist, and what placements do sponsors expect?
+## 13. Open questions
 
-## Success criteria
+For the team:
 
-A winning demo would show these on a phone (proposed, based on brief §06 and §07):
+- **Q-01** How long is the hackathon, how long is the demo, and is there a rubric beyond brief §07?
+- **Q-02** Do we agree to the three stack simplifications in section 10? Each becomes an ADR.
 
-1. A parent follows two teams in different divisions in a few taps and sees one combined schedule with times and courts.
-2. Schedules and results from two different platforms, such as AES and TIMU, appear on the same screens, and the user can't tell which platform each came from.
-3. A match is rescheduled or a result comes in, and the follower sees the change.
-4. A staff member publishes an announcement from a simple screen, and it reaches phones with no developer involved.
-5. A team page shows the roster, jersey numbers and photo from an import, with nothing retyped.
-6. Sponsor and 50/50 placements appear without blocking schedules or results.
-7. The screens pass basic accessibility checks: contrast, screen-reader labels and resizable text.
+For OVA:
 
-OVA will judge it against the seven outcomes in brief §07: a better event experience, meaningful personalization, connected existing systems, less administrative work, accessibility, long-term scalability, and sustainable value from sponsors or other revenue. The brief says the strongest solutions balance a great participant experience with technical feasibility, ease of maintenance and long-term value for OVA.
+- **Q-03** May the companion read and re-display AES, TIMU and MyTeam.click data, and is there an approved feed for each?
+- **Q-04** Can MRS export rosters, and which fields may be shown publicly?
+- **Q-05** How is OVAchamps run today, and would OVA extend it or replace it? [research §3.1]
+- **Q-06** Which channels carry announcements today, and does OVA want push or email later?
+- **Q-07** What sponsor tiers exist, and what placements do sponsors expect?
+- **Q-08** What does "TLS" mean in "TLS Girls"?
+
+## 14. Success criteria
+
+The demo succeeds if every step in section 9 runs live on a phone, and each of J1 to J7 is shown at least once. For the pitch, the research proposes measurable pilot targets OVA could judge a real rollout by [research §11]:
+
+- At least 90% of people find their next match and correct court unaided.
+- The time to find a match and its location drops by at least 30%.
+- Staff minutes spent re-entering rosters and content drop by at least 30%.
+- Published fields match the official source at least 99.5% of the time.
+- No blocking accessibility defects on the core journeys.
