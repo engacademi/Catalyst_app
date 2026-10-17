@@ -65,7 +65,7 @@ def test_aes_load_builds_event_from_recordings_and_is_idempotent(
     assert listed["title"].startswith("2026 Ontario Championships - Event 2")
     assert (listed["start_date"], listed["end_date"]) == ("2026-04-19", "2026-04-21")
     assert listed["venues"] == ["Enercare Centre"] and listed["kind"] == "indoor"
-    assert listed["demo_now"].startswith("2026-04-19T09:40")
+    assert listed["demo_now"] is None
     teams = client.get(f"/v1/events/{event.slug}/teams").json()
     assert teams["total"] == 46
     matches = client.get(

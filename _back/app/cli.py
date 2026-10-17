@@ -19,10 +19,9 @@ from sqlalchemy import select
 
 from app.adapters.live import fetch_text
 from app.core.db import get_sessionmaker
-from app.models import Event, Organization, RoleGrant, Source, User, Venue, utcnow
+from app.models import Event, Organization, RoleGrant, Source, User, Venue
 from app.seed import TZ, seed
 
-AES_DEMO_TIME = "2026-04-19T09:40:00-04:00"
 
 
 def grant(
@@ -70,7 +69,7 @@ def grant(
 
 
 def aes_load(event_key: str, get=fetch_text) -> Event:
-    """Create or refresh an event from AES by its key, with the demo clock at AES_DEMO_TIME."""
+    """Create or refresh an event from AES by its key."""
     from app.modules.sync import sync_source
 
     key = quote(event_key, safe="")
@@ -94,8 +93,6 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
                 start_date=date.fromisoformat(data["StartDate"][:10]),
                 end_date=date.fromisoformat(data["EndDate"][:10]),
                 status="published",
-                # The demo clock only runs on demo events.
-                is_demo=True,
             )
             db.add(event)
             db.flush()
@@ -116,7 +113,6 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
                     config={"authorized": True, "event_key": event_key},
                 )
             )
-        event.demo_clock = {"at": AES_DEMO_TIME, "set_at": utcnow().isoformat()}
         db.commit()
         source = db.scalar(
             select(Source).where(Source.event_id == event.id, Source.mode == "aes")
