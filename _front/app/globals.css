@@ -855,7 +855,7 @@ caption {
   font-size: 13px;
   color: var(--muted);
 }
-.staff-tabs button[aria-selected="true"] {
+.staff-tabs button[aria-selected="true"], .staff-tabs button[aria-pressed="true"] {
   background: var(--brand);
   color: white;
   font-weight: 600;
@@ -1168,3 +1168,5 @@ caption {
     transform: none;
   }
 }
+
+@media (min-width:640px) { main { scroll-margin-top:6rem; } }

@@ -1,12 +1,11 @@
 "use client";
-
 import { useHydrated } from "@/lib/hydration";
 
+import Link from "next/link";
 import Image from "next/image";
 import { UserRound } from "lucide-react";
 import { useEntry } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
-import { TeamAvatar } from "../brand";
 import { FollowButton } from "../follow-button";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
@@ -28,9 +27,8 @@ export function TeamView({
 
   return (
     <div>
-      <div className="team-profile flex flex-wrap items-center justify-between gap-4">
-        <TeamAvatar name={team.team_name} />
-        <div className="min-w-0 flex-1">
+      <div className="team-profile flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">
             {team.team_name}
           </h1>
@@ -57,6 +55,12 @@ export function TeamView({
         </div>
       )}
 
+      <Link
+        href={`/events/${eventId}/pathway${team.division ? `?division=${team.division.id}` : ""}`}
+        className="mt-4 inline-flex min-h-11 items-center font-semibold text-brand underline"
+      >
+        Follow this division’s pool & playoff path →
+      </Link>
       <SectionTitle>Matches</SectionTitle>
       {team.matches.length ? (
         <ul className="match-list">

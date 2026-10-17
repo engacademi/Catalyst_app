@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:ui": "playwright test"
+    "test:e2e": "playwright test",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:ui": "playwright test --config playwright.ui.config.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.17",

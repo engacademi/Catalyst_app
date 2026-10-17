@@ -1,5 +1,4 @@
 "use client";
-
 import { useHydrated } from "@/lib/hydration";
 
 import {
@@ -51,28 +50,8 @@ export function GuideView({ eventId }: { eventId: string }) {
       <PageTitle subtitle="Find your court, grab a bite, and feel at home at the venue.">
         Around the venue
       </PageTitle>
-      <nav aria-label="Guide sections" className="guide-shortcuts">
-        <a className="secondary-link" href="#guide-venues">
-          Venues & courts
-        </a>
-        <a className="secondary-link" href="#guide-around">
-          Getting around
-        </a>
-        {offers.length > 0 && (
-          <a className="secondary-link" href="#guide-offers">
-            Merch & more
-          </a>
-        )}
-        {officials.length > 0 && (
-          <a className="secondary-link" href="#guide-officials">
-            Officials
-          </a>
-        )}
-      </nav>
 
-      <div id="guide-venues" className="scroll-mt-40">
-        <SectionTitle>Venues & courts</SectionTitle>
-      </div>
+      <SectionTitle>Venues</SectionTitle>
       <div className="grid gap-4">
         {venues.map((v) => (
           <Card key={v.id}>
@@ -118,9 +97,7 @@ export function GuideView({ eventId }: { eventId: string }) {
         ))}
       </div>
 
-      <div id="guide-around" className="scroll-mt-40">
-        <SectionTitle>Getting around</SectionTitle>
-      </div>
+      <SectionTitle>Getting around</SectionTitle>
       <div className="grid gap-4 sm:grid-cols-2">
         {general.map((i) => {
           const Icon = ICONS[i.kind] ?? LifeBuoy;
@@ -148,9 +125,7 @@ export function GuideView({ eventId }: { eventId: string }) {
 
       {offers.length > 0 && (
         <>
-          <div id="guide-offers" className="scroll-mt-40">
-            <SectionTitle>Tickets, merchandise & the 50/50</SectionTitle>
-          </div>
+          <SectionTitle>Tickets, merchandise and the 50/50</SectionTitle>
           <div className="grid gap-4">
             {offers.map((p) => (
               <Card key={p.id}>
@@ -195,10 +170,8 @@ export function GuideView({ eventId }: { eventId: string }) {
         <>
           <SectionTitle>
             <span className="flex items-center gap-2">
-              <Whistle aria-hidden className="h-4 w-4 text-brand" />{" "}
-              <span id="guide-officials" className="scroll-mt-40">
-                Referees and scorekeepers
-              </span>
+              <Whistle aria-hidden className="h-4 w-4 text-brand" /> Referees
+              and scorekeepers
             </span>
           </SectionTitle>
           {officials.map((i) => (
@@ -210,9 +183,9 @@ export function GuideView({ eventId }: { eventId: string }) {
                   href={i.link_url}
                   target="_blank"
                   rel="noopener"
-                  className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand underline"
+                  className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline"
                 >
-                  Open resource <ExternalLink size={14} aria-hidden />
+                  Open official resource
                   <span className="sr-only"> (opens in a new tab)</span>
                 </a>
               )}

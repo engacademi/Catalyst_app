@@ -18,6 +18,54 @@ from app.models import (
     Venue,
 )
 
+
+def event_now(event):
+    now = datetime.now(timezone.utc)
+    clock = event.demo_clock if event.is_demo else {}
+    if clock and clock.get("at") and clock.get("set_at"):
+        return datetime.fromisoformat(clock["at"]) + (
+            now - datetime.fromisoformat(clock["set_at"])
+        )
+    return now
+
+
+def match_timing(match, event):
+    now = event_now(event)
+    upcoming = match.status in ("scheduled", "postponed")
+    estimate = match.estimated_start if upcoming else None
+    origin = "Competition source" if estimate else None
+    notice = None
+    delay = match.court.delay if match.court else {}
+    if upcoming and delay and datetime.fromisoformat(delay["expires_at"]) > now:
+        notice = delay
+        newer_source = (
+            match.source_updated_at
+            and match.source_updated_at > datetime.fromisoformat(delay["posted_at"])
+        )
+        if (
+            match.official_time_revised_at
+            and match.official_time_revised_at
+            > datetime.fromisoformat(delay["posted_at"])
+        ):
+            newer_source = True
+        if (
+            not estimate
+            and not newer_source
+            and match.scheduled_start
+            and match.status in ("scheduled", "postponed")
+        ):
+            estimate = match.scheduled_start + timedelta(minutes=delay["minutes"])
+            origin = "OVA staff"
+    return {
+        "estimated_start": iso(estimate),
+        "estimate_source": origin,
+        "delay_notice": notice,
+        "expected_start_soon": bool(
+            estimate and estimate < now and match.status == "scheduled"
+        ),
+    }
+
+
 SNAPSHOT_MODES = {"manual_import", "demo_fixture"}
 
 
@@ -33,7 +81,7 @@ def source_freshness(source: Source, now: datetime | None = None) -> str:
     now = now or datetime.now(timezone.utc)
     if source.status == "unavailable":
         return "unavailable"
-    if source.mode in SNAPSHOT_MODES:
+    if source.mode in SNAPSHOT_MODES or not source.config.get("last_sync_success"):
         return "imported_snapshot" if source.last_import_at else "no_data"
     if not source.last_successful_check_at:
         return "unknown"
@@ -48,6 +96,8 @@ def source_public(source: Source) -> dict[str, Any]:
         "mode": source.mode,
         "status": source.status,
         "official_url": source.official_url,
+        "last_attempt_at": iso(source.last_attempt_at),
+        "last_error": source.last_error,
         "last_checked_at": iso(source.last_successful_check_at),
         "last_import_at": iso(source.last_import_at),
         "upstream_updated_at": iso(source.upstream_updated_at),
@@ -66,7 +116,8 @@ def court_public(court: Court | None) -> dict[str, Any] | None:
         return None
     return {
         "id": str(court.id),
-        "label": court.label,
+        "label": court.label + (f" · {court.area_label}" if court.area_label else ""),
+        "area_label": court.area_label,
         "venue_id": str(court.venue_id),
         "venue_name": court.venue.name,
     }
@@ -80,7 +131,7 @@ def venue_public(venue: Venue) -> dict[str, Any]:
         "accessible_entrance": venue.accessible_entrance,
         "directions": venue.directions,
         "map_url": venue.map_url,
-        "courts": [{"id": str(c.id), "label": c.label} for c in venue.courts],
+        "courts": [court_public(c) for c in venue.courts],
     }
 
 
@@ -95,6 +146,12 @@ def event_public(event: Event) -> dict[str, Any]:
         "end_date": event.end_date.isoformat(),
         "status": event.status,
         "is_demo": event.is_demo,
+        "server_now": iso(datetime.now(timezone.utc))
+        if event.is_demo and event.demo_clock
+        else None,
+        "demo_now": iso(event_now(event))
+        if event.is_demo and event.demo_clock
+        else None,
         "revision": event.revision,
     }
 
@@ -117,11 +174,18 @@ def participant_public(match: Match, slot: str) -> dict[str, Any]:
                 "club_name": p.entry.club_name if p.entry else None,
                 "placeholder": p.placeholder_label,
             }
-    return {"entry_id": None, "team_name": None, "club_name": None, "placeholder": "TBD"}
+    return {
+        "entry_id": None,
+        "team_name": None,
+        "club_name": None,
+        "placeholder": "TBD",
+    }
 
 
 def sets_won(match: Match) -> dict[str, int] | None:
-    scored = [s for s in match.sets if s.home_score is not None and s.away_score is not None]
+    scored = [
+        s for s in match.sets if s.home_score is not None and s.away_score is not None
+    ]
     if not scored:
         return None
     home = sum(1 for s in scored if s.home_score > s.away_score)
@@ -129,23 +193,28 @@ def sets_won(match: Match) -> dict[str, int] | None:
     return {"home": home, "away": away}
 
 
-def match_public(match: Match, event: Event, latest_change: ChangeEvent | None = None) -> dict[str, Any]:
+def match_public(
+    match: Match, event: Event, latest_change: ChangeEvent | None = None
+) -> dict[str, Any]:
     return {
         "id": str(match.id),
         "revision": match.revision,
+        "source_match_id": match.external_id,
         "status": match.status,
         "result_state": match.result_state,
         "round_label": match.round_label,
         "division": division_public(match.division),
         "scheduled_start": iso(match.scheduled_start),
-        "estimated_start": iso(match.estimated_start),
+        **match_timing(match, event),
+        "work_entry_id": str(match.work_entry_id) if match.work_entry_id else None,
         "timezone": event.timezone,
         "court": court_public(match.court),
         "home": participant_public(match, "home"),
         "away": participant_public(match, "away"),
         # Missing scores stay null; nothing is defaulted to 0.
         "sets": [
-            {"set_number": s.set_number, "home": s.home_score, "away": s.away_score} for s in match.sets
+            {"set_number": s.set_number, "home": s.home_score, "away": s.away_score}
+            for s in match.sets
         ],
         "sets_won": sets_won(match),
         "source": {

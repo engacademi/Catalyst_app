@@ -51,11 +51,13 @@ The supplied meeting/calendar and sports interfaces informed the rounded card sy
 | Official assignments | Original private assignment workflow, styled with shared cards and typography |
 | System states | Loading, errors, empty results, focus visibility, reduced motion, skip link and explicit status text |
 
-Officials' `link_url` values are now surfaced as resource links in the guide; this fixes an existing display omission without inventing resource destinations.
+Officials’ resource links supplied by the newly merged workflows remain accessible in the redesigned guide.
 
 ## Setup and verification
 
-No new backend deployment, database migration, secret or runtime variable is required. Continue using the existing API URL and Clerk variables. Font files are fetched at build time by Next, not from visitors' browsers. The branch does not change API contracts or guest storage keys.
+No new backend deployment, database migration, secret or runtime variable is required. Continue using the existing API URL and Clerk variables. Font files are fetched at build time by Next, not from visitors' browsers. The branch does not change API contracts or guest storage keys. It integrates the complete companion workflows merged into main during development; main’s deployment/migration instructions still apply.
+
+Additional merged functionality remains available: division following, private labels and My teams, work duties, court delays and demo time, the competition pathway, source/registration/assignment management, coach roster review and list pagination.
 
 UI verification uses representative intercepted API responses, not a live database or live Clerk session. Run:
 

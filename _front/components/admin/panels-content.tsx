@@ -9,21 +9,40 @@ import { formatRelative } from "@/lib/format";
 import { Badge, Card, ErrorState, Loading, SectionTitle } from "../ui";
 import type { AdminEventData } from "./admin-event";
 import { useAdminMutation, useAdminQuery } from "./hooks";
-import { Field, FormError, inputClass, PrimaryButton, SmallButton } from "./form";
+import {
+  Field,
+  FormError,
+  inputClass,
+  PrimaryButton,
+  SmallButton,
+} from "./form";
 
 const announcementSchema = z.object({
   title: z.string().min(3, "Give it a short title").max(200),
   body: z.string().min(1, "Write the message").max(4000),
   category: z.enum(["general", "schedule", "venue", "safety"]),
   entry_id: z.string().optional(),
+  publish_at: z.string().optional(),
+  expire_at: z.string().optional(),
 });
 type AnnouncementForm = z.infer<typeof announcementSchema>;
 
 export function AnnouncementsPanel({ event }: { event: AdminEventData }) {
-  const list = useAdminQuery<{ data: (Announcement & { state: string })[] }>(`/v1/admin/events/${event.id}/announcements`);
-  const create = useAdminMutation("POST", `/v1/admin/events/${event.id}/announcements`);
-  const publish = useAdminMutation<{ id: string }>("POST", (b) => `/v1/admin/announcements/${b.id}/publish`);
-  const archive = useAdminMutation<{ id: string }>("POST", (b) => `/v1/admin/announcements/${b.id}/archive`);
+  const list = useAdminQuery<{ data: (Announcement & { state: string })[] }>(
+    `/v1/admin/events/${event.id}/announcements`,
+  );
+  const create = useAdminMutation(
+    "POST",
+    `/v1/admin/events/${event.id}/announcements`,
+  );
+  const publish = useAdminMutation<{ id: string }>(
+    "POST",
+    (b) => `/v1/admin/announcements/${b.id}/publish`,
+  );
+  const archive = useAdminMutation<{ id: string }>(
+    "POST",
+    (b) => `/v1/admin/announcements/${b.id}/archive`,
+  );
   const form = useForm<AnnouncementForm>({
     resolver: zodResolver(announcementSchema),
     defaultValues: { title: "", body: "", category: "general", entry_id: "" },
@@ -33,7 +52,21 @@ export function AnnouncementsPanel({ event }: { event: AdminEventData }) {
   const submit = (publishNow: boolean) =>
     form.handleSubmit((values) =>
       create.mutate(
-        { ...values, entry_id: values.entry_id || null },
+        {
+          ...values,
+          entry_id: values.entry_id?.startsWith("division:")
+            ? null
+            : values.entry_id || null,
+          division_id: values.entry_id?.startsWith("division:")
+            ? values.entry_id.slice(9)
+            : null,
+          publish_at: values.publish_at
+            ? new Date(values.publish_at).toISOString()
+            : null,
+          expire_at: values.expire_at
+            ? new Date(values.expire_at).toISOString()
+            : null,
+        },
         {
           onSuccess: (res) => {
             const created = (res as { data: Announcement }).data;
@@ -50,12 +83,27 @@ export function AnnouncementsPanel({ event }: { event: AdminEventData }) {
         <h2 className="mb-3 font-semibold">New announcement</h2>
         <form className="space-y-3" onSubmit={submit(false)}>
           <Field label="Title">
-            <input {...form.register("title")} className={inputClass} aria-invalid={!!errors.title} />
-            {errors.title && <span className="text-xs text-danger">{errors.title.message}</span>}
+            <input
+              {...form.register("title")}
+              className={inputClass}
+              aria-invalid={!!errors.title}
+            />
+            {errors.title && (
+              <span className="text-xs text-danger">
+                {errors.title.message}
+              </span>
+            )}
           </Field>
           <Field label="Message">
-            <textarea {...form.register("body")} rows={4} className={`${inputClass} py-2`} aria-invalid={!!errors.body} />
-            {errors.body && <span className="text-xs text-danger">{errors.body.message}</span>}
+            <textarea
+              {...form.register("body")}
+              rows={4}
+              className={`${inputClass} py-2`}
+              aria-invalid={!!errors.body}
+            />
+            {errors.body && (
+              <span className="text-xs text-danger">{errors.body.message}</span>
+            )}
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Category">
@@ -66,21 +114,54 @@ export function AnnouncementsPanel({ event }: { event: AdminEventData }) {
                 <option value="safety">Safety</option>
               </select>
             </Field>
-            <Field label="Who sees it" hint="One team's followers, or everyone">
+            <Field label="Who sees it" hint="Event, division or one team">
               <select {...form.register("entry_id")} className={inputClass}>
                 <option value="">Everyone at the event</option>
+                {event.divisions?.map((d) => (
+                  <option key={d.id} value={`division:${d.id}`}>
+                    Division · {d.name}
+                  </option>
+                ))}
                 {event.entries.map((e) => (
-                  <option key={e.id} value={e.id}>{e.team_name}</option>
+                  <option key={e.id} value={e.id}>
+                    {e.team_name}
+                  </option>
                 ))}
               </select>
             </Field>
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Publish at (optional)"
+              hint="Leave blank for immediate publication"
+            >
+              <input
+                type="datetime-local"
+                {...form.register("publish_at")}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Expires at (optional)">
+              <input
+                type="datetime-local"
+                {...form.register("expire_at")}
+                className={inputClass}
+              />
+            </Field>
+          </div>
           <FormError error={create.error ?? publish.error} />
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={submit(true)} className="min-h-11 rounded-full bg-brand px-5 font-semibold text-white hover:bg-brand-strong">
-              Publish now
+            <button
+              type="button"
+              onClick={submit(true)}
+              className="min-h-11 rounded-full bg-brand px-5 font-semibold text-white hover:bg-brand-strong"
+            >
+              Publish / schedule
             </button>
-            <button type="submit" className="min-h-11 rounded-full border border-border px-5 font-medium">
+            <button
+              type="submit"
+              className="min-h-11 rounded-full border border-border px-5 font-medium"
+            >
               Save draft
             </button>
           </div>
@@ -99,16 +180,46 @@ export function AnnouncementsPanel({ event }: { event: AdminEventData }) {
               <li key={a.id}>
                 <Card>
                   <div className="flex items-center gap-2">
-                    <Badge tone={a.state === "published" ? "brand" : a.state === "draft" ? "warn" : "neutral"}>{a.state}</Badge>
+                    <Badge
+                      tone={
+                        a.state === "published"
+                          ? "brand"
+                          : a.state === "draft"
+                            ? "warn"
+                            : "neutral"
+                      }
+                    >
+                      {a.state}
+                    </Badge>
                     <Badge>{a.category}</Badge>
-                    {a.entry_id && <Badge tone="info">{event.entries.find((e) => e.id === a.entry_id)?.team_name ?? "One team"}</Badge>}
+                    {a.entry_id && (
+                      <Badge tone="info">
+                        {event.entries.find((e) => e.id === a.entry_id)
+                          ?.team_name ?? "One team"}
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-2 font-semibold">{a.title}</p>
                   <p className="whitespace-pre-line text-sm">{a.body}</p>
-                  <p className="mt-1 text-xs text-muted">{a.publish_at ? `Published ${formatRelative(a.publish_at)}` : "Not published"}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {a.publish_at
+                      ? `Published ${formatRelative(a.publish_at)}`
+                      : "Not published"}
+                  </p>
                   <div className="mt-2 flex gap-2">
-                    {a.state === "draft" && <SmallButton tone="brand" onClick={() => publish.mutate({ id: a.id })}>Publish</SmallButton>}
-                    {a.state !== "archived" && <SmallButton onClick={() => archive.mutate({ id: a.id })}>Archive</SmallButton>}
+                    {a.state === "draft" && (
+                      <SmallButton
+                        tone="brand"
+                        onClick={() => publish.mutate({ id: a.id })}
+                      >
+                        Publish
+                      </SmallButton>
+                    )}
+                    {a.state !== "archived" && (
+                      <SmallButton onClick={() => archive.mutate({ id: a.id })}>
+                        Archive
+                      </SmallButton>
+                    )}
                   </div>
                 </Card>
               </li>
@@ -120,8 +231,22 @@ export function AnnouncementsPanel({ event }: { event: AdminEventData }) {
   );
 }
 
-const GUIDE_KINDS = ["parking", "food", "accessibility", "directions", "services", "help", "officials"];
-const PARTNER_KINDS = ["sponsor", "merchandise", "tickets", "fundraiser", "activity"];
+const GUIDE_KINDS = [
+  "parking",
+  "food",
+  "accessibility",
+  "directions",
+  "services",
+  "help",
+  "officials",
+];
+const PARTNER_KINDS = [
+  "sponsor",
+  "merchandise",
+  "tickets",
+  "fundraiser",
+  "activity",
+];
 
 export function ContentPanel({ event }: { event: AdminEventData }) {
   return (
@@ -134,8 +259,16 @@ export function ContentPanel({ event }: { event: AdminEventData }) {
 }
 
 function VenuesSection({ event }: { event: AdminEventData }) {
-  const create = useAdminMutation("POST", `/v1/admin/events/${event.id}/venues`);
-  const [form, setForm] = useState({ name: "", address: "", accessible_entrance: "", directions: "" });
+  const create = useAdminMutation(
+    "POST",
+    `/v1/admin/events/${event.id}/venues`,
+  );
+  const [form, setForm] = useState({
+    name: "",
+    address: "",
+    accessible_entrance: "",
+    directions: "",
+  });
   return (
     <section>
       <SectionTitle>Venues</SectionTitle>
@@ -145,7 +278,11 @@ function VenuesSection({ event }: { event: AdminEventData }) {
             <Card>
               <p className="font-semibold">{v.name}</p>
               <p className="text-sm text-muted">{v.address}</p>
-              <p className="text-sm">Courts: {v.courts.map((c) => c.label).join(", ") || "added by match imports"}</p>
+              <p className="text-sm">
+                Courts:{" "}
+                {v.courts.map((c) => c.label).join(", ") ||
+                  "added by match imports"}
+              </p>
             </Card>
           </li>
         ))}
@@ -155,20 +292,50 @@ function VenuesSection({ event }: { event: AdminEventData }) {
           className="grid gap-3 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
-            create.mutate(form, { onSuccess: () => setForm({ name: "", address: "", accessible_entrance: "", directions: "" }) });
+            create.mutate(form, {
+              onSuccess: () =>
+                setForm({
+                  name: "",
+                  address: "",
+                  accessible_entrance: "",
+                  directions: "",
+                }),
+            });
           }}
         >
-          <Field label="Venue name" hint="Match imports refer to venues by this exact name">
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+          <Field
+            label="Venue name"
+            hint="Match imports refer to venues by this exact name"
+          >
+            <input
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className={inputClass}
+            />
           </Field>
           <Field label="Address">
-            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={inputClass} />
+            <input
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className={inputClass}
+            />
           </Field>
           <Field label="Accessible entrance">
-            <input value={form.accessible_entrance} onChange={(e) => setForm({ ...form, accessible_entrance: e.target.value })} className={inputClass} />
+            <input
+              value={form.accessible_entrance}
+              onChange={(e) =>
+                setForm({ ...form, accessible_entrance: e.target.value })
+              }
+              className={inputClass}
+            />
           </Field>
           <Field label="Directions inside">
-            <input value={form.directions} onChange={(e) => setForm({ ...form, directions: e.target.value })} className={inputClass} />
+            <input
+              value={form.directions}
+              onChange={(e) => setForm({ ...form, directions: e.target.value })}
+              className={inputClass}
+            />
           </Field>
           <div className="sm:col-span-2">
             <FormError error={create.error} />
@@ -181,14 +348,31 @@ function VenuesSection({ event }: { event: AdminEventData }) {
 }
 
 function GuideSection({ event }: { event: AdminEventData }) {
-  const guide = useAdminQuery<{ data: { items: GuideItem[] } }>(`/v1/events/${event.id}/guide`);
-  const create = useAdminMutation("POST", `/v1/admin/events/${event.id}/guide-items`);
-  const remove = useAdminMutation<{ id: string }>("DELETE", (b) => `/v1/admin/guide-items/${b.id}`);
-  const [form, setForm] = useState({ kind: "parking", title: "", body: "", link_url: "" });
+  const guide = useAdminQuery<{ data: { items: GuideItem[] } }>(
+    `/v1/events/${event.id}/guide`,
+  );
+  const create = useAdminMutation(
+    "POST",
+    `/v1/admin/events/${event.id}/guide-items`,
+  );
+  const remove = useAdminMutation<{ id: string }>(
+    "DELETE",
+    (b) => `/v1/admin/guide-items/${b.id}`,
+  );
+  const [form, setForm] = useState({
+    kind: "parking",
+    title: "",
+    body: "",
+    link_url: "",
+  });
   return (
     <section>
       <SectionTitle>Guide: parking, food, accessibility, help</SectionTitle>
-      {event.status !== "published" && <p className="mb-2 text-xs text-muted">Guide items show here once the event is published.</p>}
+      {event.status !== "published" && (
+        <p className="mb-2 text-xs text-muted">
+          Guide items show here once the event is published.
+        </p>
+      )}
       <ul className="mb-3 space-y-2">
         {guide.data?.data.items.map((i) => (
           <li key={i.id}>
@@ -198,65 +382,12 @@ function GuideSection({ event }: { event: AdminEventData }) {
                 <p className="mt-1 font-semibold">{i.title}</p>
                 <p className="text-sm">{i.body}</p>
               </div>
-              <SmallButton tone="danger" onClick={() => remove.mutate({ id: i.id })}>Remove</SmallButton>
-            </Card>
-          </li>
-        ))}
-      </ul>
-      <Card>
-        <form
-          className="grid gap-3 sm:grid-cols-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            create.mutate({ ...form, link_url: form.link_url || null }, { onSuccess: () => setForm({ ...form, title: "", body: "", link_url: "" }) });
-          }}
-        >
-          <Field label="Type">
-            <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} className={inputClass}>
-              {GUIDE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-            </select>
-          </Field>
-          <Field label="Title">
-            <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inputClass} />
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Details">
-              <textarea rows={3} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} className={`${inputClass} py-2`} />
-            </Field>
-          </div>
-          <Field label="Link (optional)">
-            <input type="url" value={form.link_url} onChange={(e) => setForm({ ...form, link_url: e.target.value })} className={inputClass} />
-          </Field>
-          <div className="sm:col-span-2">
-            <FormError error={create.error ?? remove.error} />
-            <PrimaryButton pending={create.isPending}>Add guide item</PrimaryButton>
-          </div>
-        </form>
-      </Card>
-    </section>
-  );
-}
-
-function PartnersSection({ event }: { event: AdminEventData }) {
-  const list = useAdminQuery<{ data: Partner[] }>(`/v1/admin/events/${event.id}/partners`);
-  const create = useAdminMutation("POST", `/v1/admin/events/${event.id}/partners`);
-  const remove = useAdminMutation<{ id: string }>("DELETE", (b) => `/v1/admin/partners/${b.id}`);
-  const empty = { kind: "sponsor", name: "", body: "", link_url: "", booth_location: "", seller_note: "" };
-  const [form, setForm] = useState(empty);
-  return (
-    <section>
-      <SectionTitle>Sponsors, merchandise, tickets and the 50/50</SectionTitle>
-      <p className="mb-2 text-xs text-muted">These appear in the Event guide, below schedules and results, and always link out to the seller. No payments run here.</p>
-      <ul className="mb-3 grid gap-2 sm:grid-cols-2">
-        {list.data?.data.map((p) => (
-          <li key={p.id}>
-            <Card className="flex items-start justify-between gap-3">
-              <div>
-                <Badge>{p.kind}</Badge>
-                <p className="mt-1 font-semibold">{p.name}</p>
-                <p className="text-sm text-muted">{p.booth_location}</p>
-              </div>
-              <SmallButton tone="danger" onClick={() => remove.mutate({ id: p.id })}>Remove</SmallButton>
+              <SmallButton
+                tone="danger"
+                onClick={() => remove.mutate({ id: i.id })}
+              >
+                Remove
+              </SmallButton>
             </Card>
           </li>
         ))}
@@ -267,30 +398,182 @@ function PartnersSection({ event }: { event: AdminEventData }) {
           onSubmit={(e) => {
             e.preventDefault();
             create.mutate(
-              { ...form, link_url: form.link_url || null, booth_location: form.booth_location || null, seller_note: form.seller_note || null },
+              { ...form, link_url: form.link_url || null },
+              {
+                onSuccess: () =>
+                  setForm({ ...form, title: "", body: "", link_url: "" }),
+              },
+            );
+          }}
+        >
+          <Field label="Type">
+            <select
+              value={form.kind}
+              onChange={(e) => setForm({ ...form, kind: e.target.value })}
+              className={inputClass}
+            >
+              {GUIDE_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Title">
+            <input
+              required
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className={inputClass}
+            />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Details">
+              <textarea
+                rows={3}
+                value={form.body}
+                onChange={(e) => setForm({ ...form, body: e.target.value })}
+                className={`${inputClass} py-2`}
+              />
+            </Field>
+          </div>
+          <Field label="Link (optional)">
+            <input
+              type="url"
+              value={form.link_url}
+              onChange={(e) => setForm({ ...form, link_url: e.target.value })}
+              className={inputClass}
+            />
+          </Field>
+          <div className="sm:col-span-2">
+            <FormError error={create.error ?? remove.error} />
+            <PrimaryButton pending={create.isPending}>
+              Add guide item
+            </PrimaryButton>
+          </div>
+        </form>
+      </Card>
+    </section>
+  );
+}
+
+function PartnersSection({ event }: { event: AdminEventData }) {
+  const list = useAdminQuery<{ data: Partner[] }>(
+    `/v1/admin/events/${event.id}/partners`,
+  );
+  const create = useAdminMutation(
+    "POST",
+    `/v1/admin/events/${event.id}/partners`,
+  );
+  const remove = useAdminMutation<{ id: string }>(
+    "DELETE",
+    (b) => `/v1/admin/partners/${b.id}`,
+  );
+  const empty = {
+    kind: "sponsor",
+    name: "",
+    body: "",
+    link_url: "",
+    booth_location: "",
+    seller_note: "",
+  };
+  const [form, setForm] = useState(empty);
+  return (
+    <section>
+      <SectionTitle>Sponsors, merchandise, tickets and the 50/50</SectionTitle>
+      <p className="mb-2 text-xs text-muted">
+        These appear in the Event guide, below schedules and results, and always
+        link out to the seller. No payments run here.
+      </p>
+      <ul className="mb-3 grid gap-2 sm:grid-cols-2">
+        {list.data?.data.map((p) => (
+          <li key={p.id}>
+            <Card className="flex items-start justify-between gap-3">
+              <div>
+                <Badge>{p.kind}</Badge>
+                <p className="mt-1 font-semibold">{p.name}</p>
+                <p className="text-sm text-muted">{p.booth_location}</p>
+              </div>
+              <SmallButton
+                tone="danger"
+                onClick={() => remove.mutate({ id: p.id })}
+              >
+                Remove
+              </SmallButton>
+            </Card>
+          </li>
+        ))}
+      </ul>
+      <Card>
+        <form
+          className="grid gap-3 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate(
+              {
+                ...form,
+                link_url: form.link_url || null,
+                booth_location: form.booth_location || null,
+                seller_note: form.seller_note || null,
+              },
               { onSuccess: () => setForm(empty) },
             );
           }}
         >
           <Field label="Type">
-            <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} className={inputClass}>
-              {PARTNER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+            <select
+              value={form.kind}
+              onChange={(e) => setForm({ ...form, kind: e.target.value })}
+              className={inputClass}
+            >
+              {PARTNER_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="Name">
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+            <input
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className={inputClass}
+            />
           </Field>
           <Field label="Description">
-            <input value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} className={inputClass} />
+            <input
+              value={form.body}
+              onChange={(e) => setForm({ ...form, body: e.target.value })}
+              className={inputClass}
+            />
           </Field>
           <Field label="Seller link" hint="https only">
-            <input type="url" pattern="https://.*" value={form.link_url} onChange={(e) => setForm({ ...form, link_url: e.target.value })} className={inputClass} />
+            <input
+              type="url"
+              pattern="https://.*"
+              value={form.link_url}
+              onChange={(e) => setForm({ ...form, link_url: e.target.value })}
+              className={inputClass}
+            />
           </Field>
           <Field label="Booth location">
-            <input value={form.booth_location} onChange={(e) => setForm({ ...form, booth_location: e.target.value })} className={inputClass} />
+            <input
+              value={form.booth_location}
+              onChange={(e) =>
+                setForm({ ...form, booth_location: e.target.value })
+              }
+              className={inputClass}
+            />
           </Field>
           <Field label="Seller and refund note">
-            <input value={form.seller_note} onChange={(e) => setForm({ ...form, seller_note: e.target.value })} className={inputClass} />
+            <input
+              value={form.seller_note}
+              onChange={(e) =>
+                setForm({ ...form, seller_note: e.target.value })
+              }
+              className={inputClass}
+            />
           </Field>
           <div className="sm:col-span-2">
             <FormError error={create.error ?? remove.error} />

@@ -1,5 +1,4 @@
 "use client";
-
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
@@ -63,7 +62,6 @@ export function MatchView({
   if (!hydrated || query.isPending) return <Loading label="Loading match" />;
   if (query.error) return <ErrorState error={query.error} />;
   const m = query.data.data;
-  const start = m.estimated_start ?? m.scheduled_start;
 
   return (
     <div>
@@ -88,11 +86,14 @@ export function MatchView({
       <Card className="mt-4 space-y-2">
         <p className="flex items-center gap-2">
           <Clock aria-hidden className="h-4 w-4 text-brand" />
-          {start
-            ? `${formatDay(start, m.timezone)}, ${formatTime(start, m.timezone)}`
-            : "Time to be confirmed"}
+          {m.scheduled_start
+            ? `Official ${formatDay(m.scheduled_start, m.timezone)}, ${formatTime(m.scheduled_start, m.timezone)}`
+            : "Official time to be confirmed"}
           {m.estimated_start && (
-            <span className="text-sm text-muted">(estimated)</span>
+            <span className="text-sm text-muted">
+              Est. ~{formatTime(m.estimated_start, m.timezone)},{" "}
+              {m.estimate_source}
+            </span>
           )}
         </p>
         <p className="flex items-center gap-2">
@@ -110,6 +111,20 @@ export function MatchView({
         </p>
       </Card>
 
+      {m.delay_notice && (
+        <p className="mt-3 rounded-xl border border-warn/40 bg-warn-soft p-3 text-sm text-warn">
+          Court running ~{m.delay_notice.minutes} minutes late ·{" "}
+          {m.delay_notice.posted_by}. Posted{" "}
+          {formatTime(m.delay_notice.posted_at, m.timezone)}; expires{" "}
+          {formatTime(m.delay_notice.expires_at, m.timezone)}. Official time
+          remains unchanged.
+        </p>
+      )}
+      {m.expected_start_soon && (
+        <p className="mt-2 text-sm font-semibold text-warn">
+          Expected to start soon · awaiting source confirmation
+        </p>
+      )}
       <SectionTitle>Score</SectionTitle>
       {m.sets.length ? (
         <Card className="overflow-x-auto p-0">

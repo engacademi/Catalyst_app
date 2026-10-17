@@ -5,8 +5,8 @@ import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
 import { formatDay, formatTime, formatRelative } from "@/lib/format";
 import { useNow } from "@/lib/now";
-import { Badge } from "./ui";
 import { TeamAvatar } from "./brand";
+import { Badge } from "./ui";
 
 const STATUS: Record<
   Match["status"],
@@ -113,9 +113,12 @@ export function MatchCard({
         <span className="flex items-center gap-1 font-semibold">
           <Clock aria-hidden className="h-4 w-4 text-brand" />
           {showDay && start ? `${formatDay(start, match.timezone)}, ` : ""}
-          {formatTime(start, match.timezone)}
+          {formatTime(match.scheduled_start, match.timezone)}
           {match.estimated_start && (
-            <span className="font-normal text-muted">(estimated)</span>
+            <span className="font-normal text-muted">
+              · Est. ~{formatTime(start, match.timezone)},{" "}
+              {match.estimate_source}
+            </span>
           )}
         </span>
         <span className="flex items-center gap-1 text-muted">
@@ -125,6 +128,19 @@ export function MatchCard({
             : "Court to be confirmed"}
         </span>
       </div>
+      {match.delay_notice && (
+        <p className="mb-2 rounded-lg bg-warn-soft px-2 py-1 text-xs text-warn">
+          Court running ~{match.delay_notice.minutes} min late ·{" "}
+          {match.delay_notice.posted_by} · posted{" "}
+          {formatTime(match.delay_notice.posted_at, match.timezone)}, until{" "}
+          {formatTime(match.delay_notice.expires_at, match.timezone)}
+        </p>
+      )}
+      {match.expected_start_soon && (
+        <p className="mb-2 text-xs font-semibold text-warn">
+          Expected to start soon · awaiting source confirmation
+        </p>
+      )}
       <div className="space-y-1">
         <TeamLine
           p={match.home}

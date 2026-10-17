@@ -1,5 +1,4 @@
 "use client";
-
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
@@ -9,6 +8,7 @@ import { Search } from "lucide-react";
 import { useFollows } from "@/lib/follows";
 import { useEvent, useTeams } from "@/lib/queries";
 import { TeamAvatar } from "../brand";
+import { LoadMore } from "../load-more";
 import { FollowButton } from "../follow-button";
 import { EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
@@ -22,7 +22,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
   const [text, setText] = useState(q);
   const event = useEvent(eventId);
   const teams = useTeams(eventId, q, division);
-  const { ids } = useFollows(eventId);
+  const { ids, divisionIds, isFollowing, toggle } = useFollows(eventId);
 
   // Keep the search in the URL so it survives refresh and can be shared.
   useEffect(() => {
@@ -44,7 +44,6 @@ export function TeamsView({ eventId }: { eventId: string }) {
   };
 
   if (!hydrated) return <Loading />;
-
   return (
     <div>
       <PageTitle
@@ -88,29 +87,60 @@ export function TeamsView({ eventId }: { eventId: string }) {
         </label>
       </div>
 
-      <div className="mt-4" aria-live="polite">
+      <section className="mt-5" aria-labelledby="division-follows">
+        <h2 id="division-follows" className="text-sm font-semibold">
+          Follow a whole division
+        </h2>
+        <p className="mt-1 text-xs text-muted">
+          Every team and unresolved playoff slot, including teams added later.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {event.data?.data.divisions
+            .filter(
+              (d) =>
+                !q ||
+                d.name.toLowerCase().includes(q.toLowerCase()) ||
+                d.code?.toLowerCase().includes(q.toLowerCase()),
+            )
+            .map((d) => (
+              <button
+                key={d.id}
+                aria-pressed={isFollowing(`division:${d.id}`)}
+                onClick={() => toggle(`division:${d.id}`)}
+                className={`min-h-11 rounded-full border px-4 text-sm font-medium ${isFollowing(`division:${d.id}`) ? "border-brand bg-brand-soft text-brand-strong" : "border-border bg-surface"}`}
+              >
+                {isFollowing(`division:${d.id}`) ? "Following · " : "+ "}
+                {d.name}
+              </button>
+            ))}
+        </div>
+        <p className="sr-only" role="status">
+          {divisionIds.length} divisions followed
+        </p>
+      </section>
+      <div className="mt-5" aria-live="polite">
         {teams.isPending ? (
           <Loading label="Searching" />
         ) : teams.error ? (
           <ErrorState error={teams.error} />
-        ) : teams.data.data.length === 0 ? (
+        ) : teams.data!.data.length === 0 ? (
           <EmptyState title="No teams match that search">
             Try a club name or a division code like 15U.
           </EmptyState>
         ) : (
           <>
             <p className="mb-2 text-xs text-muted">
-              {teams.data.total} team{teams.data.total === 1 ? "" : "s"}
+              {teams.data!.total} team{teams.data!.total === 1 ? "" : "s"}
             </p>
             <ul className="team-grid">
-              {teams.data.data.map((t) => (
+              {teams.data!.data.map((t) => (
                 <li key={t.id} className="team-tile">
                   <TeamAvatar name={t.team_name} />
                   <Link
                     href={`/events/${eventId}/teams/${t.id}`}
-                    className="min-w-0 flex-1 py-2"
+                    className="min-w-0 flex-1"
                   >
-                    <p className="font-semibold break-words">{t.team_name}</p>
+                    <p className="break-words font-semibold">{t.team_name}</p>
                     <p className="text-xs text-muted">
                       {[t.club_name, t.division?.name]
                         .filter(Boolean)
@@ -125,6 +155,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
                 </li>
               ))}
             </ul>
+            <LoadMore query={teams} label="teams" />
           </>
         )}
       </div>

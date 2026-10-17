@@ -3,23 +3,28 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
-import type { EventSummary, SourceInfo, Venue } from "@/lib/api";
+import type { Division, EventSummary, SourceInfo, Venue } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
-import { Badge, Card, ErrorState, Loading, SectionTitle } from "../ui";
+import { Badge, Card, ErrorState, Loading } from "../ui";
 import { useAdminMutation, useAdminQuery } from "./hooks";
-import {
-  Field,
-  FormError,
-  inputClass,
-  PrimaryButton,
-  SmallButton,
-} from "./form";
+import { FormError, SmallButton } from "./form";
 import { AnnouncementsPanel, ContentPanel } from "./panels-content";
+import { CourtOperations } from "./court-operations";
+import {
+  ConnectionsPanel,
+  RegistrationPanel,
+  AssignmentPanel,
+} from "./operations";
 import { DemoPanel, ImportsPanel, RostersPanel } from "./panels-data";
 
 export type AdminEventData = EventSummary & {
+  divisions?: Division[];
   venues: Venue[];
-  sources: (SourceInfo & { generation: number })[];
+  sources: (SourceInfo & {
+    generation: number;
+    last_error?: string;
+    config?: { capabilities?: { divisions?: boolean; matches?: boolean } };
+  })[];
   entries: { id: string; team_name: string; club_name: string | null }[];
 };
 
@@ -28,6 +33,9 @@ const TABS = [
   "Imports",
   "Content",
   "Rosters",
+  "Registration",
+  "Assignments",
+  "Courts & clock",
   "Sources",
   "Demo tools",
   "Audit",
@@ -103,6 +111,7 @@ export function AdminEvent({ eventId }: { eventId: string }) {
         {tabs.map((t) => (
           <button
             key={t}
+
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
@@ -141,114 +150,13 @@ export function AdminEvent({ eventId }: { eventId: string }) {
         {tab === "Imports" && <ImportsPanel event={event} />}
         {tab === "Content" && <ContentPanel event={event} />}
         {tab === "Rosters" && <RostersPanel event={event} />}
-        {tab === "Sources" && <SourcesPanel event={event} />}
+        {tab === "Sources" && <ConnectionsPanel event={event} />}
+        {tab === "Registration" && <RegistrationPanel event={event} />}
+        {tab === "Assignments" && <AssignmentPanel event={event} />}
+        {tab === "Courts & clock" && <CourtOperations event={event} />}
         {tab === "Demo tools" && <DemoPanel event={event} />}
         {tab === "Audit" && <AuditPanel eventId={event.id} />}
       </div>
-    </div>
-  );
-}
-
-function SourcesPanel({ event }: { event: AdminEventData }) {
-  const patch = useAdminMutation<{ id: string; status: string }>(
-    "PATCH",
-    (b) => `/v1/admin/sources/${b.id}`,
-  );
-  const create = useAdminMutation(
-    "POST",
-    `/v1/admin/events/${event.id}/sources`,
-  );
-  const [form, setForm] = useState({
-    name: "",
-    mode: "manual_import",
-    official_url: "",
-  });
-
-  return (
-    <div>
-      <p className="mb-3 text-sm text-muted">
-        A source is where competition data comes from. CSV imports work today.
-        AES, TIMU and MyTeam.click sources are labels until a connector is
-        authorized; their data still arrives by CSV.
-      </p>
-      <ul className="space-y-2">
-        {event.sources.map((s) => (
-          <li key={s.id}>
-            <Card>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="font-semibold">{s.name}</p>
-                  <p className="text-sm text-muted">
-                    {s.mode} · {s.freshness.replace("_", " ")} · last import{" "}
-                    {formatRelative(s.last_import_at)} · generation{" "}
-                    {s.generation}
-                  </p>
-                </div>
-                <label className="text-sm">
-                  <span className="sr-only">Status for {s.name}</span>
-                  <select
-                    value={s.status}
-                    onChange={(e) =>
-                      patch.mutate({ id: s.id, status: e.target.value })
-                    }
-                    className="min-h-9 rounded-full border border-border bg-surface px-3"
-                  >
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="unavailable">Unavailable</option>
-                  </select>
-                </label>
-              </div>
-            </Card>
-          </li>
-        ))}
-      </ul>
-      <FormError error={patch.error} />
-      <SectionTitle>Add a source</SectionTitle>
-      <Card>
-        <form
-          className="grid gap-3 sm:grid-cols-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            create.mutate({ ...form, official_url: form.official_url || null });
-          }}
-        >
-          <Field label="Name">
-            <input
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Platform">
-            <select
-              value={form.mode}
-              onChange={(e) => setForm({ ...form, mode: e.target.value })}
-              className={inputClass}
-            >
-              <option value="manual_import">CSV import</option>
-              <option value="aes">AES (CSV for now)</option>
-              <option value="timu">TIMU (CSV for now)</option>
-              <option value="myteam">MyTeam.click (CSV for now)</option>
-            </select>
-          </Field>
-          <Field label="Official results page">
-            <input
-              type="url"
-              value={form.official_url}
-              onChange={(e) =>
-                setForm({ ...form, official_url: e.target.value })
-              }
-              className={inputClass}
-            />
-          </Field>
-          <div className="sm:col-span-3">
-            <FormError error={create.error} />
-            <PrimaryButton pending={create.isPending}>Add source</PrimaryButton>
-          </div>
-        </form>
-      </Card>
     </div>
   );
 }

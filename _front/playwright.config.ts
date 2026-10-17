@@ -1,24 +1,19 @@
-import { defineConfig } from "@playwright/test";
-
+import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
-  testDir: "./tests",
+  testDir: "./e2e",
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
+  retries: 0,
+  reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3001",
-    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      ? {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-          args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-zygote"],
-        }
-      : {},
-  },
-  webServer: {
-    command: process.env.OLLEY_QA_DEV
-      ? "npm run dev -- --hostname 127.0.0.1 --port 3001"
-      : "npm run start -- --hostname 127.0.0.1 --port 3001",
-    url: "http://127.0.0.1:3001",
-    reuseExistingServer: !process.env.CI,
+    baseURL: process.env.E2E_WEB_URL ?? "http://127.0.0.1:3000",
+    ...devices["iPhone 13"],
+    browserName: "chromium",
+    launchOptions: {
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+      args: ["--no-sandbox"],
+    },
+    trace: "retain-on-failure",
   },
 });

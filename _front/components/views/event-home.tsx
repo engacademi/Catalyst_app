@@ -22,11 +22,18 @@ export function EventHomeView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
   const event = useEvent(eventId);
   const announcements = useAnnouncements(eventId);
-  const { ids } = useFollows(eventId);
+  const { ids, divisionIds } = useFollows(eventId);
 
   if (!hydrated || event.isPending) return <Loading label="Loading event" />;
   if (event.error) return <ErrorState error={event.error} />;
   const e = event.data.data;
+  const notices =
+    announcements.data?.data.filter(
+      (a) =>
+        (!a.entry_id && !a.division_id) ||
+        (!!a.entry_id && ids.includes(a.entry_id)) ||
+        (!!a.division_id && divisionIds.includes(a.division_id)),
+    ) ?? [];
 
   return (
     <div>
@@ -111,9 +118,9 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           <Megaphone aria-hidden className="h-4 w-4 text-brand" /> Announcements
         </span>
       </SectionTitle>
-      {announcements.data?.data.length ? (
+      {notices.length ? (
         <ul className="space-y-2">
-          {announcements.data.data.map((a) => (
+          {notices.map((a) => (
             <li key={a.id}>
               <Card
                 className={a.category === "safety" ? "border-danger/40" : ""}

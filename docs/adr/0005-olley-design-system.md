@@ -1,4 +1,4 @@
-# ADR 0004 — Olley Catalyst visual system
+# ADR 0005 — Olley Catalyst visual system
 
 Date: 2026-10-17. Status: accepted for the redesign branch.
 
@@ -18,6 +18,6 @@ The existing application has functional guest and staff workflows but uses a nar
 
 ## Consequences
 
-This is a presentation-layer overhaul, not an implementation of unbuilt requirements. The current requirements document describes AES, delay notices, division following, demo time and other planned functionality that is not implemented on this base commit. This branch neither claims to supply those features nor removes their future integration points. Global tokens and reusable components allow those pages to adopt the same visual system later.
+This is a presentation-layer overhaul integrated with the companion workflows merged into main at `12f6cbca6cc7c099d08d89cc41d8fd9652a8f76b`. Division follows, private team labels, work duties, official/staff estimates, demo clock, pathway views, pagination, source connectors, registration mapping, coach review and assignment management are retained. New data views use the same typography, surfaces and navigation. Main owns those backend operations and their migration; this redesign adds no further migration.
 
 Figma is the editable concept reference; code is the source of truth for the implemented responsive behavior and actual feature availability. The Figma sample uses fictional demonstration teams. Canva supplied an additional illustration concept; its returned 199×112 thumbnail is retained as a reference only, not upscaled into production. Superdesign was blocked by automatic approval review because of an unapproved PostHog analytics transmission and was not used further.

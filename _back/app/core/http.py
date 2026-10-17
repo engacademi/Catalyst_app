@@ -28,7 +28,7 @@ def parse_uuid(value: str, what: str = "id") -> uuid.UUID:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown {what}") from exc
 
 
-def parse_uuid_list(value: str | None, *, limit: int = 50) -> list[uuid.UUID] | None:
+def parse_uuid_list(value: str | None, *, limit: int = 1000) -> list[uuid.UUID] | None:
     if value is None:
         return None
     items = [v for v in value.split(",") if v.strip()]

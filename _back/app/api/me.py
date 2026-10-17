@@ -17,7 +17,11 @@ router = APIRouter(prefix="/v1/me", tags=["me"])
 
 
 @router.get("/assignments")
-def my_assignments(request: Request, db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal) -> Response:
+def my_assignments(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    principal: CurrentPrincipal,
+) -> Response:
     """An official sees only their own imported assignments, never anyone else's."""
     rows = db.scalars(
         select(Assignment)
@@ -43,3 +47,85 @@ def my_assignments(request: Request, db: Annotated[Session, Depends(get_db)], pr
             }
         )
     return json_response(request, {"data": data}, private=True)
+
+
+@router.get("/roster-reviews")
+def my_roster_reviews(
+    db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal
+):
+    from app.models import RosterPublication, EventEntry
+
+    allowed = [g.entry_id for g in principal.grants if g.role == "coach" and g.entry_id]
+    rows = db.scalars(
+        select(RosterPublication)
+        .where(
+            RosterPublication.entry_id.in_(allowed),
+            RosterPublication.state != "withdrawn",
+        )
+        .order_by(RosterPublication.created_at.desc())
+    )
+    return {
+        "data": [
+            {
+                "id": str(r.id),
+                "team": db.get(EventEntry, r.entry_id).team_name,
+                "version": r.version,
+                "players": r.public_players,
+                "review": r.review,
+                "state": r.state,
+            }
+            for r in rows
+        ]
+    }
+
+
+from pydantic import BaseModel, Field
+from fastapi import HTTPException
+from app.core.http import parse_uuid
+
+
+class ReviewIn(BaseModel):
+    approved: bool
+    note: str = Field("", max_length=1000)
+
+
+@router.post("/roster-reviews/{roster_id}")
+def review_roster(
+    roster_id: str,
+    body: ReviewIn,
+    db: Annotated[Session, Depends(get_db)],
+    principal: CurrentPrincipal,
+):
+    from app.models import RosterPublication, utcnow, AuditEntry, EventEntry
+
+    r = db.scalar(
+        select(RosterPublication)
+        .where(RosterPublication.id == parse_uuid(roster_id))
+        .with_for_update()
+    )
+    if not r or not any(
+        g.role == "coach" and g.entry_id == r.entry_id for g in principal.grants
+    ):
+        raise HTTPException(403, "This roster is not assigned to you")
+    if r.state != "draft":
+        raise HTTPException(409, "Only draft rosters can be reviewed")
+    r.review = {
+        **r.review,
+        "state": "approved" if body.approved else "changes_requested",
+        "note": body.note,
+        "reviewed_at": utcnow().isoformat(),
+        "reviewer_id": str(principal.user.id),
+    }
+    entry = db.get(EventEntry, r.entry_id)
+    db.add(
+        AuditEntry(
+            actor_user_id=principal.user.id,
+            event_id=entry.event_id,
+            action="roster.review",
+            target_type="roster_publications",
+            target_id=str(r.id),
+            summary={"approved": body.approved, "version": r.version},
+        )
+    )
+    db.commit()
+    return {"data": r.review}

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from app.adapters.base import Capabilities, ParsedRow, ParseResult
 
 COLUMNS: dict[str, tuple[set[str], set[str]]] = {
+    "assignments": ({"external_assignment_id", "subject", "external_match_id", "role", "reporting_time"}, set()),
     "entries": ({"external_entry_id", "team_name", "division"}, {"club_name", "division_code"}),
     "matches": (
         {"external_match_id", "division", "venue", "court", "status"},
@@ -27,6 +28,8 @@ COLUMNS: dict[str, tuple[set[str], set[str]]] = {
             "round",
             "set_scores",
             "source_revision",
+            "work_entry_id",
+            "court_area",
             "source_updated_at",
         },
     ),
@@ -35,7 +38,7 @@ COLUMNS: dict[str, tuple[set[str], set[str]]] = {
         {"position", "photo_url", "photo_approved", "team_photo_url", "team_photo_approved"},
     ),
 }
-ID_COLUMN = {"entries": "external_entry_id", "matches": "external_match_id", "rosters": "external_entry_id"}
+ID_COLUMN = {"assignments": "external_assignment_id", "entries": "external_entry_id", "matches": "external_match_id", "rosters": "external_entry_id"}
 STATUSES = {"scheduled", "in_progress", "completed", "cancelled", "postponed"}
 MAX_CELL = 500
 TRUE_VALUES = {"yes", "y", "true", "1"}
@@ -124,12 +127,16 @@ class CsvAdapter:
             "team_name": cells.get("team_name", ""),
             "club_name": cells.get("club_name") or None,
             "division": cells.get("division", ""),
+            "work_entry_id": cells.get("work_entry_id") or None,
+            "court_area": cells.get("court_area") or None,
             "division_code": cells.get("division_code") or None,
         }
 
     def _matches(self, cells: dict[str, str], errors: list[str], tz: str) -> dict:
         data: dict = {
             "division": cells.get("division", ""),
+            "work_entry_id": cells.get("work_entry_id") or None,
+            "court_area": cells.get("court_area") or None,
             "venue": cells.get("venue", ""),
             "court": cells.get("court", ""),
             "round": cells.get("round") or None,
@@ -163,6 +170,17 @@ class CsvAdapter:
                 data["sets"] = parse_sets(cells["set_scores"])
             except ValueError as exc:
                 errors.append(str(exc))
+        return data
+
+    def _assignments(self, cells, errors, tz):
+        for key in ("subject", "external_match_id", "role", "reporting_time"):
+            if not cells.get(key):
+                errors.append(f"{key} is required")
+        data = {k: cells.get(k, "") for k in ("subject", "external_match_id", "role", "reporting_time")}
+        try:
+            data["reporting_time"] = parse_time(data["reporting_time"], tz).isoformat()
+        except ValueError:
+            errors.append("reporting_time must be an ISO 8601 date-time")
         return data
 
     def _rosters(self, cells: dict[str, str], errors: list[str], tz: str) -> dict:

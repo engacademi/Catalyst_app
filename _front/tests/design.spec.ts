@@ -59,6 +59,7 @@ const event = {
 };
 const match = {
   id: "m1",
+  source_match_id: "S1",
   revision: 1,
   status: "scheduled",
   result_state: "pending",
@@ -142,6 +143,12 @@ async function fixtures(page: Page) {
             .includes((url.searchParams.get("q") || "").toLowerCase()),
         ),
         total: 2,
+      };
+    else if (path.endsWith("/pathway"))
+      body = {
+        data: [{ label: "Pool A", matches: [match, result] }],
+        sources: [source],
+        note: "Published competition path",
       };
     else if (path.endsWith("/my-day"))
       body = wrap({
@@ -279,12 +286,14 @@ for (const width of [390, 768, 1440]) {
       `${base}/matches`,
       `${base}/matches/m2`,
       `${base}/teams/t1`,
+      `${base}/my-teams`,
+      `${base}/pathway`,
       `${base}/guide`,
       `${base}/updates`,
     ]) {
       await page.goto(path);
       await expect(page.locator("h1")).toBeVisible();
-      await expect(page.getByRole("status")).toHaveCount(0);
+      await expect(page.locator(".loading-state")).toHaveCount(0);
       await noOverflow(page);
     }
     await page.goto(`${base}/my-day`);
@@ -332,7 +341,7 @@ test("following survives navigation and reload; search and match filters retain 
   await page.goto(`${base}/my-day`);
   await expect(page.getByText("Next on court")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Add these matches/ }),
+    page.getByRole("link", { name: /Download matches/ }),
   ).toHaveAttribute("href", /calendar\.ics\?entry_ids=t1/);
   await page.goto(`${base}/matches`);
   await page.getByRole("button", { name: "Results", exact: true }).click();
@@ -358,7 +367,7 @@ test("guide resources, approved roster and guest empty state remain accessible",
   ).toBeVisible();
   await page.goto(`${base}/guide`);
   await expect(
-    page.getByRole("link", { name: /Open resource/ }),
+    page.getByRole("link", { name: /Open.*resource/ }),
   ).toHaveAttribute("href", "https://example.com/scoring");
   await expect(page.getByText("Use the east entrance")).toBeVisible();
   await page.goto(`${base}/teams/t1`);
@@ -379,6 +388,9 @@ test("staff tools and forms remain reachable on phones", async ({ page }) => {
     "Imports",
     "Content",
     "Rosters",
+    "Registration",
+    "Assignments",
+    "Courts & clock",
     "Sources",
     "Demo tools",
     "Audit",
@@ -421,7 +433,7 @@ test("core journeys have no WCAG A/AA axe violations", async ({ page }) => {
   ]) {
     await page.goto(path);
     await expect(page.locator("h1")).toBeVisible();
-    await expect(page.getByRole("status")).toHaveCount(0);
+    await expect(page.locator(".loading-state")).toHaveCount(0);
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
       .analyze();
@@ -468,12 +480,73 @@ test("attendee routes produce no browser runtime errors", async ({ page }) => {
     `${base}/matches`,
     `${base}/matches/m2`,
     `${base}/teams/t1`,
+    `${base}/my-teams`,
+    `${base}/pathway`,
     `${base}/guide`,
     `${base}/updates`,
   ]) {
     await page.goto(path);
     await expect(page.locator("h1")).toBeVisible();
-    await expect(page.getByRole("status")).toHaveCount(0);
+    await expect(page.locator(".loading-state")).toHaveCount(0);
   }
   expect(errors).toEqual([]);
+});
+
+test("merged division follows, private labels, pathway and staff estimates remain usable", async ({
+  page,
+}) => {
+  await fixtures(page);
+  await page.goto(`${base}/teams`);
+  const followDivision = page.getByRole("button", {
+    name: /16U Girls Division 1/,
+  });
+  await followDivision.click();
+  await expect(followDivision).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", {
+      name: `Follow ${entries[0].team_name}`,
+      exact: true,
+    })
+    .click();
+  await page.goto(`${base}/my-teams`);
+  await page
+    .getByRole("textbox", { name: "Private label" })
+    .fill("Maya's team");
+  await page.goto(`${base}/my-day`);
+  await expect(page.getByText("Maya's team", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Divisions you follow")).toBeVisible();
+  await page.locator("summary").click();
+  await expect(
+    page.getByText("Division schedule", { exact: true }),
+  ).toBeVisible();
+  await page.goto(`${base}/pathway`);
+  await expect(
+    page.getByRole("heading", { name: "Competition path" }),
+  ).toBeVisible();
+  await expect(page.locator(".match-card")).toHaveCount(2);
+  await page.route("**/v1/matches/m1", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          ...match,
+          event,
+          history: [],
+          estimated_start: next,
+          estimate_source: "OVA staff",
+          delay_notice: {
+            minutes: 20,
+            posted_by: "OVA staff",
+            posted_at: now,
+            expires_at: next,
+          },
+          expected_start_soon: true,
+        },
+        sources: [source],
+      },
+    }),
+  );
+  await page.goto(`${base}/matches/m1`);
+  await expect(page.getByText(/Court running ~20 minutes late/)).toBeVisible();
+  await expect(page.getByText(/Official time remains unchanged/)).toBeVisible();
+  await expect(page.getByText(/Expected to start soon/)).toBeVisible();
 });

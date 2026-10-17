@@ -1,5 +1,4 @@
 "use client";
-
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
@@ -9,6 +8,7 @@ import type { Change, Match } from "@/lib/api";
 import { useFollows, useLastSeen } from "@/lib/follows";
 import { formatRelative, formatTime } from "@/lib/format";
 import { useChanges } from "@/lib/queries";
+import { LoadMore } from "../load-more";
 import { Badge, EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
 const TITLES: Record<string, string> = {
@@ -17,7 +17,9 @@ const TITLES: Record<string, string> = {
   status_changed: "Status changed",
   result_posted: "Result posted",
   result_corrected: "Result corrected",
-  participants_resolved: "Teams confirmed",
+  participants_resolved: "Next match set",
+  work_assigned: "Work duty assigned",
+  delay_notice: "Court delay notice",
 };
 
 function matchLine(m: Match | undefined) {
@@ -28,6 +30,10 @@ function matchLine(m: Match | undefined) {
 function detail(c: Change, m: Match | undefined): string {
   const d = c.diff as Record<string, [unknown, unknown]>;
   const tz = m?.timezone ?? "America/Toronto";
+  if (c.event_type === "delay_notice")
+    return `Court delay: ${String(c.diff.minutes)} minutes. Official start remains unchanged.`;
+  if (c.event_type === "participants_resolved")
+    return `Next match set: ${m?.round_label ?? "Upcoming match"}, ${m?.court?.label ?? "court pending"}, ${formatTime(m?.scheduled_start ?? null, tz)}.`;
   if (c.event_type === "court_changed")
     return `Now on ${d.court?.[1] ?? "a court to be confirmed"} (was ${d.court?.[0] ?? "unassigned"}).`;
   if (c.event_type === "time_changed")
@@ -42,7 +48,7 @@ function detail(c: Change, m: Match | undefined): string {
 export function UpdatesView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
   const query = useChanges(eventId);
-  const { ids } = useFollows(eventId);
+  const { ids, divisionIds } = useFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
   const latest = query.data?.latest_id ?? 0;
 
@@ -57,8 +63,14 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   if (query.error) return <ErrorState error={query.error} />;
 
   // Filtering happens here on the device, so the server never learns who follows what.
-  const relevant = query.data.data.filter(
-    (c) => c.entry_ids.length === 0 || c.entry_ids.some((e) => ids.includes(e)),
+  const relevant = query.data!.data.filter(
+    (c) =>
+      (!c.division_id &&
+        c.entry_ids.length === 0 &&
+        c.entity_type === "announcement") ||
+      c.entry_ids.some((e) => ids.includes(e)) ||
+      (!!c.division_id && divisionIds.includes(c.division_id)) ||
+      divisionIds.includes(query.data!.divisions[c.entity_id]),
   );
 
   return (
@@ -78,7 +90,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
             {relevant.map((c) => {
               const isNew = c.id > lastSeen;
               if (c.entity_type === "announcement") {
-                const a = query.data.announcements[c.entity_id];
+                const a = query.data!.announcements[c.entity_id];
                 if (!a) return null;
                 return (
                   <li
@@ -97,7 +109,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
                   </li>
                 );
               }
-              const m = query.data.matches[c.entity_id];
+              const m = query.data!.matches[c.entity_id];
               return (
                 <li key={c.id}>
                   <Link
@@ -122,6 +134,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
           </ol>
         )}
       </div>
+      <LoadMore query={query} label="older updates" />
       <p className="mt-4 text-xs text-muted">
         Updates refresh about every 30 seconds while this page is open. They
         aren&apos;t push notifications and shouldn&apos;t be relied on as the

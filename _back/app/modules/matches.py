@@ -30,10 +30,13 @@ MATCH_STATUSES = {"scheduled", "in_progress", "completed", "cancelled", "postpon
 
 def match_load_options():
     return (
-        selectinload(Match.participants).selectinload(MatchParticipant.entry).selectinload(EventEntry.division),
+        selectinload(Match.participants)
+        .selectinload(MatchParticipant.entry)
+        .selectinload(EventEntry.division),
         selectinload(Match.sets),
         selectinload(Match.court).selectinload(Court.venue),
         selectinload(Match.division),
+        selectinload(Match.work_entry),
         selectinload(Match.source),
     )
 
@@ -42,6 +45,7 @@ def match_query(
     event_id: uuid.UUID,
     *,
     entry_ids: list[uuid.UUID] | None = None,
+    division_ids: list[uuid.UUID] | None = None,
     status_group: str | None = None,
     court_id: uuid.UUID | None = None,
     division_id: uuid.UUID | None = None,
@@ -49,27 +53,46 @@ def match_query(
     day: date | None = None,
     tz: str = "America/Toronto",
 ) -> Select[tuple[Match]]:
-    stmt = select(Match).where(Match.event_id == event_id).options(*match_load_options())
+    stmt = (
+        select(Match).where(Match.event_id == event_id).options(*match_load_options())
+    )
     if entry_ids is not None:
         stmt = stmt.where(
-            Match.id.in_(select(MatchParticipant.match_id).where(MatchParticipant.entry_id.in_(entry_ids)))
+            or_(
+                Match.work_entry_id.in_(entry_ids),
+                Match.id.in_(
+                    select(MatchParticipant.match_id).where(
+                        MatchParticipant.entry_id.in_(entry_ids)
+                    )
+                ),
+                Match.division_id.in_(division_ids or []),
+            )
         )
     if status_group and status_group != "all":
         stmt = stmt.where(Match.status.in_(STATUS_GROUPS[status_group]))
     if court_id:
         stmt = stmt.where(Match.court_id == court_id)
     if venue_id:
-        stmt = stmt.where(Match.court_id.in_(select(Court.id).where(Court.venue_id == venue_id)))
+        stmt = stmt.where(
+            Match.court_id.in_(select(Court.id).where(Court.venue_id == venue_id))
+        )
     if division_id:
         stmt = stmt.where(Match.division_id == division_id)
     if day:
         start = datetime.combine(day, time.min, tzinfo=ZoneInfo(tz))
-        stmt = stmt.where(and_(Match.scheduled_start >= start, Match.scheduled_start < start + timedelta(days=1)))
+        stmt = stmt.where(
+            and_(
+                Match.scheduled_start >= start,
+                Match.scheduled_start < start + timedelta(days=1),
+            )
+        )
     # Unscheduled matches sort last so they stay discoverable without crowding the top.
     return stmt.order_by(Match.scheduled_start.asc().nulls_last(), Match.external_id)
 
 
-def latest_changes(db: Session, match_ids: list[uuid.UUID]) -> dict[uuid.UUID, ChangeEvent]:
+def latest_changes(
+    db: Session, match_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, ChangeEvent]:
     if not match_ids:
         return {}
     rows = db.scalars(
@@ -129,7 +152,15 @@ def current_state(match: Match) -> MatchState:
 
 def changed_fields(before: MatchState, after: MatchState) -> list[str]:
     fields = []
-    for name in ("division_id", "court_id", "round_label", "scheduled_start", "estimated_start", "status", "sets"):
+    for name in (
+        "division_id",
+        "court_id",
+        "round_label",
+        "scheduled_start",
+        "estimated_start",
+        "status",
+        "sets",
+    ):
         if getattr(before, name) != getattr(after, name):
             fields.append(name)
     if (before.home, before.away) != (after.home, after.away):
@@ -177,6 +208,11 @@ def apply_match_state(
     match.division_id = after.division_id
     match.court_id = after.court_id
     match.round_label = after.round_label
+    if not is_new and "scheduled_start" in fields:
+        from app.models import Event
+        from app.modules.projections import event_now
+
+        match.official_time_revised_at = event_now(db.get(Event, match.event_id))
     match.scheduled_start = after.scheduled_start
     match.estimated_start = after.estimated_start
     match.status = after.status
@@ -198,14 +234,25 @@ def apply_match_state(
         match.sets.clear()
         db.flush()
         for number, (home, away) in enumerate(after.sets, start=1):
-            match.sets.append(SetResult(set_number=number, home_score=home, away_score=away))
+            match.sets.append(
+                SetResult(set_number=number, home_score=home, away_score=away)
+            )
 
     if is_new:
         return []
 
     match.revision += 1
     entry_ids = sorted(
-        {str(e) for e in (before.home.entry_id, before.away.entry_id, after.home.entry_id, after.away.entry_id) if e}
+        {
+            str(e)
+            for e in (
+                before.home.entry_id,
+                before.away.entry_id,
+                after.home.entry_id,
+                after.away.entry_id,
+            )
+            if e
+        }
     )
     events: list[tuple[str, dict]] = []
     if "scheduled_start" in fields or "estimated_start" in fields:
@@ -213,17 +260,35 @@ def apply_match_state(
             (
                 "time_changed",
                 {
-                    "scheduled_start": [iso(before.scheduled_start), iso(after.scheduled_start)],
-                    "estimated_start": [iso(before.estimated_start), iso(after.estimated_start)],
+                    "scheduled_start": [
+                        iso(before.scheduled_start),
+                        iso(after.scheduled_start),
+                    ],
+                    "estimated_start": [
+                        iso(before.estimated_start),
+                        iso(after.estimated_start),
+                    ],
                 },
             )
         )
     if "court_id" in fields:
-        events.append(("court_changed", {"court": [_court_label(db, before.court_id), _court_label(db, after.court_id)]}))
+        events.append(
+            (
+                "court_changed",
+                {
+                    "court": [
+                        _court_label(db, before.court_id),
+                        _court_label(db, after.court_id),
+                    ]
+                },
+            )
+        )
     if "status" in fields:
         events.append(("status_changed", {"status": [before.status, after.status]}))
     if "sets" in fields:
-        kind = "result_corrected" if match.result_state == "corrected" else "result_posted"
+        kind = (
+            "result_corrected" if match.result_state == "corrected" else "result_posted"
+        )
         events.append((kind, {"sets": [before.sets, after.sets]}))
     if "participants" in fields:
         events.append(("participants_resolved", {}))
