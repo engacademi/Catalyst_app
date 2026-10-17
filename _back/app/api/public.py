@@ -32,7 +32,7 @@ from app.modules.matches import (
     match_load_options,
     match_query,
 )
-from app.modules.my_day import build_my_day
+from app.modules.my_day import build_division_section, build_my_day
 
 router = APIRouter(prefix="/v1", tags=["public"])
 DB = Annotated[Session, Depends(get_db)]
@@ -169,9 +169,11 @@ def my_day(
     db: DB,
     settings: Annotated[Settings, Depends(get_settings)],
     entry_ids: str = "",
+    division_ids: str = "",
 ) -> Response:
     event = load_event(db, event_ref)
     followed = parse_uuid_list(entry_ids) or []
+    followed_divisions = parse_uuid_list(division_ids) or []
     matches = list(db.scalars(match_query(event.id, entry_ids=followed))) if followed else []
     entries = (
         db.scalars(
@@ -183,11 +185,26 @@ def my_day(
         else []
     )
     summary = build_my_day(matches, set(followed), settings.assumed_match_minutes)
+    divisions = (
+        db.scalars(
+            select(Division)
+            .where(Division.event_id == event.id, Division.id.in_(followed_divisions))
+            .order_by(Division.name)
+        )
+        if followed_divisions
+        else []
+    )
+    sections = []
+    for division in divisions:
+        division_matches = list(db.scalars(match_query(event.id, division_id=division.id)))
+        matches += division_matches
+        sections.append({"division": P.division_public(division), **build_division_section(division_matches)})
     payload = {
         "data": {
             **summary,
             "entries": [P.entry_public(e) for e in entries],
-            "matches": {m["id"]: m for m in project_matches(db, event, matches)},
+            "division_sections": sections,
+            "matches": {m["id"]: m for m in project_matches(db, event, list({m.id: m for m in matches}.values()))},
         },
         "event_revision": event.revision,
         "sources": sources_envelope(event),
@@ -218,11 +235,17 @@ def change_feed(
         db.scalars(select(Match).where(Match.id.in_(match_ids)).options(*match_load_options())) if match_ids else []
     )
     announcement_ids = [r.entity_id for r in rows if r.entity_type == "announcement"]
-    announcements = (
+    announcements = list(
         db.scalars(select(Announcement).where(Announcement.id.in_(announcement_ids))) if announcement_ids else []
     )
+    matches = list(matches)
+    # Lets the device show changes for followed divisions as well as followed entries.
+    division_of = {m.id: m.division_id for m in matches} | {a.id: a.division_id for a in announcements}
     payload = {
-        "data": [P.change_public(r) for r in rows],
+        "data": [
+            {**P.change_public(r), "division_id": str(d) if (d := division_of.get(r.entity_id)) else None}
+            for r in rows
+        ],
         "matches": {str(m.id): P.match_public(m, event) for m in matches},
         "announcements": {str(a.id): P.announcement_public(a) for a in announcements if a.state == "published"},
         "latest_id": rows[0].id if rows else after,
