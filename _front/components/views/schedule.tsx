@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
 import { formatTime } from "@/lib/format";
@@ -10,6 +10,7 @@ import { useEventSelections, usePreference } from "@/lib/preferences";
 import { useHydrated } from "@/lib/hydration";
 import { MatchCard } from "../match-card";
 import { ErrorState, Loading, EmptyState } from "../ui";
+import { TimeGrid } from "../time-grid";
 import { FreshnessNote } from "../freshness";
 
 export function dateKey(iso: string, timeZone = "America/Toronto") {
@@ -156,11 +157,7 @@ export function ScheduleView() {
   return (
     <main id="main" className="platform-main">
       <div className="discovery-heading">
-        <p className="eyebrow text-brand">YOUR GAME PLAN</p>
         <h1>My Schedule</h1>
-        <p>
-          Only saved tournaments and matches for teams or divisions you follow.
-        </p>
       </div>
       {!hydrated || events.isPending ? (
         <Loading />
@@ -178,29 +175,6 @@ export function ScheduleView() {
         </EmptyState>
       ) : (
         <>
-          <details className="schedule-visibility">
-            <summary>
-              Show or hide tournaments · {visible.length} visible
-            </summary>
-            <div>
-              {selected.map((e) => (
-                <label key={e.id}>
-                  <input
-                    type="checkbox"
-                    checked={!hidden.includes(e.slug)}
-                    onChange={() =>
-                      setHidden(
-                        hidden.includes(e.slug)
-                          ? hidden.filter((id) => id !== e.slug)
-                          : [...hidden, e.slug],
-                      )
-                    }
-                  />
-                  {e.title}
-                </label>
-              ))}
-            </div>
-          </details>
           <div className="schedule-controls">
             <div className="segmented">
               {["calendar", "list"].map((m) => (
@@ -247,11 +221,34 @@ export function ScheduleView() {
               <ChevronRight size={18} aria-hidden />
             </button>
             <button onClick={() => setStart(today)}>Today</button>
+            <details className="schedule-visibility">
+              <summary title="Visibility">
+                <Eye size={18} aria-hidden />
+                <span className="sr-only">Visibility</span>
+              </summary>
+              <div className="visibility-panel">
+                <p className="visibility-panel-heading">
+                  Visibility · {visible.length} shown
+                </p>
+                {selected.map((e) => (
+                  <label key={e.id}>
+                    <input
+                      type="checkbox"
+                      checked={!hidden.includes(e.slug)}
+                      onChange={() =>
+                        setHidden(
+                          hidden.includes(e.slug)
+                            ? hidden.filter((id) => id !== e.slug)
+                            : [...hidden, e.slug],
+                        )
+                      }
+                    />
+                    {e.title}
+                  </label>
+                ))}
+              </div>
+            </details>
           </div>
-          <p className="mb-3 text-xs text-muted">
-            Times shown in America/Toronto. Match cards also show the
-            event&apos;s local time.
-          </p>
           {queries.some(
             (q, i) => !hidden.includes(selected[i].slug) && q.isPending,
           ) && <Loading label="Loading your matches" />}
@@ -268,44 +265,7 @@ export function ScheduleView() {
               Use the visibility controls above to show them again.
             </EmptyState>
           ) : mode === "calendar" ? (
-            <div
-              className="calendar-scroll"
-              tabIndex={0}
-              aria-label={`${days} day schedule, scroll horizontally for more days`}
-            >
-              <div className={`calendar-grid ${days === 7 ? "full-week" : ""}`}>
-                {dates.map((day) => (
-                  <section key={day}>
-                    <h2>
-                      {new Date(`${day}T12:00:00Z`).toLocaleDateString(
-                        "en-CA",
-                        {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                          timeZone: "UTC",
-                        },
-                      )}
-                    </h2>
-                    {inRange
-                      .filter(
-                        (r) =>
-                          dateKey(
-                            (r.match.estimated_start ??
-                              r.match.scheduled_start)!,
-                          ) === day,
-                      )
-                      .map(renderMatch)}
-                    {!inRange.some(
-                      (r) =>
-                        dateKey(
-                          (r.match.estimated_start ?? r.match.scheduled_start)!,
-                        ) === day,
-                    ) && <p className="calendar-empty">No saved matches</p>}
-                  </section>
-                ))}
-              </div>
-            </div>
+            <TimeGrid rows={inRange} dates={dates} />
           ) : inRange.length ? (
             <div className="schedule-list">{inRange.map(renderMatch)}</div>
           ) : (

@@ -62,7 +62,6 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
   return (
     <main id="main" className="platform-main profile-page">
       <div className="discovery-heading">
-        <p className="eyebrow text-brand">YOUR CORNER OF THE COURT</p>
         <h1>My Profile</h1>
       </div>
       <Card>

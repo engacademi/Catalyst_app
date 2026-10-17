@@ -9,6 +9,7 @@ import { useEvents } from "@/lib/queries";
 import { usePreference, useLocalFollows } from "@/lib/preferences";
 import { EventTile, type DiscoveryEvent } from "../event-tile";
 import { EmptyState, ErrorState, Loading } from "../ui";
+import { DiscoveryGreeting } from "../discovery-greeting";
 const TORONTO = { latitude: 43.6532, longitude: -79.3832 };
 export function distanceKm(a: typeof TORONTO, b: typeof TORONTO) {
   const r = Math.PI / 180;
@@ -75,15 +76,13 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
     </div>
   );
 }
-function FollowedEvent({ event }: { event: DiscoveryEvent }) {
-  const follows = useLocalFollows(event.slug);
-  return follows.length ? (
-    <li>
-      <SavedEventPreview event={event} />
-    </li>
-  ) : null;
-}
-export function DiscoverView({ catalogue = false }: { catalogue?: boolean }) {
+export function DiscoverView({
+  catalogue = false,
+  personalized = false,
+}: {
+  catalogue?: boolean;
+  personalized?: boolean;
+}) {
   const events = useEvents();
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState("all");
@@ -153,30 +152,14 @@ export function DiscoverView({ catalogue = false }: { catalogue?: boolean }) {
   return (
     <main id="main" className="platform-main discovery-page">
       <div className="discovery-heading">
-        <p className="eyebrow text-brand">YOUR PLACE, COURTSIDE</p>
-        <h1>{catalogue ? "Tournaments" : "Find your next game."}</h1>
-        <p>
-          {catalogue
-            ? "Explore every published tournament in the OVA companion."
-            : "The teams you love. The games around you."}
-        </p>
+        {catalogue ? (
+          <h1>Tournaments</h1>
+        ) : personalized ? (
+          <DiscoveryGreeting />
+        ) : (
+          <h1>Find your next game.</h1>
+        )}
       </div>
-      {!catalogue && (
-        <div className="location-strip">
-          <span>
-            <MapPin size={17} aria-hidden />
-            Near {locationLabel} <small>· 100 km</small>
-          </span>
-          <button onClick={requestLocation} disabled={locating}>
-            {locating ? "Locating…" : "Use my location"}
-          </button>
-        </div>
-      )}
-      {message && (
-        <p role="status" className="mb-3 text-xs text-muted">
-          {message}
-        </p>
-      )}
       <div className="discovery-search">
         <Search size={19} aria-hidden />
         <input
@@ -220,32 +203,36 @@ export function DiscoverView({ catalogue = false }: { catalogue?: boolean }) {
         <>
           {!catalogue && (
             <>
-              <section className="saved-discovery">
-                <h2>Your courtside picks</h2>
-                <p className="section-description">
-                  Saved tournaments and the teams you follow, first.
-                </p>
-                <ul className="event-carousel">
-                  {filtered.map((e) =>
-                    saved.includes(e.slug) ? (
-                      <li key={e.id}>
-                        <SavedEventPreview event={e} />
-                      </li>
-                    ) : (
-                      <FollowedEvent key={e.id} event={e} />
-                    ),
-                  )}
-                </ul>
-                <p className="saved-empty">
-                  Save a tournament with the heart, or follow a team to bring it
-                  here.
-                </p>
-              </section>
-              <section>
+              {filtered.some((e) => saved.includes(e.slug)) && (
+                <section className="saved-discovery reveal-section">
+                  <h2>Your courtside picks</h2>
+                  <ul className="event-carousel">
+                    {filtered
+                      .filter((e) => saved.includes(e.slug))
+                      .map((e) => (
+                        <li key={e.id}>
+                          <SavedEventPreview event={e} />
+                        </li>
+                      ))}
+                  </ul>
+                </section>
+              )}
+              <section className="reveal-section">
                 <h2>Near {locationLabel}</h2>
-                <p className="section-description">
-                  Published venues within 100 km.
-                </p>
+                <div className="location-strip">
+                  <span>
+                    <MapPin size={17} aria-hidden />
+                    Within 100 km
+                  </span>
+                  <button onClick={requestLocation} disabled={locating}>
+                    {locating ? "Locating…" : "Use my location"}
+                  </button>
+                </div>
+                {message && (
+                  <p role="status" className="mb-3 text-xs text-muted">
+                    {message}
+                  </p>
+                )}
                 {near.length ? (
                   <ul className="event-carousel">
                     {near.map((x) => (
@@ -261,15 +248,12 @@ export function DiscoverView({ catalogue = false }: { catalogue?: boolean }) {
                   </EmptyState>
                 )}
               </section>
-              <section>
+              <section className="reveal-section">
                 <div className="section-row">
                   <h2>Picked for you</h2>
                   <Link href="/profile">Edit interests →</Link>
                 </div>
-                <p className="section-description">
-                  Based on your interests, saved tournaments and events you mark
-                  as attended.
-                </p>
+
                 {recommended.length ? (
                   <ul className="event-carousel">
                     {recommended.map((e) => (
@@ -280,16 +264,13 @@ export function DiscoverView({ catalogue = false }: { catalogue?: boolean }) {
                   </ul>
                 ) : (
                   <p className="empty-inline">
-                    Choose Indoor or Beach in your profile to discover more
-                    games you like.
+                    Choose interests in your profile.
                   </p>
                 )}
               </section>
-              <section>
+              <section className="reveal-section">
                 <h2>Popular on court</h2>
-                <p className="section-description">
-                  The largest competitions by published team count.
-                </p>
+
                 <ul className="event-carousel">
                   {popular.slice(0, 8).map((e) => (
                     <li key={e.id}>

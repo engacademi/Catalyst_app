@@ -124,9 +124,12 @@ export function PlatformShell({ children }: { children: ReactNode }) {
   return (
     <div className="platform-app">
       <header className="platform-header">
-        <Link href="/" aria-label="Olley Catalyst by OVA">
+        <Link
+          href="/"
+          aria-label="Olley Catalyst by Ontario Volleyball Association"
+        >
           <Wordmark />
-          <small className="by-ova">By OVA</small>
+          <small className="by-ova">By Ontario Volleyball Association</small>
         </Link>
         <nav className="platform-desktop-nav" aria-label="Main navigation">
           {nav}
@@ -150,7 +153,7 @@ export function PlatformShell({ children }: { children: ReactNode }) {
       <footer className="platform-footer">
         <Link href="/">
           <Wordmark />
-          <small className="by-ova">By OVA</small>
+          <small className="by-ova">By Ontario Volleyball Association</small>
         </Link>
         <span>Your place, courtside.</span>
       </footer>

@@ -111,7 +111,6 @@ export function EmptyState({
 
 export function PageTitle({
   children,
-  subtitle,
 }: {
   children: ReactNode;
   subtitle?: ReactNode;
@@ -119,7 +118,6 @@ export function PageTitle({
   return (
     <div className="page-heading">
       <h1 className="font-display">{children}</h1>
-      {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
     </div>
   );
 }

@@ -3,7 +3,15 @@
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
-import { ArrowRight, Info, ListOrdered, Megaphone, Users } from "lucide-react";
+import {
+  ArrowRight,
+  Info,
+  ListOrdered,
+  Megaphone,
+  Users,
+  Tags,
+  Check,
+} from "lucide-react";
 import { useAnnouncements, useEvent, useMatches } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
 import { formatDateRange, formatRelative } from "@/lib/format";
@@ -42,7 +50,6 @@ export function EventHomeView({ eventId }: { eventId: string }) {
   return (
     <div>
       <div className="page-heading">
-        <p className="eyebrow mb-2 text-muted">WELCOME TO YOUR EVENT</p>
         <h1>{e.title}</h1>
       </div>
       <p className="mt-1 text-sm text-muted">
@@ -51,13 +58,21 @@ export function EventHomeView({ eventId }: { eventId: string }) {
         {e.divisions.length} divisions
       </p>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      <div className="tournament-actions">
         <div className="tournament-save">
           <SaveEventButton slug={e.slug} />
-          <span className="text-xs">Save tournament</span>
+          <Link
+            className="icon-link team-label-link"
+            href={`/events/${eventId}/my-teams`}
+            aria-label="Manage team labels"
+            title="Team labels"
+          >
+            <Tags size={19} aria-hidden />
+          </Link>
         </div>
         <button
-          className="secondary-link"
+          className="secondary-link attendance-toggle"
+          aria-label="Attended"
           aria-pressed={attended.includes(e.slug)}
           onClick={() =>
             setAttended(
@@ -67,9 +82,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
             )
           }
         >
-          {attended.includes(e.slug)
-            ? "✓ Marked as attended"
-            : "I've attended this event"}
+          <Check size={15} aria-hidden /> Attended
         </button>
       </div>
       <SectionTitle

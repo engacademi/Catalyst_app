@@ -7,7 +7,6 @@ export default function Updates() {
     <main id="main" className="platform-main">
       <div className="discovery-heading">
         <h1>Updates</h1>
-        <p>Changes from your saved tournaments and followed teams.</p>
       </div>
       <ul className="profile-links">
         {notifications.map(({ event, count, error }) => (

@@ -21,8 +21,6 @@ export function EventShell({
     ["teams", "Teams"],
     ["pathway", "Brackets"],
     ["guide", "Venue guide"],
-    ["my-day", "My event day"],
-    ["my-teams", "My teams"],
   ];
   return (
     <div className="tournament-shell">
@@ -30,11 +28,6 @@ export function EventShell({
         <Link href="/tournaments">← Tournaments</Link>
         <span>{event?.title ?? "Tournament"}</span>
       </div>
-      {event?.is_demo && (
-        <p className="demo-notice">
-          Demo event · Fictional teams and simulated changes. Not a live feed.
-        </p>
-      )}
       {event?.demo_now && (
         <DemoClockBanner
           iso={event.demo_now}

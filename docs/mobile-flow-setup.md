@@ -39,3 +39,9 @@ Existing environment variable names are documented in `_front/.env.example`, `_b
 Run frontend lint, typecheck and build; `npm run test:ui` for fixtures and responsive/accessibility journeys; API tests require a disposable PostgreSQL database via `TEST_DATABASE_URL`. Never run the destructive test fixture against a production database. The repository CI provisions an isolated PostgreSQL service.
 
 Validation completed locally: frontend lint/typecheck/production build; 17-test existing/new browser suite plus the additional notification-read regression (18 distinct checks); responsive views at 320/390/768/1440 px; automated axe checks; six existing API unit tests; new coordinate/match schema checks; Python compilation and migration SQL generation through `0003`. The new PostgreSQL integration regressions are included in `_back/tests/test_mobile_flow.py` but were not executed locally because no disposable PostgreSQL server is available. No production database migration or deployment has been performed.
+
+## October 17 visual and calendar refinement
+
+The follow-up update reduces header/section copy, hides empty saved-event sections, places location controls under Nearby, and moves Visibility beside Today. Branding uses the full Ontario Volleyball Association subtitle. Card/navigation surfaces use restrained shadow/transparency; entrance fades and toggle transitions respect reduced motion. The event overview uses compact attendance and team-label controls; legacy routes remain usable.
+
+My Schedule now uses an hourly, start-positioned calendar with separate lanes for overlaps. Its one-hour display slots are not confirmed match durations. Dense blocks use initials while retaining full accessible match names and links. The optional signed-in home greeting reuses the existing Clerk key and root-route middleware; no new configuration or database migration is needed for these refinements. Guest flows and browser-local preferences are unchanged.
