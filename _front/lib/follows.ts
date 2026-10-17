@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "./api";
 
 // Guest follows stay on this device. The ids are canonical entry ids from the API, so a
 // later sign-in can merge them into an account without guessing.
@@ -21,7 +23,8 @@ function read(eventId: string): string[] {
   let ids: string[] = EMPTY;
   try {
     const parsed = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(parsed)) ids = parsed.filter((v) => typeof v === "string");
+    if (Array.isArray(parsed))
+      ids = parsed.filter((v) => typeof v === "string");
   } catch {}
   cache.set(eventId, { raw, ids });
   return ids;
@@ -36,7 +39,8 @@ function write(eventId: string, ids: string[]) {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  const onStorage = (e: StorageEvent) => e.key?.startsWith("courtside:") && listener();
+  const onStorage = (e: StorageEvent) =>
+    e.key?.startsWith("courtside:") && listener();
   window.addEventListener("storage", onStorage);
   return () => {
     listeners.delete(listener);
@@ -53,11 +57,43 @@ export function useFollows(eventId: string) {
   const toggle = useCallback(
     (entryId: string) => {
       const current = read(eventId);
-      write(eventId, current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId]);
+      write(
+        eventId,
+        current.includes(entryId)
+          ? current.filter((id) => id !== entryId)
+          : [...current, entryId],
+      );
     },
     [eventId],
   );
-  return { ids, isFollowing: (id: string) => ids.includes(id), toggle };
+  const divisionIds = ids
+    .filter((id) => id.startsWith("division:"))
+    .map((id) => id.slice(9));
+  const directTeamIds = ids.filter((id) => !id.startsWith("division:"));
+  const selected = useQuery({
+    queryKey: [
+      "followed-division-entries",
+      eventId,
+      [...divisionIds].sort().join(","),
+    ],
+    queryFn: () =>
+      apiGet<{ data: string[] }>(
+        `/v1/events/${eventId}/selection?division_ids=${divisionIds.join(",")}`,
+      ),
+    enabled: divisionIds.length > 0,
+  });
+  return {
+    ids: [
+      ...new Set([
+        ...directTeamIds,
+        ...(divisionIds.length ? (selected.data?.data ?? []) : []),
+      ]),
+    ],
+    directTeamIds,
+    divisionIds,
+    isFollowing: (id: string) => ids.includes(id),
+    toggle,
+  };
 }
 
 // The last change the guest has seen, so Updates can mark new items. Local only.
@@ -84,4 +120,29 @@ export function useLastSeen(eventId: string) {
     [key],
   );
   return { lastSeen: value, markSeen };
+}
+
+export function useTeamLabel(eventId: string, entryId: string) {
+  const key = `courtside:label:${eventId}:${entryId}`;
+  const label = useSyncExternalStore(
+    subscribe,
+    () => {
+      try {
+        return window.localStorage.getItem(key) ?? "";
+      } catch {
+        return "";
+      }
+    },
+    () => "",
+  );
+  const setLabel = useCallback(
+    (value: string) => {
+      try {
+        window.localStorage.setItem(key, value.slice(0, 60));
+      } catch {}
+      listeners.forEach((l) => l());
+    },
+    [key],
+  );
+  return { label, setLabel };
 }

@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager, suppress
 import logging
 import uuid
 
@@ -16,14 +18,34 @@ logging.basicConfig(level=settings.log_level)
 log = logging.getLogger("courtside")
 
 if settings.auth_mode == "dev" and not settings.dev_auth_allowed:
-    raise RuntimeError("AUTH_MODE=dev is only allowed when APP_ENV is development or test")
+    raise RuntimeError(
+        "AUTH_MODE=dev is only allowed when APP_ENV is development or test"
+    )
 
-app = FastAPI(title="Courtside Connected API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app):
+    from app.modules.sync import poll_sources
+
+    task = asyncio.create_task(poll_sources())
+    yield
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+app = FastAPI(lifespan=lifespan, title="Courtside Connected API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "If-None-Match", "X-Dev-User", "X-Request-ID"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "If-None-Match",
+        "X-Dev-User",
+        "X-Request-ID",
+    ],
     expose_headers=["ETag", "X-Request-ID"],
 )
 
@@ -40,7 +62,9 @@ async def request_id(request: Request, call_next):
 async def database_unavailable(request: Request, exc: OperationalError) -> JSONResponse:
     # Never answer with an empty schedule when the data can't be read.
     log.error("database unavailable: %s", exc.__class__.__name__)
-    return JSONResponse({"detail": "Event data is temporarily unavailable"}, status_code=503)
+    return JSONResponse(
+        {"detail": "Event data is temporarily unavailable"}, status_code=503
+    )
 
 
 @app.get("/health/live", tags=["health"])

@@ -3,7 +3,7 @@
 :root {
   /* OVA brand: lime mark and slate type. Lime is for accents only; text and buttons use the
      darker green so they pass WCAG AA contrast on white. */
-  --background: #f6f7f5;
+  --background: #f4f7f2;
   --surface: #ffffff;
   --foreground: #1f2328;
   --muted: #59606a;
@@ -59,3 +59,9 @@ body {
     transition: none !important;
   }
 }
+
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), select { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+@media (min-width: 640px) { main { scroll-margin-top: 6rem; } }
+@media (prefers-reduced-motion: no-preference) { button, a { transition: background-color 120ms ease, border-color 120ms ease; } }

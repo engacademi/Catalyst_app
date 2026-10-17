@@ -47,3 +47,11 @@ One row per player.
 | team_photo_url, team_photo_approved | no | Same rule for the team photo |
 
 A roster goes public only when the upload includes a consent review reference. Without one it's saved as a draft for staff to publish later.
+
+## Registration exports and private assignments
+
+The staff **Registration** workflow maps approved columns from an existing CSV export. Required target columns are `external_entry_id`, `jersey`, and `display_name`; optional targets match the roster schema above. Exact registration team IDs can be explicitly mapped to current event-entry UUIDs. Mapped registration imports create coach-review drafts before staff publication.
+
+Assignment imports use `external_assignment_id,subject,external_match_id,role,reporting_time`. The subject is an already authorized Clerk official, and the match resolves within the selected source. Assignment data is private.
+
+Match imports also accept `work_entry_id` (an existing source entry identity) and `court_area`. Work teams are shown as duties, not as match participants.

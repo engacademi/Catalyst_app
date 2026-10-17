@@ -1,7 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiAuthGet, apiSend } from "@/lib/api";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { apiAuthGet, apiSend, type Match } from "@/lib/api";
 import { useAdminAuth } from "./auth";
 
 export function useAdminQuery<T>(path: string | null) {
@@ -23,10 +28,35 @@ export function useAdminMutation<TBody = unknown, TResult = unknown>(
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: TBody) =>
-      apiSend<TResult>(auth, method, typeof path === "function" ? path(body) : path, method === "DELETE" ? undefined : body),
+      apiSend<TResult>(
+        auth,
+        method,
+        typeof path === "function" ? path(body) : path,
+        method === "DELETE" ? undefined : body,
+      ),
     onSuccess: () => {
       // Staff edits feed public screens too, so refresh both.
       client.invalidateQueries();
     },
   });
+}
+
+export function useAdminMatches(eventId: string) {
+  const { auth, identity } = useAdminAuth();
+  const query = useInfiniteQuery({
+    queryKey: ["admin", identity, "assignment-matches", eventId],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      apiAuthGet<{ data: Match[]; next_cursor: number | null }>(
+        auth,
+        `/v1/admin/events/${eventId}/matches?cursor=${pageParam}`,
+      ),
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+  });
+  return {
+    ...query,
+    data: query.data
+      ? { data: query.data.pages.flatMap((p) => p.data) }
+      : undefined,
+  };
 }

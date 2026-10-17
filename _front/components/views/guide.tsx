@@ -139,6 +139,7 @@ export function GuideView({ eventId }: { eventId: string }) {
             <Card key={i.id} className="mb-2">
               <p className="font-semibold">{i.title}</p>
               <p className="mt-1 whitespace-pre-line text-sm">{i.body}</p>
+              {i.link_url && <a href={i.link_url} target="_blank" rel="noopener" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline">Open official resource<span className="sr-only"> (opens in a new tab)</span></a>}
             </Card>
           ))}
           <p className="text-sm">

@@ -35,6 +35,7 @@ from app.models import (
     PartnerCard,
     RosterPublication,
     Source,
+    Division,
     Venue,
     utcnow,
 )
@@ -52,7 +53,17 @@ DB = Annotated[Session, Depends(get_db)]
 STAFF = {"staff"}
 
 
-def audit(db: Session, request: Request, principal: Principal, action: str, event_id, target, old=None, new=None, **summary):
+def audit(
+    db: Session,
+    request: Request,
+    principal: Principal,
+    action: str,
+    event_id,
+    target,
+    old=None,
+    new=None,
+    **summary,
+):
     db.add(
         AuditEntry(
             actor_user_id=principal.user.id,
@@ -70,7 +81,9 @@ def audit(db: Session, request: Request, principal: Principal, action: str, even
 
 def check_revision(current: int, expected: int | None) -> None:
     if expected is not None and expected != current:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Someone else changed this. Reload and try again.")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Someone else changed this. Reload and try again."
+        )
 
 
 def staff_event(db: Session, principal: Principal, event_id: str) -> Event:
@@ -101,7 +114,12 @@ def me(principal: CurrentPrincipal) -> dict:
         "user_id": str(principal.user.id),
         "subject": principal.user.clerk_subject,
         "grants": [
-            {"role": g.role, "event_id": str(g.event_id) if g.event_id else None, "expires_at": P.iso(g.expires_at)}
+            {
+                "role": g.role,
+                "event_id": str(g.event_id) if g.event_id else None,
+                "entry_id": str(g.entry_id) if g.entry_id else None,
+                "expires_at": P.iso(g.expires_at),
+            }
             for g in principal.grants
         ],
         "is_staff": any(g.role in ("admin", "staff") for g in principal.grants),
@@ -133,15 +151,23 @@ class EventPatch(BaseModel):
 @router.get("/events")
 def admin_events(db: DB, principal: CurrentPrincipal) -> dict:
     events = db.scalars(select(Event).order_by(Event.start_date.desc()))
-    return {"data": [P.event_public(e) for e in events if principal.has_role(STAFF, e.id)]}
+    return {
+        "data": [P.event_public(e) for e in events if principal.has_role(STAFF, e.id)]
+    }
 
 
 @router.post("/events", status_code=201)
-def create_event(body: EventIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def create_event(
+    body: EventIn, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     if not principal.has_role(set()):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only organization admins can create events")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Only organization admins can create events"
+        )
     if body.end_date < body.start_date:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "End date is before start date")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "End date is before start date"
+        )
     if db.scalar(select(Event.id).where(Event.slug == body.slug)):
         raise HTTPException(status.HTTP_409_CONFLICT, "That event link is already used")
     org_id = next(g.organization_id for g in principal.grants if g.role == "admin")
@@ -157,23 +183,47 @@ def create_event(body: EventIn, request: Request, db: DB, principal: CurrentPrin
 @router.get("/events/{event_id}")
 def admin_event(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     event = staff_event(db, principal, event_id)
-    entries = db.scalars(select(EventEntry).where(EventEntry.event_id == event.id).order_by(EventEntry.team_name))
+    entries = db.scalars(
+        select(EventEntry)
+        .where(EventEntry.event_id == event.id)
+        .order_by(EventEntry.team_name)
+    )
     return {
         "data": {
             **P.event_public(event),
             "venues": [P.venue_public(v) for v in event.venues],
-            "sources": [{**P.source_public(s), "generation": s.generation} for s in event.sources],
-            "entries": [{"id": str(e.id), "team_name": e.team_name, "club_name": e.club_name} for e in entries],
+            "sources": [
+                {**P.source_public(s), "config": s.config, "generation": s.generation}
+                for s in event.sources
+            ],
+            "divisions": [
+                P.division_public(d)
+                for d in db.scalars(
+                    select(Division).where(Division.event_id == event.id)
+                )
+            ],
+            "entries": [
+                {"id": str(e.id), "team_name": e.team_name, "club_name": e.club_name}
+                for e in entries
+            ],
         }
     }
 
 
 @router.patch("/events/{event_id}")
-def update_event(event_id: str, body: EventPatch, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def update_event(
+    event_id: str,
+    body: EventPatch,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     event = staff_event(db, principal, event_id)
     check_revision(event.revision, body.expected_revision)
     old = event.revision
-    for key, value in body.model_dump(exclude_unset=True, exclude={"expected_revision"}).items():
+    for key, value in body.model_dump(
+        exclude_unset=True, exclude={"expected_revision"}
+    ).items():
         setattr(event, key, value)
     event.revision += 1
     audit(db, request, principal, "event.update", event.id, event, old, event.revision)
@@ -191,9 +241,14 @@ class VenueIn(BaseModel):
 
 
 @router.post("/events/{event_id}/venues", status_code=201)
-def create_venue(event_id: str, body: VenueIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def create_venue(
+    event_id: str, body: VenueIn, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     event = staff_event(db, principal, event_id)
-    venue = Venue(event_id=event.id, **{**body.model_dump(), "map_url": str(body.map_url) if body.map_url else None})
+    venue = Venue(
+        event_id=event.id,
+        **{**body.model_dump(), "map_url": str(body.map_url) if body.map_url else None},
+    )
     db.add(venue)
     db.flush()
     audit(db, request, principal, "venue.create", event.id, venue)
@@ -203,7 +258,9 @@ def create_venue(event_id: str, body: VenueIn, request: Request, db: DB, princip
 
 
 @router.patch("/venues/{venue_id}")
-def update_venue(venue_id: str, body: VenueIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def update_venue(
+    venue_id: str, body: VenueIn, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     venue = get_owned(db, principal, Venue, venue_id)
     for key, value in body.model_dump(exclude_unset=True).items():
         setattr(venue, key, str(value) if key == "map_url" and value else value)
@@ -214,19 +271,25 @@ def update_venue(venue_id: str, body: VenueIn, request: Request, db: DB, princip
 
 class SourceIn(BaseModel):
     name: str = Field(min_length=2, max_length=200)
-    mode: Literal["manual_import", "demo_fixture", "aes", "timu", "myteam"] = "manual_import"
+    mode: Literal["manual_import", "demo_fixture", "aes", "timu", "myteam"] = (
+        "manual_import"
+    )
     official_url: HttpUrl | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
     expected_check_interval_minutes: int = Field(15, ge=1, le=1440)
 
 
 class SourcePatch(BaseModel):
+    config: dict[str, Any] | None = None
     status: Literal["active", "paused", "unavailable"] | None = None
     official_url: HttpUrl | None = None
     expected_check_interval_minutes: int | None = Field(None, ge=1, le=1440)
 
 
 @router.post("/events/{event_id}/sources", status_code=201)
-def create_source(event_id: str, body: SourceIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def create_source(
+    event_id: str, body: SourceIn, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     event = staff_event(db, principal, event_id)
     data = body.model_dump()
     data["official_url"] = str(body.official_url) if body.official_url else None
@@ -239,12 +302,26 @@ def create_source(event_id: str, body: SourceIn, request: Request, db: DB, princ
 
 
 @router.patch("/sources/{source_id}")
-def update_source(source_id: str, body: SourcePatch, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def update_source(
+    source_id: str,
+    body: SourcePatch,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     source = get_owned(db, principal, Source, source_id)
     before = source.status
     for key, value in body.model_dump(exclude_unset=True).items():
         setattr(source, key, str(value) if key == "official_url" and value else value)
-    audit(db, request, principal, "source.update", source.event_id, source, status=[before, source.status])
+    audit(
+        db,
+        request,
+        principal,
+        "source.update",
+        source.event_id,
+        source,
+        status=[before, source.status],
+    )
     db.commit()
     return {"data": P.source_public(source)}
 
@@ -253,7 +330,10 @@ def update_source(source_id: str, body: SourcePatch, request: Request, db: DB, p
 def source_health(source_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     source = get_owned(db, principal, Source, source_id)
     batches = db.scalars(
-        select(ImportBatch).where(ImportBatch.source_id == source.id).order_by(ImportBatch.created_at.desc()).limit(10)
+        select(ImportBatch)
+        .where(ImportBatch.source_id == source.id)
+        .order_by(ImportBatch.created_at.desc())
+        .limit(10)
     )
     return {
         "data": {
@@ -274,7 +354,8 @@ def _batch_summary(batch: ImportBatch) -> dict[str, Any]:
         "filename": batch.filename,
         "state": batch.state,
         "summary": batch.summary,
-        "error_count": len(batch.errors) + sum(1 for r in batch.rows if r["action"] == "error"),
+        "error_count": len(batch.errors)
+        + sum(1 for r in batch.rows if r["action"] == "error"),
         "created_at": P.iso(batch.created_at),
         "committed_at": P.iso(batch.committed_at),
     }
@@ -286,16 +367,45 @@ async def upload_import(
     principal: CurrentPrincipal,
     event_id: Annotated[str, Form()],
     source_id: Annotated[str, Form()],
-    kind: Annotated[Literal["entries", "matches", "rosters"], Form()],
+    kind: Annotated[Literal["entries", "matches", "rosters", "assignments"], Form()],
     file: Annotated[UploadFile, File()],
     strict: Annotated[bool, Form()] = True,
     consent_review_ref: Annotated[str | None, Form(max_length=200)] = None,
+    column_mapping: Annotated[str | None, Form()] = None,
+    team_mapping: Annotated[str | None, Form()] = None,
 ) -> dict:
     event = staff_event(db, principal, event_id)
     source = db.get(Source, parse_uuid(source_id, "source"))
     if source is None or source.event_id != event.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Source not found for this event")
-    content = await file.read()
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Source not found for this event"
+        )
+    from app.core.config import get_settings
+
+    content = await file.read(get_settings().import_max_bytes + 1)
+    if len(content) > get_settings().import_max_bytes:
+        raise HTTPException(422, "File exceeds 5 MB")
+    import json
+
+    try:
+        columns = json.loads(column_mapping) if column_mapping else None
+        teams = json.loads(team_mapping) if team_mapping else {}
+        if not isinstance(teams, dict) or (
+            columns is not None and not isinstance(columns, dict)
+        ):
+            raise ValueError()
+        for mapped in teams.values():
+            uuid.UUID(mapped)
+    except (ValueError, TypeError):
+        raise HTTPException(422, "Invalid column or team mapping")
+    if columns:
+        if kind != "rosters":
+            raise HTTPException(
+                422, "Column mapping is only supported for registration rosters"
+            )
+        from app.modules.operations import map_registration
+
+        content = map_registration(content, columns, teams)
     batch = stage_import(
         db,
         event=event,
@@ -303,22 +413,35 @@ async def upload_import(
         kind=kind,
         filename=file.filename,
         content=content,
-        options={"strict": strict, "consent_review_ref": consent_review_ref or None},
+        options={
+            "strict": strict,
+            "consent_review_ref": consent_review_ref or None,
+            "team_mapping": teams,
+            "require_review": bool(columns),
+        },
         actor_id=principal.user.id,
     )
-    return {"data": {**_batch_summary(batch), "errors": batch.errors, "rows": batch.rows}}
+    return {
+        "data": {**_batch_summary(batch), "errors": batch.errors, "rows": batch.rows}
+    }
 
 
 @router.get("/imports/{batch_id}")
 def get_import(batch_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     batch = get_owned(db, principal, ImportBatch, batch_id)
-    return {"data": {**_batch_summary(batch), "errors": batch.errors, "rows": batch.rows}}
+    return {
+        "data": {**_batch_summary(batch), "errors": batch.errors, "rows": batch.rows}
+    }
 
 
 @router.post("/imports/{batch_id}/commit")
-def commit(batch_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def commit(
+    batch_id: str, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     get_owned(db, principal, ImportBatch, batch_id)
-    batch = commit_import(db, parse_uuid(batch_id), principal.user.id, request.state.request_id)
+    batch = commit_import(
+        db, parse_uuid(batch_id), principal.user.id, request.state.request_id
+    )
     return {"data": _batch_summary(batch)}
 
 
@@ -326,7 +449,10 @@ def commit(batch_id: str, request: Request, db: DB, principal: CurrentPrincipal)
 def list_imports(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     event = staff_event(db, principal, event_id)
     batches = db.scalars(
-        select(ImportBatch).where(ImportBatch.event_id == event.id).order_by(ImportBatch.created_at.desc()).limit(50)
+        select(ImportBatch)
+        .where(ImportBatch.event_id == event.id)
+        .order_by(ImportBatch.created_at.desc())
+        .limit(50)
     )
     return {"data": [_batch_summary(b) for b in batches]}
 
@@ -341,6 +467,7 @@ class AnnouncementIn(BaseModel):
     entry_id: uuid.UUID | None = None
     division_id: uuid.UUID | None = None
     expire_at: datetime | None = None
+    publish_at: datetime | None = None
 
 
 class AnnouncementPatch(BaseModel):
@@ -348,6 +475,7 @@ class AnnouncementPatch(BaseModel):
     body: str | None = Field(None, min_length=1, max_length=4000)
     category: Literal["general", "schedule", "venue", "safety"] | None = None
     expire_at: datetime | None = None
+    publish_at: datetime | None = None
     expected_revision: int | None = None
 
 
@@ -355,19 +483,42 @@ class AnnouncementPatch(BaseModel):
 def admin_announcements(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     event = staff_event(db, principal, event_id)
     rows = db.scalars(
-        select(Announcement).where(Announcement.event_id == event.id).order_by(Announcement.created_at.desc())
+        select(Announcement)
+        .where(Announcement.event_id == event.id)
+        .order_by(Announcement.created_at.desc())
     )
     return {"data": [P.announcement_admin(a) for a in rows]}
 
 
 @router.post("/events/{event_id}/announcements", status_code=201)
-def create_announcement(event_id: str, body: AnnouncementIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def create_announcement(
+    event_id: str,
+    body: AnnouncementIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     event = staff_event(db, principal, event_id)
     if body.entry_id:
         entry = db.get(EventEntry, body.entry_id)
         if entry is None or entry.event_id != event.id:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Team is not in this event")
-    a = Announcement(event_id=event.id, created_by=principal.user.id, **body.model_dump())
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Team is not in this event"
+            )
+    if body.division_id:
+        division = db.get(Division, body.division_id)
+        if not division or division.event_id != event.id:
+            raise HTTPException(422, "Division is not in this event")
+    if body.entry_id and body.division_id:
+        raise HTTPException(422, "Choose one announcement audience")
+    for stamp in (body.publish_at, body.expire_at):
+        if stamp and stamp.tzinfo is None:
+            raise HTTPException(422, "Announcement times need a timezone")
+    if body.expire_at and body.expire_at <= (body.publish_at or P.event_now(event)):
+        raise HTTPException(422, "Expiry must be after publication")
+    a = Announcement(
+        event_id=event.id, created_by=principal.user.id, **body.model_dump()
+    )
     db.add(a)
     db.flush()
     audit(db, request, principal, "announcement.create", event.id, a, new=1)
@@ -377,12 +528,18 @@ def create_announcement(event_id: str, body: AnnouncementIn, request: Request, d
 
 @router.patch("/announcements/{announcement_id}")
 def update_announcement(
-    announcement_id: str, body: AnnouncementPatch, request: Request, db: DB, principal: CurrentPrincipal
+    announcement_id: str,
+    body: AnnouncementPatch,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
 ) -> dict:
     a = get_owned(db, principal, Announcement, announcement_id)
     check_revision(a.revision, body.expected_revision)
     old = a.revision
-    for key, value in body.model_dump(exclude_unset=True, exclude={"expected_revision"}).items():
+    for key, value in body.model_dump(
+        exclude_unset=True, exclude={"expected_revision"}
+    ).items():
         setattr(a, key, value)
     a.revision += 1
     audit(db, request, principal, "announcement.update", a.event_id, a, old, a.revision)
@@ -391,13 +548,15 @@ def update_announcement(
 
 
 @router.post("/announcements/{announcement_id}/publish")
-def publish_announcement(announcement_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def publish_announcement(
+    announcement_id: str, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     a = get_owned(db, principal, Announcement, announcement_id)
     if a.state == "published":
         return {"data": P.announcement_admin(a)}
     old = a.revision
     a.state = "published"
-    a.publish_at = utcnow()
+    a.publish_at = a.publish_at or P.event_now(db.get(Event, a.event_id))
     a.revision += 1
     db.add(
         ChangeEvent(
@@ -410,18 +569,24 @@ def publish_announcement(announcement_id: str, request: Request, db: DB, princip
             entry_ids=[str(a.entry_id)] if a.entry_id else [],
         )
     )
-    audit(db, request, principal, "announcement.publish", a.event_id, a, old, a.revision)
+    audit(
+        db, request, principal, "announcement.publish", a.event_id, a, old, a.revision
+    )
     db.commit()
     return {"data": P.announcement_admin(a)}
 
 
 @router.post("/announcements/{announcement_id}/archive")
-def archive_announcement(announcement_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def archive_announcement(
+    announcement_id: str, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     a = get_owned(db, principal, Announcement, announcement_id)
     old = a.revision
     a.state = "archived"
     a.revision += 1
-    audit(db, request, principal, "announcement.archive", a.event_id, a, old, a.revision)
+    audit(
+        db, request, principal, "announcement.archive", a.event_id, a, old, a.revision
+    )
     db.commit()
     return {"data": P.announcement_admin(a)}
 
@@ -430,7 +595,15 @@ def archive_announcement(announcement_id: str, request: Request, db: DB, princip
 
 
 class GuideItemIn(BaseModel):
-    kind: Literal["parking", "food", "accessibility", "directions", "services", "help", "officials"]
+    kind: Literal[
+        "parking",
+        "food",
+        "accessibility",
+        "directions",
+        "services",
+        "help",
+        "officials",
+    ]
     title: str = Field(min_length=2, max_length=200)
     body: str = Field("", max_length=4000)
     link_url: HttpUrl | None = None
@@ -452,7 +625,9 @@ class PartnerIn(BaseModel):
     def clean(self) -> dict:
         data = self.model_dump()
         if self.link_url and self.link_url.scheme != "https":
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Partner links must use https")
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Partner links must use https"
+            )
         data["link_url"] = str(self.link_url) if self.link_url else None
         return data
 
@@ -464,7 +639,13 @@ def _guide_data(body: GuideItemIn) -> dict:
 
 
 @router.post("/events/{event_id}/guide-items", status_code=201)
-def create_guide_item(event_id: str, body: GuideItemIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def create_guide_item(
+    event_id: str,
+    body: GuideItemIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     event = staff_event(db, principal, event_id)
     item = GuideItem(event_id=event.id, **_guide_data(body))
     db.add(item)
@@ -475,19 +656,29 @@ def create_guide_item(event_id: str, body: GuideItemIn, request: Request, db: DB
 
 
 @router.put("/guide-items/{item_id}")
-def update_guide_item(item_id: str, body: GuideItemIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def update_guide_item(
+    item_id: str,
+    body: GuideItemIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     item = get_owned(db, principal, GuideItem, item_id)
     old = item.revision
     for key, value in _guide_data(body).items():
         setattr(item, key, value)
     item.revision += 1
-    audit(db, request, principal, "guide.update", item.event_id, item, old, item.revision)
+    audit(
+        db, request, principal, "guide.update", item.event_id, item, old, item.revision
+    )
     db.commit()
     return {"data": P.guide_item_public(item)}
 
 
 @router.delete("/guide-items/{item_id}", status_code=204)
-def delete_guide_item(item_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> None:
+def delete_guide_item(
+    item_id: str, request: Request, db: DB, principal: CurrentPrincipal
+) -> None:
     item = get_owned(db, principal, GuideItem, item_id)
     audit(db, request, principal, "guide.delete", item.event_id, item, item.revision)
     db.delete(item)
@@ -497,12 +688,22 @@ def delete_guide_item(item_id: str, request: Request, db: DB, principal: Current
 @router.get("/events/{event_id}/partners")
 def admin_partners(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     event = staff_event(db, principal, event_id)
-    rows = db.scalars(select(PartnerCard).where(PartnerCard.event_id == event.id).order_by(PartnerCard.sort))
+    rows = db.scalars(
+        select(PartnerCard)
+        .where(PartnerCard.event_id == event.id)
+        .order_by(PartnerCard.sort)
+    )
     return {"data": [P.partner_public(p) for p in rows]}
 
 
 @router.post("/events/{event_id}/partners", status_code=201)
-def create_partner(event_id: str, body: PartnerIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def create_partner(
+    event_id: str,
+    body: PartnerIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     event = staff_event(db, principal, event_id)
     card = PartnerCard(event_id=event.id, **body.clean())
     db.add(card)
@@ -513,19 +714,36 @@ def create_partner(event_id: str, body: PartnerIn, request: Request, db: DB, pri
 
 
 @router.put("/partners/{partner_id}")
-def update_partner(partner_id: str, body: PartnerIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def update_partner(
+    partner_id: str,
+    body: PartnerIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     card = get_owned(db, principal, PartnerCard, partner_id)
     old = card.revision
     for key, value in body.clean().items():
         setattr(card, key, value)
     card.revision += 1
-    audit(db, request, principal, "partner.update", card.event_id, card, old, card.revision)
+    audit(
+        db,
+        request,
+        principal,
+        "partner.update",
+        card.event_id,
+        card,
+        old,
+        card.revision,
+    )
     db.commit()
     return {"data": P.partner_public(card)}
 
 
 @router.delete("/partners/{partner_id}", status_code=204)
-def delete_partner(partner_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> None:
+def delete_partner(
+    partner_id: str, request: Request, db: DB, principal: CurrentPrincipal
+) -> None:
     card = get_owned(db, principal, PartnerCard, partner_id)
     audit(db, request, principal, "partner.delete", card.event_id, card, card.revision)
     db.delete(card)
@@ -543,6 +761,7 @@ def _roster_admin(r: RosterPublication) -> dict:
         "players": r.public_players,
         "team_photo_url": r.team_photo_url,
         "consent_review_ref": r.consent_review_ref,
+        "review": r.review,
         "published_at": P.iso(r.published_at),
         "created_at": P.iso(r.created_at),
     }
@@ -556,14 +775,29 @@ class PublishRosterIn(BaseModel):
 def entry_rosters(entry_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     entry = get_owned(db, principal, EventEntry, entry_id)
     rows = db.scalars(
-        select(RosterPublication).where(RosterPublication.entry_id == entry.id).order_by(RosterPublication.version.desc())
+        select(RosterPublication)
+        .where(RosterPublication.entry_id == entry.id)
+        .order_by(RosterPublication.version.desc())
     )
     return {"data": [_roster_admin(r) for r in rows]}
 
 
 @router.post("/rosters/{roster_id}/publish")
-def publish_roster(roster_id: str, body: PublishRosterIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def publish_roster(
+    roster_id: str,
+    body: PublishRosterIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     roster = get_owned(db, principal, RosterPublication, roster_id)
+    if roster.state == "withdrawn":
+        raise HTTPException(
+            409,
+            "Withdrawn versions cannot be republished; import a newly approved version",
+        )
+    if roster.review.get("required") and roster.review.get("state") != "approved":
+        raise HTTPException(409, "Team review is required before publication")
     for other in db.scalars(
         select(RosterPublication).where(
             RosterPublication.entry_id == roster.entry_id,
@@ -577,13 +811,17 @@ def publish_roster(roster_id: str, body: PublishRosterIn, request: Request, db: 
     roster.reviewed_by = principal.user.id
     roster.published_at = utcnow()
     event_id = db.get(EventEntry, roster.entry_id).event_id
-    audit(db, request, principal, "roster.publish", event_id, roster, new=roster.version)
+    audit(
+        db, request, principal, "roster.publish", event_id, roster, new=roster.version
+    )
     db.commit()
     return {"data": _roster_admin(roster)}
 
 
 @router.post("/rosters/{roster_id}/withdraw")
-def withdraw_roster(roster_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def withdraw_roster(
+    roster_id: str, request: Request, db: DB, principal: CurrentPrincipal
+) -> dict:
     roster = get_owned(db, principal, RosterPublication, roster_id)
     roster.state = "withdrawn"
     event_id = db.get(EventEntry, roster.entry_id).event_id
@@ -605,20 +843,40 @@ class SimulateIn(BaseModel):
 
 
 @router.post("/events/{event_id}/simulate-change")
-def simulate_change(event_id: str, body: SimulateIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+def simulate_change(
+    event_id: str,
+    body: SimulateIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+) -> dict:
     """Demo events only: apply a pretend source change through the real revision pipeline."""
     event = staff_event(db, principal, event_id)
     if not event.is_demo:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Simulated changes are only allowed on demo events")
-    match = db.scalar(select(Match).where(Match.id == body.match_id, Match.event_id == event.id).options(*match_load_options()))
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Simulated changes are only allowed on demo events",
+        )
+    match = db.scalar(
+        select(Match)
+        .where(Match.id == body.match_id, Match.event_id == event.id)
+        .options(*match_load_options())
+    )
     if match is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Match not found")
     state = current_state(match)
     if body.court_label:
         venue_id = body.venue_id or (match.court.venue_id if match.court else None)
         if venue_id is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose a venue for the new court")
-        court = db.scalar(select(Court).where(Court.venue_id == venue_id, Court.label == body.court_label))
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Choose a venue for the new court",
+            )
+        court = db.scalar(
+            select(Court).where(
+                Court.venue_id == venue_id, Court.label == body.court_label
+            )
+        )
         if court is None:
             court = Court(venue_id=venue_id, label=body.court_label)
             db.add(court)
@@ -634,10 +892,25 @@ def simulate_change(event_id: str, body: SimulateIn, request: Request, db: DB, p
         state.sets = [tuple(s) for s in body.sets]
     old = match.revision
     changes = apply_match_state(db, match, state, simulated=True)
-    audit(db, request, principal, "match.simulate", event.id, match, old, match.revision, events=[c.event_type for c in changes])
+    audit(
+        db,
+        request,
+        principal,
+        "match.simulate",
+        event.id,
+        match,
+        old,
+        match.revision,
+        events=[c.event_type for c in changes],
+    )
     event.revision += 1
     db.commit()
-    return {"data": {"revision": match.revision, "change_events": [c.event_type for c in changes]}}
+    return {
+        "data": {
+            "revision": match.revision,
+            "change_events": [c.event_type for c in changes],
+        }
+    }
 
 
 # ---- audit -------------------------------------------------------------------------------
@@ -647,7 +920,10 @@ def simulate_change(event_id: str, body: SimulateIn, request: Request, db: DB, p
 def audit_log(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
     event = staff_event(db, principal, event_id)
     rows = db.scalars(
-        select(AuditEntry).where(AuditEntry.event_id == event.id).order_by(AuditEntry.id.desc()).limit(100)
+        select(AuditEntry)
+        .where(AuditEntry.event_id == event.id)
+        .order_by(AuditEntry.id.desc())
+        .limit(100)
     )
     return {
         "data": [
@@ -663,4 +939,305 @@ def audit_log(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
             }
             for r in rows
         ]
+    }
+
+
+@router.post("/sources/{source_id}/refresh")
+def refresh_source(source_id: str, db: DB, principal: CurrentPrincipal):
+    source = get_owned(db, principal, Source, source_id)
+    source_id, actor_id = source.id, principal.user.id
+    db.rollback()  # Release this request's connection before the independent sync session.
+    from app.modules.sync import sync_source
+
+    return {"data": sync_source(source_id, actor_id)}
+
+
+@router.post("/registration/columns")
+async def registration_columns(
+    principal: CurrentPrincipal, file: Annotated[UploadFile, File()]
+):
+    if not principal.has_role({"staff"}):
+        # Event staff have scoped grants; any current staff grant suffices to inspect their file.
+        if not any(g.role == "staff" for g in principal.grants):
+            raise HTTPException(403, "Staff access required")
+    import csv, io
+
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(422, "File exceeds 5 MB")
+    try:
+        headers = csv.DictReader(io.StringIO(content.decode("utf-8-sig"))).fieldnames
+        if not headers or len(headers) > 100:
+            raise ValueError()
+        return {"data": headers}
+    except (UnicodeError, ValueError, csv.Error):
+        raise HTTPException(422, "Choose a UTF-8 CSV export with a header row")
+
+
+@router.get("/events/{event_id}/assignments")
+def assignments_admin(event_id: str, db: DB, principal: CurrentPrincipal):
+    from app.models import Assignment, User
+
+    event = staff_event(db, principal, event_id)
+    rows = db.scalars(
+        select(Assignment)
+        .where(Assignment.event_id == event.id)
+        .order_by(Assignment.reporting_time)
+    )
+    return {
+        "data": [
+            {
+                "id": str(a.id),
+                "subject": db.get(User, a.person_user_id).clerk_subject,
+                "role": a.role,
+                "match_id": str(a.match_id) if a.match_id else None,
+                "reporting_time": P.iso(a.reporting_time),
+                "revision": a.revision,
+            }
+            for a in rows
+        ]
+    }
+
+
+class AssignmentIn(BaseModel):
+    subject: str = Field(min_length=1, max_length=200)
+    match_id: uuid.UUID
+    role: str = Field(min_length=2, max_length=50)
+    reporting_time: datetime
+    expected_revision: int | None = None
+
+
+def write_assignment(body, event, db, assignment=None):
+    from app.models import Assignment, User, RoleGrant
+
+    user = db.scalar(
+        select(User).where(
+            User.clerk_subject == body.subject, User.disabled_at.is_(None)
+        )
+    )
+    grant = (
+        db.scalar(
+            select(RoleGrant).where(
+                RoleGrant.user_id == user.id,
+                RoleGrant.role == "official",
+                RoleGrant.event_id == event.id,
+            )
+        )
+        if user
+        else None
+    )
+    if not grant or (grant.expires_at and grant.expires_at <= utcnow()):
+        raise HTTPException(
+            422, "Grant this subject an official role for the event first"
+        )
+    match = db.get(Match, body.match_id)
+    if not match or match.event_id != event.id:
+        raise HTTPException(422, "Match is not in this event")
+    if body.reporting_time.tzinfo is None:
+        raise HTTPException(422, "Reporting time must include a timezone")
+    if assignment:
+        check_revision(assignment.revision, body.expected_revision)
+        assignment.revision += 1
+    else:
+        assignment = Assignment(
+            event_id=event.id, role=body.role, person_user_id=user.id
+        )
+        db.add(assignment)
+    assignment.person_user_id, assignment.match_id = user.id, match.id
+    assignment.court_id, assignment.role, assignment.reporting_time = (
+        match.court_id,
+        body.role,
+        body.reporting_time,
+    )
+    db.flush()
+    return assignment
+
+
+@router.post("/events/{event_id}/assignments", status_code=201)
+def create_assignment(
+    event_id: str,
+    body: AssignmentIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+):
+    event = staff_event(db, principal, event_id)
+    a = write_assignment(body, event, db)
+    audit(db, request, principal, "assignment.create", event.id, a, new=1)
+    db.commit()
+    return {"data": {"id": str(a.id)}}
+
+
+@router.put("/assignments/{assignment_id}")
+def update_assignment(
+    assignment_id: str,
+    body: AssignmentIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+):
+    from app.models import Assignment
+
+    a = get_owned(db, principal, Assignment, assignment_id)
+    event = staff_event(db, principal, str(a.event_id))
+    a = write_assignment(body, event, db, a)
+    audit(db, request, principal, "assignment.update", event.id, a, new=a.revision)
+    db.commit()
+    return {"data": {"id": str(a.id), "revision": a.revision}}
+
+
+@router.delete("/assignments/{assignment_id}", status_code=204)
+def delete_assignment(
+    assignment_id: str, request: Request, db: DB, principal: CurrentPrincipal
+):
+    from app.models import Assignment
+
+    a = get_owned(db, principal, Assignment, assignment_id)
+    audit(db, request, principal, "assignment.delete", a.event_id, a)
+    # Remove the import identity too, allowing a subsequent approved reimport.
+    from app.models import ExternalMapping
+    from sqlalchemy import delete
+
+    db.execute(
+        delete(ExternalMapping).where(
+            ExternalMapping.entity_type == "assignment",
+            ExternalMapping.canonical_id == a.id,
+        )
+    )
+    db.delete(a)
+    db.commit()
+
+
+class ClockIn(BaseModel):
+    at: datetime | None = None
+    advance_minutes: int = Field(0, ge=0, le=1440)
+    reset: bool = False
+
+
+@router.post("/events/{event_id}/clock")
+def demo_clock(
+    event_id: str, body: ClockIn, request: Request, db: DB, principal: CurrentPrincipal
+):
+    event = staff_event(db, principal, event_id)
+    if not event.is_demo:
+        raise HTTPException(409, "Demo clock is unavailable for real events")
+    if body.at and body.at.tzinfo is None:
+        raise HTTPException(422, "Demo time requires a timezone")
+    from datetime import timedelta
+
+    at = body.at or P.event_now(event)
+    event.demo_clock = (
+        {}
+        if body.reset
+        else {
+            "at": (at + timedelta(minutes=body.advance_minutes)).isoformat(),
+            "set_at": utcnow().isoformat(),
+        }
+    )
+    audit(db, request, principal, "demo.clock", event.id, event)
+    db.commit()
+    return {"data": P.event_public(event)}
+
+
+class CourtNoticeIn(BaseModel):
+    area_label: str | None = Field(None, max_length=150)
+    delay_minutes: int = Field(0, ge=0, le=240)
+    duration_minutes: int = Field(60, ge=1, le=1440)
+    apply_to_area: bool = False
+
+
+@router.patch("/courts/{court_id}/notice")
+def court_notice(
+    court_id: str,
+    body: CourtNoticeIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+):
+    from datetime import timedelta
+
+    court = db.get(Court, parse_uuid(court_id))
+    if not court:
+        raise HTTPException(404, "Court not found")
+    venue = db.get(Venue, court.venue_id)
+    event = staff_event(db, principal, str(venue.event_id))
+    if "area_label" in body.model_fields_set:
+        court.area_label = body.area_label or None
+    courts = (
+        list(
+            db.scalars(
+                select(Court).where(
+                    Court.venue_id == venue.id, Court.area_label == court.area_label
+                )
+            )
+        )
+        if body.apply_to_area and court.area_label
+        else [court]
+    )
+    now = P.event_now(event)
+    for c in courts:
+        c.delay = (
+            {
+                "minutes": body.delay_minutes,
+                "posted_at": now.isoformat(),
+                "expires_at": (
+                    now + timedelta(minutes=body.duration_minutes)
+                ).isoformat(),
+                "posted_by": principal.user.display_name or "OVA staff",
+            }
+            if body.delay_minutes
+            else {}
+        )
+        for m in db.scalars(
+            select(Match)
+            .where(Match.court_id == c.id, Match.status.in_(["scheduled", "postponed"]))
+            .options(*match_load_options())
+        ):
+            m.revision += 1
+            db.add(
+                ChangeEvent(
+                    event_id=event.id,
+                    entity_type="match",
+                    entity_id=m.id,
+                    entity_revision=m.revision,
+                    event_type="delay_notice",
+                    entry_ids=[str(p.entry_id) for p in m.participants if p.entry_id],
+                    diff={
+                        "minutes": body.delay_minutes,
+                        "expires_at": c.delay.get("expires_at"),
+                    },
+                    simulated=event.is_demo,
+                )
+            )
+        audit(
+            db,
+            request,
+            principal,
+            "court.notice",
+            event.id,
+            c,
+            minutes=body.delay_minutes,
+        )
+    db.commit()
+    return {"data": [P.court_public(c) for c in courts]}
+
+
+@router.get("/events/{event_id}/matches")
+def staff_matches(
+    event_id: str,
+    db: DB,
+    principal: CurrentPrincipal,
+    cursor: int = 0,
+    limit: int = 100,
+):
+    event = staff_event(db, principal, event_id)
+    from app.modules.matches import match_query
+    from app.api.public import project_matches
+
+    if cursor < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "Invalid page size or cursor")
+    rows = list(db.scalars(match_query(event.id).offset(cursor).limit(limit + 1)))
+    return {
+        "data": project_matches(db, event, rows[:limit]),
+        "next_cursor": cursor + limit if len(rows) > limit else None,
     }
