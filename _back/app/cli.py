@@ -38,6 +38,7 @@ def grant(
             db.add(user)
             db.flush()
         import uuid
+
         from app.models import EventEntry
 
         entry = db.get(EventEntry, uuid.UUID(entry_id)) if entry_id else None
@@ -64,6 +65,10 @@ def grant(
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser(
+        "seed-testing",
+        help="Add two varied synthetic tournaments without resetting data",
+    )
     seed_cmd = sub.add_parser("seed", help="Load the synthetic demo event")
     seed_cmd.add_argument(
         "--reset", action="store_true", help="Delete and recreate the demo event"
@@ -81,7 +86,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.command == "seed":
+    if args.command == "seed-testing":
+        from app.seed import seed_testing
+
+        with get_sessionmaker()() as db:
+            events = seed_testing(db)
+            print(f"Testing tournaments added: {len(events)}")
+    elif args.command == "seed":
         with get_sessionmaker()() as db:
             event = seed(db, reset=args.reset)
             print(f"Demo event ready: /events/{event.slug}")

@@ -1,4 +1,5 @@
 "use client";
+import { usePreference } from "@/lib/preferences";
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
@@ -18,6 +19,7 @@ const TITLES: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Next match set",
+  details_changed: "Bracket details updated",
   work_assigned: "Work duty assigned",
   delay_notice: "Court delay notice",
 };
@@ -47,6 +49,7 @@ function detail(c: Change, m: Match | undefined): string {
 
 export function UpdatesView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
+  const [saved] = usePreference<string[]>("saved-events", []);
   const query = useChanges(eventId);
   const { ids, divisionIds } = useFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
@@ -65,12 +68,13 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   // Filtering happens here on the device, so the server never learns who follows what.
   const relevant = query.data!.data.filter(
     (c) =>
+      saved.includes(eventId) ||
       (!c.division_id &&
         c.entry_ids.length === 0 &&
         c.entity_type === "announcement") ||
       c.entry_ids.some((e) => ids.includes(e)) ||
       (!!c.division_id && divisionIds.includes(c.division_id)) ||
-      divisionIds.includes(query.data!.divisions[c.entity_id]),
+      divisionIds.includes(query.data!.divisions?.[c.entity_id]),
   );
 
   return (

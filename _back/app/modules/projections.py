@@ -117,6 +117,7 @@ def court_public(court: Court | None) -> dict[str, Any] | None:
     return {
         "id": str(court.id),
         "label": court.label + (f" · {court.area_label}" if court.area_label else ""),
+        "base_label": court.label,
         "area_label": court.area_label,
         "venue_id": str(court.venue_id),
         "venue_name": court.venue.name,
@@ -128,6 +129,9 @@ def venue_public(venue: Venue) -> dict[str, Any]:
         "id": str(venue.id),
         "name": venue.name,
         "address": venue.address,
+        "city": venue.city,
+        "latitude": venue.latitude,
+        "longitude": venue.longitude,
         "accessible_entrance": venue.accessible_entrance,
         "directions": venue.directions,
         "map_url": venue.map_url,

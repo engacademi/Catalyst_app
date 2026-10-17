@@ -1,6 +1,9 @@
 "use client";
 
+import { EventAccess } from "./event-access";
 import Link from "next/link";
+import { MatchEditorPanel } from "./match-editor";
+import { EventDetailsPanel } from "./event-details";
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import type { Division, EventSummary, SourceInfo, Venue } from "@/lib/api";
@@ -29,6 +32,8 @@ export type AdminEventData = EventSummary & {
 };
 
 const TABS = [
+  "Event details",
+  "Matches & brackets",
   "Announcements",
   "Imports",
   "Content",
@@ -39,6 +44,7 @@ const TABS = [
   "Sources",
   "Demo tools",
   "Audit",
+  "Event access",
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -47,11 +53,24 @@ export function AdminEvent({ eventId }: { eventId: string }) {
   const query = useAdminQuery<{ data: AdminEventData }>(
     `/v1/admin/events/${eventId}`,
   );
+  const me = useAdminQuery<{
+    grants: { role: string; event_id?: string | null }[];
+  }>("/v1/admin/me");
   const update = useAdminMutation("PATCH", `/v1/admin/events/${eventId}`);
   if (query.isPending) return <Loading />;
   if (query.error) return <ErrorState error={query.error} />;
   const event = query.data.data;
-  const tabs = TABS.filter((t) => t !== "Demo tools" || event.is_demo);
+  const tabs = TABS.filter(
+    (t) =>
+      (t !== "Demo tools" || event.is_demo) &&
+      (t !== "Assignments" ||
+        me.data?.grants.some(
+          (g) =>
+            g.role === "admin" ||
+            (g.role === "staff" && (!g.event_id || g.event_id === event.id)),
+        )) &&
+      (t !== "Event access" || me.data?.grants.some((g) => g.role === "admin")),
+  );
 
   return (
     <div>
@@ -111,7 +130,6 @@ export function AdminEvent({ eventId }: { eventId: string }) {
         {tabs.map((t) => (
           <button
             key={t}
-
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
@@ -146,6 +164,9 @@ export function AdminEvent({ eventId }: { eventId: string }) {
         aria-labelledby={`staff-tab-${tab.replaceAll(" ", "-")}`}
         tabIndex={0}
       >
+        {tab === "Event access" && <EventAccess event={event} />}
+        {tab === "Matches & brackets" && <MatchEditorPanel event={event} />}
+        {tab === "Event details" && <EventDetailsPanel event={event} />}
         {tab === "Announcements" && <AnnouncementsPanel event={event} />}
         {tab === "Imports" && <ImportsPanel event={event} />}
         {tab === "Content" && <ContentPanel event={event} />}

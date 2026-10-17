@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, Manrope } from "next/font/google";
 import "./globals.css";
+import { PlatformShell } from "@/components/platform-shell";
 import { Providers } from "./providers";
 
 const bodyFont = DM_Sans({
@@ -38,7 +40,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Suspense fallback={<p className="p-6">Loading courtside…</p>}>
+            <PlatformShell>{children}</PlatformShell>
+          </Suspense>
+        </Providers>
       </body>
     </html>
   );

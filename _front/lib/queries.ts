@@ -38,7 +38,17 @@ export function useEvents() {
   return useQuery({
     queryKey: keys.events,
     queryFn: () =>
-      apiGet<{ data: (EventSummary & { venues: string[] })[] }>("/v1/events"),
+      apiGet<{
+        data: (EventSummary & {
+          venues: string[];
+          venue_locations?: {
+            city: string | null;
+            latitude: number | null;
+            longitude: number | null;
+          }[];
+          team_count?: number;
+        })[];
+      }>("/v1/events"),
   });
 }
 
@@ -212,4 +222,18 @@ export function useGuide(eventId: string) {
       }>(`/v1/events/${eventId}/guide`),
     refetchInterval: 120_000,
   });
+}
+
+export async function allEventTeams(event: string): Promise<{ data: Entry[] }> {
+  const data: Entry[] = [];
+  let total = Infinity;
+  while (data.length < total) {
+    const page = await apiGet<{ data: Entry[]; total: number }>(
+      `/v1/events/${event}/teams?limit=100&offset=${data.length}`,
+    );
+    data.push(...page.data);
+    total = page.total;
+    if (!page.data.length) break;
+  }
+  return { data };
 }

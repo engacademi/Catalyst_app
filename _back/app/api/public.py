@@ -98,7 +98,127 @@ def list_events(request: Request, db: DB) -> Response:
         .order_by(Event.start_date.desc())
         .options(selectinload(Event.venues))
     )
-    data = [{**P.event_public(e), "venues": [v.name for v in e.venues]} for e in events]
+    # Aggregate team counts once for popularity ordering, without per-event queries.
+    counts = dict(
+        db.execute(
+            select(EventEntry.event_id, func.count()).group_by(EventEntry.event_id)
+        ).all()
+    )
+    data = [
+        {
+            **P.event_public(e),
+            "venues": [v.name for v in e.venues],
+            "venue_locations": [
+                {
+                    "city": v.city,
+                    "latitude": v.latitude,
+                    "longitude": v.longitude,
+                    "address": v.address,
+                    "name": v.name,
+                }
+                for v in e.venues
+            ],
+            "team_count": counts.get(e.id, 0),
+        }
+        for e in events
+    ]
+    return json_response(request, {"data": data}, max_age=60)
+
+
+@router.get("/search")
+def search_catalogue(
+    request: Request, db: DB, q: str = Query("", max_length=150)
+) -> Response:
+    query = q.strip()
+    if len(query) < 2:
+        return json_response(request, {"data": []})
+    # Autoescape treats % and _ as text instead of SQL wildcards.
+    results = []
+    for event in db.scalars(
+        select(Event)
+        .where(
+            Event.status == "published", Event.title.icontains(query, autoescape=True)
+        )
+        .order_by(Event.title)
+        .limit(8)
+    ):
+        results.append(
+            {
+                "id": str(event.id),
+                "kind": "Tournament",
+                "label": event.title,
+                "event_slug": event.slug,
+                "href": f"/events/{event.slug}",
+            }
+        )
+    for entry, event in db.execute(
+        select(EventEntry, Event)
+        .join(Event, Event.id == EventEntry.event_id)
+        .where(
+            Event.status == "published",
+            or_(
+                EventEntry.team_name.icontains(query, autoescape=True),
+                EventEntry.club_name.icontains(query, autoescape=True),
+            ),
+        )
+        .order_by(EventEntry.team_name)
+        .limit(8)
+    ):
+        results.append(
+            {
+                "id": str(entry.id),
+                "kind": "Team",
+                "label": entry.team_name,
+                "event_slug": event.slug,
+                "context": event.title,
+                "href": f"/events/{event.slug}/teams/{entry.id}",
+            }
+        )
+    for venue, event in db.execute(
+        select(Venue, Event)
+        .join(Event, Event.id == Venue.event_id)
+        .where(
+            Event.status == "published",
+            or_(
+                Venue.name.icontains(query, autoescape=True),
+                Venue.city.icontains(query, autoescape=True),
+                Venue.address.icontains(query, autoescape=True),
+            ),
+        )
+        .order_by(Venue.name)
+        .limit(8)
+    ):
+        results.append(
+            {
+                "id": str(venue.id),
+                "kind": "Venue",
+                "label": venue.name,
+                "event_slug": event.slug,
+                "context": event.title,
+                "href": f"/events/{event.slug}/guide",
+            }
+        )
+    return json_response(request, {"data": results}, max_age=15)
+
+
+@router.get("/sponsors")
+def discovery_sponsors(request: Request, db: DB) -> Response:
+    rows = db.scalars(
+        select(PartnerCard)
+        .join(Event, Event.id == PartnerCard.event_id)
+        .where(
+            Event.status == "published",
+            PartnerCard.active.is_(True),
+            PartnerCard.kind == "sponsor",
+        )
+        .order_by(PartnerCard.sort, PartnerCard.name)
+    )
+    seen = set()
+    data = []
+    for row in rows:
+        if row.name not in seen:
+            data.append(P.partner_public(row))
+            seen.add(row.name)
     return json_response(request, {"data": data}, max_age=60)
 
 
@@ -171,6 +291,7 @@ def list_matches(
     db: DB,
     entry_ids: str | None = None,
     division_ids: str | None = None,
+    q: str | None = Query(None, max_length=200),
     status_group: str = Query(
         "all", alias="status", pattern="^(all|upcoming|in_progress|results)$"
     ),
@@ -195,6 +316,30 @@ def list_matches(
         day=day,
         tz=event.timezone,
     )
+    if q and q.strip():
+        from app.models import MatchParticipant
+
+        like = (
+            "%"
+            + q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            + "%"
+        )
+        stmt = stmt.where(
+            or_(
+                Match.external_id.ilike(like),
+                Match.round_label.ilike(like),
+                Match.id.in_(
+                    select(MatchParticipant.match_id)
+                    .join(EventEntry, MatchParticipant.entry_id == EventEntry.id)
+                    .where(
+                        or_(
+                            EventEntry.team_name.ilike(like),
+                            EventEntry.club_name.ilike(like),
+                        )
+                    )
+                ),
+            )
+        )
     matches = list(db.scalars(stmt.offset(cursor).limit(limit + 1)))
     next_cursor = cursor + limit if len(matches) > limit else None
     payload = {

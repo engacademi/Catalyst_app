@@ -25,6 +25,7 @@ const STATUS_TABS = [
 ];
 const FILTERS = [
   "status",
+  "q",
   "venue_id",
   "court_id",
   "division_id",
@@ -42,7 +43,7 @@ export function MatchesView({ eventId }: { eventId: string }) {
   const status = params.get("status") ?? "upcoming";
   const mine = params.get("mine") === "1";
   const api = new URLSearchParams({ status });
-  for (const key of ["venue_id", "court_id", "division_id"] as const) {
+  for (const key of ["venue_id", "court_id", "division_id", "q"] as const) {
     const v = params.get(key);
     if (v) api.set(key, v);
   }
@@ -97,6 +98,15 @@ export function MatchesView({ eventId }: { eventId: string }) {
         ))}
       </div>
 
+      <label className="discovery-search mt-4">
+        <span className="sr-only">Search matches by team or round</span>
+        <input
+          type="search"
+          placeholder="Search team, club, round or match number"
+          value={params.get("q") ?? ""}
+          onChange={(e) => set("q", e.target.value)}
+        />
+      </label>
       <div className="filter-panel mt-4">
         <Select
           label="Venue"

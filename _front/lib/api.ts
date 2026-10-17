@@ -28,10 +28,18 @@ export type Venue = {
   id: string;
   name: string;
   address: string | null;
+  city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   accessible_entrance: string | null;
   directions: string | null;
   map_url: string | null;
-  courts: { id: string; label: string; area_label?: string | null }[];
+  courts: {
+    id: string;
+    label: string;
+    base_label?: string;
+    area_label?: string | null;
+  }[];
 };
 
 export type EventSummary = {

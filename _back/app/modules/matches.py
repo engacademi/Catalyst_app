@@ -293,6 +293,9 @@ def apply_match_state(
     if "participants" in fields:
         events.append(("participants_resolved", {}))
 
+    if "round_label" in fields or "division_id" in fields:
+        events.append(("details_changed", {"round_label": [before.round_label, after.round_label]}))
+
     created = []
     for event_type, diff in events:
         change = ChangeEvent(

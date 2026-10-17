@@ -29,7 +29,9 @@ class Principal:
         for grant in self.grants:
             if grant.role == "admin":
                 return True
-            if grant.role in roles and (grant.event_id is None or grant.event_id == event_id):
+            if grant.role in roles and (
+                grant.event_id is None or grant.event_id == event_id
+            ):
                 return True
         return False
 
@@ -42,7 +44,9 @@ def _jwks_client(url: str) -> jwt.PyJWKClient:
 def verify_clerk_token(token: str, settings: Settings) -> str:
     """Return the verified subject or raise 401."""
     if not settings.jwks_url or not settings.auth_issuer:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Authentication is not configured")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Authentication is not configured"
+        )
     try:
         key = _jwks_client(settings.jwks_url).get_signing_key_from_jwt(token)
         claims = jwt.decode(
@@ -53,10 +57,22 @@ def verify_clerk_token(token: str, settings: Settings) -> str:
             options={"require": ["exp", "iat", "sub"]},
         )
     except jwt.PyJWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session token") from exc
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Invalid session token"
+        ) from exc
     azp = claims.get("azp")
-    if settings.clerk_authorized_parties and azp not in settings.clerk_authorized_parties:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token issued for another origin")
+    # The configured canonical frontend is always an explicit allowed party.
+    # Preview URLs must be separately listed; never trust a request-supplied Origin.
+    from urllib.parse import urlsplit
+
+    web = urlsplit(settings.public_web_url)
+    allowed = {origin.rstrip("/") for origin in settings.clerk_authorized_parties}
+    if web.scheme in {"https", "http"} and web.netloc:
+        allowed.add(f"{web.scheme}://{web.netloc}")
+    if not isinstance(azp, str) or azp.rstrip("/") not in allowed:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Token issued for another origin"
+        )
     return str(claims["sub"])
 
 
@@ -103,6 +119,10 @@ def get_principal(
 CurrentPrincipal = Annotated[Principal, Depends(get_principal)]
 
 
-def require_event_role(principal: Principal, event_id: uuid.UUID, roles: set[str]) -> None:
+def require_event_role(
+    principal: Principal, event_id: uuid.UUID, roles: set[str]
+) -> None:
     if not principal.has_role(roles, event_id):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "You don't have access to this event")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "You don't have access to this event"
+        )

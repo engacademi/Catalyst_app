@@ -5,21 +5,33 @@ import { useHydrated } from "@/lib/hydration";
 import Link from "next/link";
 import {
   ArrowRight,
-  CalendarDays,
   Info,
   ListOrdered,
   Megaphone,
   Users,
+  Tags,
+  Check,
 } from "lucide-react";
-import { useAnnouncements, useEvent } from "@/lib/queries";
+import { useAnnouncements, useEvent, useMatches } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
 import { formatDateRange, formatRelative } from "@/lib/format";
 import { FreshnessNote } from "../freshness";
-import { WelcomeBanner } from "../brand";
+import { SaveEventButton } from "../event-tile";
+import { MatchCard } from "../match-card";
+import { usePreference } from "@/lib/preferences";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
 export function EventHomeView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
+  const live = useMatches(
+    eventId,
+    new URLSearchParams({ status: "in_progress" }),
+  );
+  const upcoming = useMatches(
+    eventId,
+    new URLSearchParams({ status: "upcoming" }),
+  );
+  const [attended, setAttended] = usePreference<string[]>("attended", []);
   const event = useEvent(eventId);
   const announcements = useAnnouncements(eventId);
   const { ids, divisionIds } = useFollows(eventId);
@@ -38,7 +50,6 @@ export function EventHomeView({ eventId }: { eventId: string }) {
   return (
     <div>
       <div className="page-heading">
-        <p className="eyebrow mb-2 text-muted">WELCOME TO YOUR EVENT</p>
         <h1>{e.title}</h1>
       </div>
       <p className="mt-1 text-sm text-muted">
@@ -47,38 +58,89 @@ export function EventHomeView({ eventId }: { eventId: string }) {
         {e.divisions.length} divisions
       </p>
 
-      <div className="mt-6">
-        <WelcomeBanner
-          title={
-            ids.length
-              ? "Your teams. Your kind of day."
-              : "Come for the volleyball. Stay for the moments."
+      <div className="tournament-actions">
+        <div className="tournament-save">
+          <SaveEventButton slug={e.slug} />
+          <Link
+            className="icon-link team-label-link"
+            href={`/events/${eventId}/my-teams`}
+            aria-label="Manage team labels"
+            title="Team labels"
+          >
+            <Tags size={19} aria-hidden />
+          </Link>
+        </div>
+        <button
+          className="secondary-link attendance-toggle"
+          aria-label="Attended"
+          aria-pressed={attended.includes(e.slug)}
+          onClick={() =>
+            setAttended(
+              attended.includes(e.slug)
+                ? attended.filter((id) => id !== e.slug)
+                : [...attended, e.slug],
+            )
           }
         >
-          {ids.length ? (
-            <>
-              <p>
-                You&apos;re following {ids.length} team
-                {ids.length === 1 ? "" : "s"}. Your next match is waiting in My
-                Day.
-              </p>
-              <Link href={`/events/${eventId}/my-day`} className="primary-link">
-                <CalendarDays size={16} aria-hidden /> Open My Day
-              </Link>
-            </>
-          ) : (
-            <>
-              <p>
-                Follow your teams and we&apos;ll bring their matches together.
-                No account needed.
-              </p>
-              <Link href={`/events/${eventId}/teams`} className="primary-link">
-                <Users size={16} aria-hidden /> Find your teams
-              </Link>
-            </>
-          )}
-        </WelcomeBanner>
+          <Check size={15} aria-hidden /> Attended
+        </button>
       </div>
+      <SectionTitle
+        action={
+          <Link
+            href={`/events/${eventId}/matches`}
+            className="text-sm text-brand underline"
+          >
+            All matches →
+          </Link>
+        }
+      >
+        Live on court
+      </SectionTitle>
+      {live.isPending ? (
+        <Loading label="Loading live matches" />
+      ) : live.error ? (
+        <ErrorState error={live.error} />
+      ) : live.data?.data.length ? (
+        <>
+          <ul className="event-carousel live-carousel">
+            {live.data.data.map((m) => (
+              <li key={m.id}>
+                <MatchCard match={m} eventId={eventId} />
+              </li>
+            ))}
+          </ul>
+          {live.hasNextPage && (
+            <button
+              className="secondary-link"
+              disabled={live.isFetchingNextPage}
+              onClick={() => live.fetchNextPage()}
+            >
+              More live matches
+            </button>
+          )}
+        </>
+      ) : (
+        <p className="empty-inline">
+          No matches currently marked in progress by the source.
+        </p>
+      )}
+      <SectionTitle>Coming up</SectionTitle>
+      {upcoming.isPending ? (
+        <Loading label="Loading upcoming matches" />
+      ) : upcoming.error ? (
+        <ErrorState error={upcoming.error} />
+      ) : upcoming.data?.data.length ? (
+        <ul className="event-carousel live-carousel">
+          {upcoming.data.data.slice(0, 8).map((m) => (
+            <li key={m.id}>
+              <MatchCard match={m} eventId={eventId} showDay />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="empty-inline">No upcoming matches published yet.</p>
+      )}
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         {[
           {
