@@ -26,7 +26,9 @@ const CHANGE_LABELS: Record<string, string> = {
   next_match_set: "Next match set",
 };
 
-export function StatusBadge({ status }: { status: Match["status"] }) {
+export function StatusBadge({ status, expectedSoon = false }: { status: Match["status"]; expectedSoon?: boolean }) {
+  // Past its start but not marked started by the source: we don't know it's under way, so never "In progress".
+  if (expectedSoon) return <Badge tone="warn">Expected to start soon</Badge>;
   const s = STATUS[status];
   return <Badge tone={s.tone}>{s.label}</Badge>;
 }
@@ -129,7 +131,7 @@ export function MatchCard({
         <TeamLine p={match.away} won={match.sets_won?.away} highlight={isFollowed(match.away)} sets={awaySets} label={labelOf(match.away)} />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-        <StatusBadge status={match.status} />
+        <StatusBadge status={match.status} expectedSoon={match.expected_to_start_soon} />
         <ChangeBadge change={match.latest_change} />
         {match.division && <span>{match.division.code ?? match.division.name}</span>}
         {match.round_label && <span>· {match.round_label}</span>}

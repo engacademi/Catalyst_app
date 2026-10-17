@@ -65,7 +65,7 @@ export function MatchView({ eventId, matchId }: { eventId: string; matchId: stri
         <Team p={m.home} eventId={eventId} /> <span className="font-normal text-muted">vs</span> <Team p={m.away} eventId={eventId} />
       </h1>
       <div className="mt-2 flex flex-wrap gap-2">
-        <StatusBadge status={m.status} />
+        <StatusBadge status={m.status} expectedSoon={m.expected_to_start_soon} />
       </div>
 
       <Card className="mt-4 space-y-2">

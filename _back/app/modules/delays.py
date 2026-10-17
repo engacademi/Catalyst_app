@@ -53,6 +53,17 @@ def estimated_start(match: Match, notice: DelayNotice | None) -> tuple[datetime 
     return None, None
 
 
+def expected_soon(match: Match, notice: DelayNotice | None, now: datetime) -> bool:
+    """Its estimated (or official) start has passed but the source hasn't marked it started.
+
+    Shown as "Expected to start soon", never "In progress": the source hasn't said it began.
+    """
+    if match.status != "scheduled" or has_started(match):
+        return False
+    start = estimated_start(match, notice)[0] or match.scheduled_start
+    return start is not None and start <= now
+
+
 def post_notice(
     db: Session, event: Event, court_id: uuid.UUID, minutes: int, duration_minutes: int, actor_id, now: datetime
 ) -> tuple[DelayNotice, DelayNotice | None]:
