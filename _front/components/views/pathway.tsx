@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiGet, type Match, type SourceInfo } from "@/lib/api";
@@ -12,7 +13,9 @@ import { EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 export function PathwayView({ eventId }: { eventId: string }) {
   const event = useEvent(eventId);
   const [chosen, choose] = useState("");
-  const division = chosen || event.data?.data.divisions[0]?.id || "";
+  const params = useSearchParams();
+  const division =
+    chosen || params.get("division") || event.data?.data.divisions[0]?.id || "";
   const { ids } = useFollows(eventId);
   const [mine, setMine] = useState(false);
   const query = useQuery({

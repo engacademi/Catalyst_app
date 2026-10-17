@@ -133,7 +133,9 @@ export function MatchCard({
       {match.delay_notice && (
         <p className="mb-2 rounded-lg bg-warn-soft px-2 py-1 text-xs text-warn">
           Court running ~{match.delay_notice.minutes} min late ·{" "}
-          {match.delay_notice.posted_by}
+          {match.delay_notice.posted_by} · posted{" "}
+          {formatTime(match.delay_notice.posted_at, match.timezone)}, until{" "}
+          {formatTime(match.delay_notice.expires_at, match.timezone)}
         </p>
       )}
       {match.expected_start_soon && (

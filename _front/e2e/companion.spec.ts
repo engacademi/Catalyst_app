@@ -118,7 +118,7 @@ test("staff schedule a division notice and manage an expiring court estimate", a
   await page
     .getByRole("button", { name: "Courts & clock", exact: true })
     .click();
-  await page.getByLabel("Court", { exact: true }).selectOption({ index: 1 });
+  await page.getByRole("combobox", { name: "Court", exact: true }).selectOption({ index: 1 });
   await page.getByLabel("Area label", { exact: true }).fill("Hall C");
   await page.getByRole("button", { name: "Post notice / save area" }).click();
   await expect(page.getByText("Court information updated.")).toBeVisible();

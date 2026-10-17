@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { API_BASE } from "@/lib/api";
 import { useState } from "react";
 
 import { useAdminAuth } from "./auth";
@@ -264,10 +265,11 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
     try {
       const body = new FormData();
       body.set("file", chosen);
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/v1/admin/registration/columns`,
-        { method: "POST", headers: await auth(), body },
-      );
+      const res = await fetch(`${API_BASE}/v1/admin/registration/columns`, {
+        method: "POST",
+        headers: await auth(),
+        body,
+      });
       const json = await res.json();
       if (!res.ok) throw Error(json.detail);
       setHeaders(json.data);
@@ -311,10 +313,11 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
           ),
         ),
       );
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/v1/admin/imports`,
-        { method: "POST", headers: await auth(), body },
-      );
+      const res = await fetch(`${API_BASE}/v1/admin/imports`, {
+        method: "POST",
+        headers: await auth(),
+        body,
+      });
       const json = await res.json();
       if (!res.ok) throw Error(json.detail);
       setPreview(json.data);
