@@ -35,6 +35,7 @@ function write(eventId: string, ids: string[]) {
     window.localStorage.setItem(KEY(eventId), JSON.stringify(ids));
   } catch {}
   listeners.forEach((l) => l());
+  window.dispatchEvent(new Event("courtside:preferences"));
 }
 
 function subscribe(listener: () => void) {
@@ -116,6 +117,7 @@ export function useLastSeen(eventId: string) {
         window.localStorage.setItem(key, String(id));
       } catch {}
       listeners.forEach((l) => l());
+      window.dispatchEvent(new Event("courtside:preferences"));
     },
     [key],
   );
@@ -141,6 +143,7 @@ export function useTeamLabel(eventId: string, entryId: string) {
         window.localStorage.setItem(key, value.slice(0, 60));
       } catch {}
       listeners.forEach((l) => l());
+      window.dispatchEvent(new Event("courtside:preferences"));
     },
     [key],
   );

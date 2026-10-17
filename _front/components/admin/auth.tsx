@@ -33,14 +33,17 @@ function Frame({
     <div className="staff-shell">
       <header className="staff-header">
         <Link href="/admin" className="flex flex-wrap items-center gap-4">
-          <Wordmark />
+          <span>
+            <Wordmark />
+            <small className="by-ova">By OVA</small>
+          </span>
           <span className="border-l border-border pl-4 text-xs font-semibold text-muted">
             Staff workspace
           </span>
         </Link>
         <div className="staff-header-links">
-          <Link href="/" className="secondary-link">
-            Attendee view
+          <Link href="/profile" className="secondary-link">
+            My Profile
           </Link>
           {right}
         </div>
@@ -48,6 +51,12 @@ function Frame({
       <main id="main" className="staff-content">
         {children}
       </main>
+      <footer className="platform-footer">
+        <span>
+          Olley Catalyst <small className="by-ova">By OVA</small>
+        </span>
+        <Link href="/profile">My Profile →</Link>
+      </footer>
     </div>
   );
 }

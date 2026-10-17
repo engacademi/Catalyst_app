@@ -13,6 +13,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Identity,
     Index,
@@ -103,6 +104,9 @@ class Venue(UUIDPk, Base):
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     address: Mapped[str | None] = mapped_column(String(300))
+    city: Mapped[str | None] = mapped_column(String(150))
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
     accessible_entrance: Mapped[str | None] = mapped_column(Text)
     directions: Mapped[str | None] = mapped_column(Text)
     map_url: Mapped[str | None] = mapped_column(String(500))

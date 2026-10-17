@@ -1,4 +1,5 @@
 "use client";
+import { VenueEditor } from "./venue-editor";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -277,7 +278,7 @@ function VenuesSection({ event }: { event: AdminEventData }) {
           <li key={v.id}>
             <Card>
               <p className="font-semibold">{v.name}</p>
-              <p className="text-sm text-muted">{v.address}</p>
+              <p className="text-sm text-muted">{v.address}</p><VenueEditor venue={v} />
               <p className="text-sm">
                 Courts:{" "}
                 {v.courts.map((c) => c.label).join(", ") ||

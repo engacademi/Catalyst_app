@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { MatchEditorPanel } from "./match-editor";
+import { EventDetailsPanel } from "./event-details";
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import type { Division, EventSummary, SourceInfo, Venue } from "@/lib/api";
@@ -29,6 +31,8 @@ export type AdminEventData = EventSummary & {
 };
 
 const TABS = [
+  "Event details",
+  "Matches & brackets",
   "Announcements",
   "Imports",
   "Content",
@@ -146,6 +150,8 @@ export function AdminEvent({ eventId }: { eventId: string }) {
         aria-labelledby={`staff-tab-${tab.replaceAll(" ", "-")}`}
         tabIndex={0}
       >
+        {tab === "Matches & brackets" && <MatchEditorPanel event={event} />}
+        {tab === "Event details" && <EventDetailsPanel event={event} />}
         {tab === "Announcements" && <AnnouncementsPanel event={event} />}
         {tab === "Imports" && <ImportsPanel event={event} />}
         {tab === "Content" && <ContentPanel event={event} />}

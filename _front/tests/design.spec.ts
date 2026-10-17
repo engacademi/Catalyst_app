@@ -304,7 +304,7 @@ for (const width of [390, 768, 1440]) {
       animations: "disabled",
     });
     await page.goto("/");
-    await expect(page.getByText("Explore the event")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Find your next game." })).toBeVisible();
     await page.screenshot({
       path: `test-results/home-${width}.png`,
       fullPage: true,

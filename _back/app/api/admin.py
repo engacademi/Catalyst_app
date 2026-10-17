@@ -220,6 +220,8 @@ def update_event(
 ) -> dict:
     event = staff_event(db, principal, event_id)
     check_revision(event.revision, body.expected_revision)
+    if (body.end_date or event.end_date) < (body.start_date or event.start_date):
+        raise HTTPException(422, "End date must not precede start date")
     old = event.revision
     for key, value in body.model_dump(
         exclude_unset=True, exclude={"expected_revision"}
@@ -234,6 +236,9 @@ def update_event(
 class VenueIn(BaseModel):
     name: str = Field(min_length=2, max_length=200)
     address: str | None = None
+    city: str | None = Field(None, max_length=150)
+    latitude: float | None = Field(None, ge=-90, le=90)
+    longitude: float | None = Field(None, ge=-180, le=180)
     accessible_entrance: str | None = None
     directions: str | None = None
     map_url: HttpUrl | None = None
@@ -1241,3 +1246,85 @@ def staff_matches(
         "data": project_matches(db, event, rows[:limit]),
         "next_cursor": cursor + limit if len(rows) > limit else None,
     }
+
+
+class MatchEditIn(BaseModel):
+    expected_revision: int = Field(ge=1)
+    scheduled_start: datetime | None = None
+    court_id: uuid.UUID | None = None
+    round_label: str | None = Field(None, max_length=200)
+    status: (
+        Literal["scheduled", "in_progress", "completed", "cancelled", "postponed"]
+        | None
+    ) = None
+    home_entry_id: uuid.UUID | None = None
+    away_entry_id: uuid.UUID | None = None
+    home_placeholder: str | None = Field(None, max_length=200)
+    away_placeholder: str | None = Field(None, max_length=200)
+
+
+@router.patch("/matches/{match_id}")
+def edit_imported_match(
+    match_id: str,
+    body: MatchEditIn,
+    request: Request,
+    db: DB,
+    principal: CurrentPrincipal,
+):
+    match = db.scalar(
+        select(Match)
+        .where(Match.id == parse_uuid(match_id))
+        .with_for_update()
+        .options(*match_load_options())
+    )
+    if match is None:
+        raise HTTPException(404, "Match not found")
+    event = staff_event(db, principal, str(match.event_id))
+    check_revision(match.revision, body.expected_revision)
+    if match.source.mode not in {"manual_import", "demo_fixture"}:
+        raise HTTPException(
+            409,
+            "Edit this connected match in its official platform, then refresh the source. Local changes would be overwritten.",
+        )
+    state = current_state(match)
+    updates = body.model_dump(exclude_unset=True, exclude={"expected_revision"})
+    if (
+        "scheduled_start" in updates
+        and body.scheduled_start is not None
+        and body.scheduled_start.tzinfo is None
+    ):
+        raise HTTPException(422, "Start time must include a timezone")
+    if body.court_id is not None:
+        court = db.get(Court, body.court_id)
+        if court is None or court.venue.event_id != event.id:
+            raise HTTPException(422, "Court must belong to this event")
+    for slot_name in ("home", "away"):
+        entry_id = getattr(body, f"{slot_name}_entry_id")
+        if entry_id is not None:
+            entry = db.get(EventEntry, entry_id)
+            if entry is None or entry.event_id != event.id:
+                raise HTTPException(422, "Team must belong to this event")
+        slot = getattr(state, slot_name)
+        if f"{slot_name}_entry_id" in updates:
+            slot.entry_id = entry_id
+            if entry_id:
+                slot.placeholder = None
+        if f"{slot_name}_placeholder" in updates and not slot.entry_id:
+            slot.placeholder = getattr(body, f"{slot_name}_placeholder")
+    if state.home.entry_id and state.home.entry_id == state.away.entry_id:
+        raise HTTPException(422, "A team cannot play itself")
+    for field in ("scheduled_start", "court_id", "round_label", "status"):
+        if field in updates:
+            if field == "status" and updates[field] is None:
+                raise HTTPException(422, "Status cannot be empty")
+            setattr(state, field, updates[field])
+    if "scheduled_start" in updates:
+        state.estimated_start = None
+    old = match.revision
+    apply_match_state(db, match, state, simulated=event.is_demo)
+    event.revision += 1
+    audit(
+        db, request, principal, "match.staff_edit", event.id, match, old, match.revision
+    )
+    db.commit()
+    return {"data": {"revision": match.revision}}

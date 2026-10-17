@@ -38,7 +38,7 @@ export function useEvents() {
   return useQuery({
     queryKey: keys.events,
     queryFn: () =>
-      apiGet<{ data: (EventSummary & { venues: string[] })[] }>("/v1/events"),
+      apiGet<{ data: (EventSummary & { venues: string[]; venue_locations?: { city: string | null; latitude: number | null; longitude: number | null }[]; team_count?: number })[] }>("/v1/events"),
   });
 }
 
