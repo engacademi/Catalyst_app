@@ -35,6 +35,7 @@ from app.modules.matches import (
     match_query,
 )
 from app.modules.my_day import build_division_section, build_my_day
+from app.modules.replay import present, replaying
 
 router = APIRouter(prefix="/v1", tags=["public"])
 DB = Annotated[Session, Depends(get_db)]
@@ -63,13 +64,16 @@ def project_matches(db: Session, event: Event, matches: list[Match], *, latest: 
     changes = latest_changes(db, [m.id for m in matches]) if latest else {}
     now = event_now(event)
     notices = active_notices(db, event.id, now)
-    return [P.match_public(m, event, changes.get(m.id), notice_for(m, notices), now) for m in matches]
+    return [P.match_public(m, event, changes.get(m.id), notice_for(m, notices), now) for m in present(event, matches, now)]
 
 
 @router.get("/events")
 def list_events(request: Request, db: DB) -> Response:
     events = db.scalars(
-        select(Event).where(Event.status == "published").order_by(Event.start_date.desc()).options(selectinload(Event.venues))
+        select(Event)
+        .where(Event.status == "published")
+        .order_by(Event.start_date.desc())
+        .options(selectinload(Event.venues), selectinload(Event.sources))
     )
     data = [{**P.event_public(e), "venues": [v.name for v in e.venues]} for e in events]
     return json_response(request, {"data": data}, max_age=60)
@@ -144,16 +148,21 @@ def list_matches(
     limit: int = Query(100, ge=1, le=200),
 ) -> Response:
     event = load_event(db, event_ref)
+    # While replaying, status is what the match looked like at demo time, so it's filtered after loading.
+    replay = replaying(event)
     stmt = match_query(
         event.id,
         entry_ids=parse_uuid_list(entry_ids),
-        status_group=status_group,
+        status_group=None if replay else status_group,
         court_id=parse_uuid(court_id, "court") if court_id else None,
         venue_id=parse_uuid(venue_id, "venue") if venue_id else None,
         division_id=parse_uuid(division_id, "division") if division_id else None,
         day=day,
         tz=event.timezone,
     )
+    if replay and status_group != "all":
+        shown = {m.id for m in present(event, list(db.scalars(stmt))) if m.status in STATUS_GROUPS[status_group]}
+        stmt = stmt.where(Match.id.in_(shown))
     matches = list(db.scalars(stmt.offset(cursor).limit(limit + 1)))
     next_cursor = cursor + limit if len(matches) > limit else None
     payload = {
@@ -192,7 +201,7 @@ def my_day(
     )
     now = event_now(event)
     notices = active_notices(db, event.id, now)
-    summary = build_my_day(matches, set(followed), settings.assumed_match_minutes, now=now, notices=notices)
+    summary = build_my_day(present(event, matches, now), set(followed), settings.assumed_match_minutes, now=now, notices=notices)
     divisions = (
         db.scalars(
             select(Division)
@@ -206,7 +215,8 @@ def my_day(
     for division in divisions:
         division_matches = list(db.scalars(match_query(event.id, division_id=division.id)))
         matches += division_matches
-        sections.append({"division": P.division_public(division), **build_division_section(division_matches, notices)})
+        section = build_division_section(present(event, division_matches, now), notices)
+        sections.append({"division": P.division_public(division), **section})
     payload = {
         "data": {
             **summary,
@@ -311,7 +321,7 @@ def calendar(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose at least one team")
     matches = list(db.scalars(match_query(event.id, entry_ids=followed)))
     domain = urlparse(settings.public_web_url).hostname or "courtside.local"
-    body = build_ics(event, matches, uid_domain=domain, assumed_minutes=settings.assumed_match_minutes)
+    body = build_ics(event, present(event, matches), uid_domain=domain, assumed_minutes=settings.assumed_match_minutes)
     return Response(
         body,
         media_type="text/calendar; charset=utf-8",
@@ -363,6 +373,7 @@ def get_match(match_id: str, request: Request, db: DB) -> Response:
     )
     history = list(history)
     now = event_now(event)
+    [match] = present(event, [match], now)
     notice = notice_for(match, active_notices(db, event.id, now))
     payload = {
         "data": {

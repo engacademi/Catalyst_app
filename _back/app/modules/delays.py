@@ -94,9 +94,12 @@ def record_change(db: Session, notice: DelayNotice, event_type: str, revision: i
     matches = db.scalars(
         select(Match)
         .where(Match.court_id == notice.court_id)
-        .options(selectinload(Match.participants), selectinload(Match.sets))
+        .options(selectinload(Match.participants), selectinload(Match.sets), selectinload(Match.source))
     )
-    entry_ids = sorted({str(p.entry_id) for m in matches if not has_started(m) for p in m.participants if p.entry_id})
+    from app.modules.replay import present  # replay builds on has_started
+
+    shown = present(db.get(Event, notice.event_id), list(matches))
+    entry_ids = sorted({str(p.entry_id) for m in shown if not has_started(m) for p in m.participants if p.entry_id})
     court = notice.court
     change = ChangeEvent(
         event_id=notice.event_id,
