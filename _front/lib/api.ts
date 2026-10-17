@@ -62,6 +62,7 @@ export type Change = {
   event_type: string;
   diff: Record<string, unknown>;
   entry_ids: string[];
+  division_id: string | null;
   simulated: boolean;
   occurred_at: string;
 };
@@ -133,7 +134,15 @@ export type MyDay = {
   conflicts: { match_ids: string[]; different_venues: boolean }[];
   assumed_match_minutes: number;
   entries: Entry[];
+  division_sections: DivisionSection[];
   matches: Record<string, Match>;
+};
+
+export type DivisionSection = {
+  division: Division;
+  upcoming_ids: string[];
+  awaiting_schedule_ids: string[];
+  completed_ids: string[];
 };
 
 export class ApiError extends Error {

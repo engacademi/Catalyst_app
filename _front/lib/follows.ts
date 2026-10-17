@@ -5,31 +5,32 @@ import { useCallback, useSyncExternalStore } from "react";
 // Guest follows stay on this device. The ids are canonical entry ids from the API, so a
 // later sign-in can merge them into an account without guessing.
 const KEY = (eventId: string) => `courtside:follows:${eventId}`;
+const DIVISION_KEY = (eventId: string) => `courtside:division-follows:${eventId}`;
 const listeners = new Set<() => void>();
 const cache = new Map<string, { raw: string | null; ids: string[] }>();
 const EMPTY: string[] = [];
 
-function read(eventId: string): string[] {
+function read(key: string): string[] {
   let raw: string | null = null;
   try {
-    raw = window.localStorage.getItem(KEY(eventId));
+    raw = window.localStorage.getItem(key);
   } catch {
     return EMPTY;
   }
-  const hit = cache.get(eventId);
+  const hit = cache.get(key);
   if (hit && hit.raw === raw) return hit.ids;
   let ids: string[] = EMPTY;
   try {
     const parsed = raw ? JSON.parse(raw) : [];
     if (Array.isArray(parsed)) ids = parsed.filter((v) => typeof v === "string");
   } catch {}
-  cache.set(eventId, { raw, ids });
+  cache.set(key, { raw, ids });
   return ids;
 }
 
-function write(eventId: string, ids: string[]) {
+function write(key: string, ids: string[]) {
   try {
-    window.localStorage.setItem(KEY(eventId), JSON.stringify(ids));
+    window.localStorage.setItem(key, JSON.stringify(ids));
   } catch {}
   listeners.forEach((l) => l());
 }
@@ -44,20 +45,29 @@ function subscribe(listener: () => void) {
   };
 }
 
-export function useFollows(eventId: string) {
+function useIdList(key: string) {
   const ids = useSyncExternalStore(
     subscribe,
-    () => read(eventId),
+    () => read(key),
     () => EMPTY,
   );
   const toggle = useCallback(
-    (entryId: string) => {
-      const current = read(eventId);
-      write(eventId, current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId]);
+    (id: string) => {
+      const current = read(key);
+      write(key, current.includes(id) ? current.filter((v) => v !== id) : [...current, id]);
     },
-    [eventId],
+    [key],
   );
   return { ids, isFollowing: (id: string) => ids.includes(id), toggle };
+}
+
+export function useFollows(eventId: string) {
+  return useIdList(KEY(eventId));
+}
+
+// Followed divisions, stored next to the followed entries and just as local.
+export function useDivisionFollows(eventId: string) {
+  return useIdList(DIVISION_KEY(eventId));
 }
 
 // The last change the guest has seen, so Updates can mark new items. Local only.
