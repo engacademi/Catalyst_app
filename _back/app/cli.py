@@ -23,7 +23,6 @@ from app.models import Event, Organization, RoleGrant, Source, User, Venue
 from app.seed import TZ, seed
 
 
-
 def grant(
     subject: str, role: str, event_slug: str | None, entry_id: str | None = None
 ) -> None:
