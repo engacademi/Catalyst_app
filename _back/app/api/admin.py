@@ -14,10 +14,11 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.adapters.aes_adapter import Fetch, http_fetch, results_url
 from app.api.public import load_event
 from app.core.auth import CurrentPrincipal, Principal, require_event_role
 from app.core.db import get_db
@@ -46,6 +47,7 @@ from app.modules.matches import (
     current_state,
     match_load_options,
 )
+from app.modules.refresh import SourceUnavailable, refresh_source
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 DB = Annotated[Session, Depends(get_db)]
@@ -212,16 +214,27 @@ def update_venue(venue_id: str, body: VenueIn, request: Request, db: DB, princip
     return {"data": P.venue_public(venue)}
 
 
+EVENT_KEY = Field(None, min_length=8, max_length=300, pattern=r"^[A-Za-z0-9_-]+$")
+
+
 class SourceIn(BaseModel):
     name: str = Field(min_length=2, max_length=200)
     mode: Literal["manual_import", "demo_fixture", "aes", "timu", "myteam"] = "manual_import"
     official_url: HttpUrl | None = None
+    external_key: str | None = EVENT_KEY
     expected_check_interval_minutes: int = Field(15, ge=1, le=1440)
+
+    @model_validator(mode="after")
+    def aes_needs_key(self):
+        if self.mode == "aes" and not self.external_key:
+            raise ValueError("An AES source needs its AES event key")
+        return self
 
 
 class SourcePatch(BaseModel):
     status: Literal["active", "paused", "unavailable"] | None = None
     official_url: HttpUrl | None = None
+    external_key: str | None = EVENT_KEY
     expected_check_interval_minutes: int | None = Field(None, ge=1, le=1440)
 
 
@@ -230,6 +243,8 @@ def create_source(event_id: str, body: SourceIn, request: Request, db: DB, princ
     event = staff_event(db, principal, event_id)
     data = body.model_dump()
     data["official_url"] = str(body.official_url) if body.official_url else None
+    if body.mode == "aes" and not data["official_url"]:
+        data["official_url"] = results_url(body.external_key)
     source = Source(event_id=event.id, **data)
     db.add(source)
     db.flush()
@@ -259,9 +274,36 @@ def source_health(source_id: str, db: DB, principal: CurrentPrincipal) -> dict:
         "data": {
             **P.source_public(source),
             "generation": source.generation,
+            "last_check_error": source.last_check_error,
             "recent_imports": [_batch_summary(b) for b in batches],
         }
     }
+
+
+def aes_fetch() -> Fetch:
+    return http_fetch
+
+
+class RefreshIn(BaseModel):
+    kind: Literal["entries"] = "entries"
+
+
+@router.post("/sources/{source_id}/refresh", status_code=201)
+def refresh(
+    source_id: str,
+    body: RefreshIn,
+    db: DB,
+    principal: CurrentPrincipal,
+    fetch: Annotated[Fetch, Depends(aes_fetch)],
+) -> dict:
+    """Read a live source and stage the result for the same preview and commit as an upload."""
+    source = get_owned(db, principal, Source, source_id)
+    event = db.get(Event, source.event_id)
+    try:
+        batch = refresh_source(db, event=event, source=source, kind=body.kind, fetch=fetch, actor_id=principal.user.id)
+    except SourceUnavailable as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"{exc}. The last committed data is still shown.") from exc
+    return {"data": {**_batch_summary(batch), "errors": batch.errors, "rows": batch.rows}}
 
 
 # ---- imports ---------------------------------------------------------------------

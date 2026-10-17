@@ -30,8 +30,9 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/main.py` | App, CORS, request IDs, health checks |
 | `app/core/` | Settings, database session, Clerk token checks and role grants, ETag responses |
 | `app/models.py` | Tables: events, venues, courts, divisions, entries, sources, mappings, matches, sets, announcements, guide items, partner cards, roster publications, assignments, change events, import batches, audit |
-| `app/adapters/` | Source adapter protocol and the CSV interchange parser |
+| `app/adapters/` | Source adapter protocol, the CSV interchange parser and the read-only AES adapter |
 | `app/modules/imports.py` | Stage, preview and commit imports |
+| `app/modules/refresh.py` | Refresh a live source into a staged import; record failed checks |
 | `app/modules/matches.py` | Match queries, revisions and change events |
 | `app/modules/my_day.py` | Itinerary, next match and overlap warnings across followed teams |
 | `app/modules/calendar.py` | ICS snapshot export |
@@ -47,7 +48,9 @@ Staff upload a CSV for a source (entries, then matches, then rosters). The API c
 
 Rosters are published only with a consent review reference. Player photos appear only when the row marks them approved; otherwise the importer drops the URL before it reaches the database.
 
-Live AES, TIMU and MyTeam.click adapters are not built yet. They would emit the same normalized rows as the CSV parser once OVA has access and permission to use each feed. Until then a source can be marked `aes`, `timu` or `myteam` for labeling, and data still arrives by CSV.
+An AES source reads the AES results site by its event key (ADR 0003). Staff press refresh (`POST /v1/admin/sources/{id}/refresh`), which stages divisions, clubs and teams for the same preview and commit as an upload. AES ids become external mappings, so a renamed team stays the same entry. The AES last-update time becomes the source's upstream update time. If AES times out, returns an HTTP error or sends something other than JSON, the refresh fails, the last committed data stays, and the source shows as unavailable until the next good refresh. Tests replay recorded responses from `tests/fixtures/aes/` and never call AES.
+
+TIMU and MyTeam.click adapters are not built yet. A source can be marked `timu` or `myteam` for labeling, and their data arrives by CSV.
 
 ## Main endpoints
 

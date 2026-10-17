@@ -156,6 +156,8 @@ class Source(UUIDPk, Base):
     name: Mapped[str] = mapped_column(String(200))
     mode: Mapped[str] = mapped_column(String(30), default="manual_import")
     official_url: Mapped[str | None] = mapped_column(String(500))
+    # The vendor's own event identifier, e.g. the AES event key.
+    external_key: Mapped[str | None] = mapped_column(String(300))
     expected_check_interval_minutes: Mapped[int] = mapped_column(Integer, default=15)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | paused | unavailable
     # Bumped on every committed import so a stale preview can't be committed.
@@ -163,6 +165,9 @@ class Source(UUIDPk, Base):
     last_successful_check_at: Mapped[datetime | None]
     last_import_at: Mapped[datetime | None]
     upstream_updated_at: Mapped[datetime | None]
+    # Set by the first failed live check and cleared by the next good one.
+    unavailable_since: Mapped[datetime | None]
+    last_check_error: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     event: Mapped[Event] = relationship(back_populates="sources")
