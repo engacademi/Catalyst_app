@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from app.adapters.base import Capabilities, ParsedRow, ParseResult, SourceUnavailable
 
@@ -37,14 +38,15 @@ class AesEvent:
     capabilities = Capabilities(
         name="AES results",
         version="1",
-        kinds=("entries",),
+        kinds=("entries", "matches"),
         live=True,
         notes="Read-only copy of the AES results site. Staff refresh, preview and commit.",
     )
 
-    def __init__(self, event_key: str, fetch: Fetch = http_fetch):
+    def __init__(self, event_key: str, fetch: Fetch = http_fetch, timezone: str = "America/Toronto"):
         self._base = f"{BASE_URL}/{quote(event_key, safe='')}"
         self._fetch = fetch
+        self._tz = ZoneInfo(timezone)
         self._cache: dict[str, Any] = {}
 
     def _get(self, path: str) -> Any:
@@ -81,8 +83,8 @@ class AesEvent:
 
     def parse(self, kind: str) -> ParseResult:
         try:
-            return {"entries": self._entries}[kind]()
-        except (KeyError, TypeError, AttributeError) as exc:
+            return {"entries": self._entries, "matches": self._matches}[kind]()
+        except (KeyError, TypeError, AttributeError, ValueError) as exc:
             raise SourceUnavailable("AES data has an unexpected shape") from exc
 
     def _entries(self) -> ParseResult:
@@ -105,3 +107,53 @@ class AesEvent:
                     },
                 )
         return ParseResult(rows=list(rows.values()), errors=[])
+
+    def _matches(self) -> ParseResult:
+        """Pool matches from each pool's poolsheet. AES times are local to the event."""
+        rows: list[ParsedRow] = []
+        location = (self._get("").get("Location") or "").split(" (")[0].strip() or None
+        for division, _, pool in self.pools():
+            sheet = self._get(f"poolsheet/{pool['PlayId']}")
+            for m in sheet["Matches"]:
+                sets = [
+                    [s["FirstTeamScore"], s["SecondTeamScore"]]
+                    for s in m.get("Sets") or []
+                    if s.get("FirstTeamScore") is not None and s.get("SecondTeamScore") is not None
+                ]
+                if m.get("FirstTeamWon") or m.get("SecondTeamWon"):
+                    status = "completed"
+                else:
+                    status = "in_progress" if sets else "scheduled"
+                start = m.get("ScheduledStartDateTime")
+                court = m.get("Court") or {}
+                rows.append(
+                    ParsedRow(
+                        row=len(rows) + 1,
+                        external_id=str(m["MatchId"]),
+                        data={
+                            "division": division["Name"],
+                            "division_external_id": str(division["DivisionId"]),
+                            "venue": None,
+                            "aes_location": location,
+                            "court": court.get("Name") or "",
+                            "court_external_id": str(court["CourtId"]) if court.get("CourtId") is not None else None,
+                            "round": " · ".join(x for x in (pool.get("FullName"), m.get("MatchFullName")) if x) or None,
+                            "status": status,
+                            "home_entry_id": _id(m.get("FirstTeamId")),
+                            "away_entry_id": _id(m.get("SecondTeamId")),
+                            "home_placeholder": None if m.get("FirstTeamId") is not None else m.get("FirstTeamName") or "To be decided",
+                            "away_placeholder": None if m.get("SecondTeamId") is not None else m.get("SecondTeamName") or "To be decided",
+                            "work_entry_id": _id(m.get("WorkTeamId")),
+                            "source_revision": None,
+                            "scheduled_start": datetime.fromisoformat(start).replace(tzinfo=self._tz).isoformat() if start else None,
+                            "estimated_start": None,
+                            "source_updated_at": None,
+                            "sets": sets,
+                        },
+                    )
+                )
+        return ParseResult(rows=rows, errors=[])
+
+
+def _id(value: Any) -> str | None:
+    return str(value) if value is not None else None

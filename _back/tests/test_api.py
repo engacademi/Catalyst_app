@@ -455,3 +455,28 @@ def test_aes_outage_keeps_teams_and_shows_unavailable(client, demo, no_overrides
     aes = next(s for s in client.get("/v1/events/ontario-2").json()["sources"] if s["mode"] == "aes")
     assert aes["freshness"] == "unavailable" and aes["unavailable_since"] == health["unavailable_since"]
     assert client.get("/v1/events/ontario-2/teams").json()["total"] == 46
+
+
+def test_aes_matches_refresh_shows_in_my_day_and_match_centre(client, demo, no_overrides):
+    source_id = aes_source(client, recorded())
+    teams = client.post(f"/v1/admin/sources/{source_id}/refresh", json={"kind": "entries"}, headers=ADMIN).json()["data"]
+    client.post(f"/v1/admin/imports/{teams['id']}/commit", headers=ADMIN)
+
+    staged = client.post(f"/v1/admin/sources/{source_id}/refresh", json={"kind": "matches"}, headers=ADMIN)
+    assert staged.status_code == 201
+    preview = staged.json()["data"]
+    assert preview["kind"] == "matches" and preview["summary"]["add"] == 148
+    assert preview["summary"]["found"] == {"matches": 148, "courts": 14}
+    assert client.get("/v1/events/ontario-2/matches").json()["data"] == [], "nothing shows before commit"
+    client.post(f"/v1/admin/imports/{preview['id']}/commit", headers=ADMIN)
+
+    team = client.get("/v1/events/ontario-2/teams", params={"q": "Woodstock"}).json()["data"][0]["id"]
+    day = client.get("/v1/events/ontario-2/my-day", params={"entry_ids": team}).json()["data"]
+    shown = [m for m in day["matches"].values() if team in (m["home"]["entry_id"], m["away"]["entry_id"])]
+    assert len(shown) == 6
+    assert all(m["source"]["mode"] == "aes" and m["source"]["freshness"] == "current" for m in shown)
+
+    centre = client.get("/v1/events/ontario-2/matches", params={"entry_ids": team}).json()
+    first = centre["data"][0]
+    assert first["court"]["label"].startswith("Court ") and first["court"]["venue_name"] == "Enercare Centre"
+    assert first["sets"] and first["source"]["name"] == "AES Event 2"

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select
 
-from app.models import ChangeEvent, Event, EventEntry, Organization, Source
+from app.models import ChangeEvent, Court, Event, EventEntry, Match, Organization, Source, Venue
 from app.modules.imports import commit_import
 from app.modules.refresh import SourceUnavailable, refresh_source
 
@@ -167,3 +167,131 @@ def test_failed_check_keeps_last_good_data_and_marks_source_unavailable(db, aes,
     refresh(db, event, source)
     db.refresh(source)
     assert source.status == "active" and source.unavailable_since is None and source.last_check_error is None
+
+
+# ---- matches (ticket #9) ----------------------------------------------------------
+
+
+@pytest.fixture
+def aes_teams(db, aes):
+    event, source = aes
+    db.add(Venue(event_id=event.id, name="Enercare Centre"))
+    db.commit()
+    commit_import(db, refresh(db, event, source).id, None, "test")
+    return event, source
+
+
+def refresh_matches(db, event, source, fetch=None):
+    db.refresh(source)
+    return refresh_source(db, event=event, source=source, kind="matches", fetch=fetch or recorded(), actor_id=None)
+
+
+def match(db, source, aes_match_id: int) -> Match:
+    return db.scalar(select(Match).where(Match.source_id == source.id, Match.external_id == str(aes_match_id)))
+
+
+def test_refresh_previews_then_commits_pool_matches(db, aes_teams):
+    event, source = aes_teams
+    batch = refresh_matches(db, event, source)
+    assert batch.state == "staged" and batch.kind == "matches"
+    assert batch.summary["add"] == 148 and batch.summary["error"] == 0
+    assert db.scalar(select(func.count()).select_from(Match)) == 0, "nothing changes before commit"
+
+    commit_import(db, batch.id, None, "test")
+    m3 = match(db, source, -52826)
+    assert m3.round_label == "Pool A · Match 3"
+    assert m3.division.name == "TLS Girls Division 7"
+    teams_by_slot = {p.slot: p.entry.team_name for p in m3.participants}
+    assert teams_by_slot == {"home": "Niagara Rapids Rise", "away": "YRV Ice"}
+    assert m3.scheduled_start == datetime(2026, 4, 19, 19, 0, tzinfo=timezone.utc), "3:00 pm Toronto time"
+    assert [(s.home_score, s.away_score) for s in m3.sets] == [(25, 13), (25, 14)]
+    assert m3.status == "completed" and m3.work_entry_id is None
+    assert (m3.court.label, m3.court.venue.name) == ("Court 29", "Enercare Centre")
+
+
+def edit_match(match_id: int, **fields):
+    def edit(sheet):
+        for m in sheet["Matches"]:
+            if m["MatchId"] == match_id:
+                m.update(fields)
+        return sheet
+
+    return edit
+
+
+def test_identical_match_replay_changes_nothing(db, aes_teams):
+    event, source = aes_teams
+    commit_import(db, refresh_matches(db, event, source).id, None, "test")
+    replay = refresh_matches(db, event, source)
+    assert replay.summary["unchanged"] == 148 and replay.summary["add"] == replay.summary["change"] == 0
+    commit_import(db, replay.id, None, "test")
+    assert db.scalar(select(func.count()).select_from(ChangeEvent)) == 0
+
+
+def test_a_changed_court_creates_exactly_one_change_event(db, aes_teams):
+    event, source = aes_teams
+    commit_import(db, refresh_matches(db, event, source).id, None, "test")
+
+    moved = recorded({"poolsheet/-52821": edit_match(-52826, Court={"CourtId": -52984, "Name": "Court 30"})})
+    batch = refresh_matches(db, event, source, moved)
+    assert batch.summary["change"] == 1 and batch.summary["unchanged"] == 147
+    commit_import(db, batch.id, None, "test")
+    changes = db.scalars(select(ChangeEvent)).all()
+    assert [(c.event_type, c.diff["court"]) for c in changes] == [
+        ("court_changed", ["Court 29 (Enercare Centre)", "Court 30 (Enercare Centre)"])
+    ]
+    assert match(db, source, -52826).court.label == "Court 30"
+
+    commit_import(db, refresh_matches(db, event, source, moved).id, None, "test")
+    assert db.scalar(select(func.count()).select_from(ChangeEvent)) == 1, "replaying the move adds nothing"
+
+
+def test_matches_missing_from_a_partial_response_are_kept(db, aes_teams):
+    event, source = aes_teams
+    commit_import(db, refresh_matches(db, event, source).id, None, "test")
+    partial = recorded({"poolsheet/-52821": lambda sheet: {**sheet, "Matches": sheet["Matches"][:1]}})
+    batch = refresh_matches(db, event, source, partial)
+    assert batch.summary["unchanged"] == 148 - 5
+    commit_import(db, batch.id, None, "test")
+    assert db.scalar(select(func.count()).select_from(Match)) == 148
+    assert db.scalar(select(func.count()).select_from(ChangeEvent)) == 0
+
+
+def test_aes_work_team_becomes_the_matches_work_entry(db, aes_teams):
+    event, source = aes_teams
+    work = recorded({"poolsheet/-52821": edit_match(-52826, WorkTeamId=-53808, WorkTeamText="Woodstock Warriors (11)")})
+    commit_import(db, refresh_matches(db, event, source, work).id, None, "test")
+    assert match(db, source, -52826).work_entry.team_name == "Woodstock Warriors"
+    others = db.scalars(select(Match).where(Match.external_id != "-52826")).all()
+    assert all(m.work_entry_id is None for m in others), "no work duty when AES assigns none"
+
+
+def test_matches_need_teams_committed_first(db, aes):
+    event, source = aes
+    batch = refresh_matches(db, event, source)
+    assert batch.summary["error"] == 148
+    assert any("import entries first" in e for e in batch.rows[0]["errors"])
+
+
+def test_aes_courts_go_under_the_events_venue_and_keep_their_ids(db, aes_teams):
+    event, source = aes_teams
+    commit_import(db, refresh_matches(db, event, source).id, None, "test")
+    venues = db.scalars(select(Venue).where(Venue.event_id == event.id)).all()
+    assert [v.name for v in venues] == ["Enercare Centre"]
+    labels = {c.label for c in db.scalars(select(Court).where(Court.venue_id == venues[0].id))}
+    assert {"Court 6", "Court 14", "Court 29", "Court 30", "Court 51", "Court 58"} <= labels
+    assert all(label.startswith("Court ") for label in labels)
+
+    # AES renames a court; its CourtId keeps it the same court, so nothing moves.
+    renamed = recorded({"poolsheet/-52821": edit_match(-52826, Court={"CourtId": -52983, "Name": "Court 29A"})})
+    batch = refresh_matches(db, event, source, renamed)
+    assert batch.summary["change"] == 0
+
+
+def test_without_a_venue_the_aes_location_becomes_the_venue(db, aes):
+    event, source = aes
+    commit_import(db, refresh(db, event, source).id, None, "test")
+    commit_import(db, refresh_matches(db, event, source).id, None, "test")
+    venues = db.scalars(select(Venue).where(Venue.event_id == event.id)).all()
+    assert [v.name for v in venues] == ["Enercare Centre"]
+    assert match(db, source, -52826).court.venue_id == venues[0].id
