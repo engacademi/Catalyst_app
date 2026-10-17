@@ -29,11 +29,15 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
     """Return ids grouped for the My Day screen.
 
     matches may contain duplicates (one per followed participant); each match appears once.
+    A match a followed entry only works (referees) is a work duty, not one of its matches.
     """
-    unique = list({m.id: m for m in matches}.values())
-    open_matches = [m for m in unique if m.status in OPEN_STATUSES]
-    timed = sorted((m for m in open_matches if _start(m)), key=lambda m: (_start(m), m.external_id))
-    awaiting = [m for m in open_matches if not _start(m)]
+    everything = list({m.id: m for m in matches}.values())
+    unique = [m for m in everything if _followed_in(m, followed)]
+    duties = sorted(
+        (m for m in everything if m.work_entry_id in followed and m.status in OPEN_STATUSES),
+        key=lambda m: (_start(m) or datetime.max.replace(tzinfo=timezone.utc), m.external_id),
+    )
+    timed, awaiting, completed = _bucket(unique)
 
     next_by_entry: dict[str, str] = {}
     for m in timed:
@@ -61,17 +65,31 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
         "next_by_entry": next_by_entry,
         "upcoming_ids": [str(m.id) for m in timed],
         "awaiting_schedule_ids": [str(m.id) for m in awaiting],
-        "completed_ids": [
-            str(m.id)
-            for m in sorted(
-                (m for m in unique if m.status == "completed"),
-                key=lambda m: _start(m) or EPOCH,
-                reverse=True,
-            )
-        ],
+        "completed_ids": [str(m.id) for m in completed],
         "conflicts": conflicts,
+        "work_duties": [{"match_id": str(m.id), "entry_id": str(m.work_entry_id)} for m in duties],
         "assumed_match_minutes": assumed_minutes,
     }
+
+
+def build_division_section(matches: list[Match]) -> dict:
+    """One followed division's matches, grouped like the followed teams' schedule."""
+    timed, awaiting, completed = _bucket(list({m.id: m for m in matches}.values()))
+    return {
+        "upcoming_ids": [str(m.id) for m in timed],
+        "awaiting_schedule_ids": [str(m.id) for m in awaiting],
+        "completed_ids": [str(m.id) for m in completed],
+    }
+
+
+def _bucket(unique: list[Match]) -> tuple[list[Match], list[Match], list[Match]]:
+    open_matches = [m for m in unique if m.status in OPEN_STATUSES]
+    timed = sorted((m for m in open_matches if _start(m)), key=lambda m: (_start(m), m.external_id))
+    awaiting = [m for m in open_matches if not _start(m)]
+    completed = sorted(
+        (m for m in unique if m.status == "completed"), key=lambda m: _start(m) or EPOCH, reverse=True
+    )
+    return timed, awaiting, completed
 
 
 def _conflict(group: list[Match]) -> dict:

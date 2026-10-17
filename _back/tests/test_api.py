@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.models import EventEntry, Match
+from app.models import Division, EventEntry, Match
 from tests.conftest import ADMIN, OFFICIAL
 from tests.test_aes import EVENT_KEY as AES_KEY
 from tests.test_aes import recorded
@@ -44,6 +44,31 @@ def test_my_day_merges_two_sources_and_dedupes(client, db, demo):
     ids = data["upcoming_ids"] + data["completed_ids"] + data["awaiting_schedule_ids"]
     assert len(ids) == len(set(ids))
     assert data["assumed_match_minutes"] == 60
+
+
+def test_my_day_with_followed_division_and_entry(client, db, demo):
+    team = entry_id(db, "Lakeshore Thunder")
+    division = str(db.scalar(select(Division.id).where(Division.name == "TLS Girls D1")))
+    data = client.get(
+        "/v1/events/demo-championships/my-day", params={"entry_ids": team, "division_ids": division}
+    ).json()["data"]
+    # The Next Match card and the main schedule use followed teams only.
+    mine = data["upcoming_ids"] + data["awaiting_schedule_ids"] + data["completed_ids"]
+    assert mine and all(team in (data["matches"][i]["home"]["entry_id"], data["matches"][i]["away"]["entry_id"]) for i in mine)
+    assert data["next_match_id"] in data["upcoming_ids"] or data["next_match_id"] is None
+    [section] = data["division_sections"]
+    assert section["division"]["name"] == "TLS Girls D1"
+    listed = section["upcoming_ids"] + section["awaiting_schedule_ids"] + section["completed_ids"]
+    total = db.scalar(select(func.count()).select_from(Match).where(Match.division_id == section["division"]["id"]))
+    assert len(listed) == total and not set(listed) & set(mine)
+    assert {data["matches"][i]["division"]["name"] for i in listed} == {"TLS Girls D1"}
+
+
+def test_my_day_with_only_a_followed_division(client, db, demo):
+    division = str(db.scalar(select(Division.id).where(Division.name == "15U Boys D1")))
+    data = client.get("/v1/events/demo-championships/my-day", params={"division_ids": division}).json()["data"]
+    assert data["next_match_id"] is None and data["upcoming_ids"] == []
+    assert data["division_sections"][0]["upcoming_ids"]
 
 
 def test_public_roster_omits_withheld_photo(client, db, demo):
@@ -168,6 +193,106 @@ def test_demo_reset_deletes_cleanly(client, db, demo):
     fresh = seed(db, reset=True)
     assert fresh.id != demo.id
     assert client.get("/v1/events/demo-championships").json()["data"]["counts"]["entries"] == 12
+
+
+def test_court_area_label_reaches_public_data(client, db, demo):
+    match = db.scalar(select(Match).where(Match.court_id.is_not(None)).limit(1))
+    court = str(match.court_id)
+    assert client.get(f"/v1/matches/{match.id}").json()["data"]["court"]["area"] is None
+    assert client.patch(f"/v1/admin/courts/{court}", json={"area": "Hall C, north side"}, headers=OFFICIAL).status_code == 403
+
+    updated = client.patch(f"/v1/admin/courts/{court}", json={"area": "Hall C, north side"}, headers=ADMIN)
+    assert updated.status_code == 200 and updated.json()["data"]["area"] == "Hall C, north side"
+    assert client.get(f"/v1/matches/{match.id}").json()["data"]["court"]["area"] == "Hall C, north side"
+    listed = client.get("/v1/events/demo-championships/matches").json()["data"]
+    assert any(m["court"] and m["court"]["area"] == "Hall C, north side" for m in listed)
+    guide = client.get("/v1/events/demo-championships/guide").json()["data"]
+    courts = [c for v in guide["venues"] for c in v["courts"]]
+    assert {"id": court, "label": match.court.label, "area": "Hall C, north side"} in courts
+
+    client.patch(f"/v1/admin/courts/{court}", json={"area": "  "}, headers=ADMIN)
+    assert client.get(f"/v1/matches/{match.id}").json()["data"]["court"]["area"] is None
+    assert any(a["action"] == "court.update" for a in client.get(f"/v1/admin/events/{demo.id}/audit", headers=ADMIN).json()["data"])
+
+
+def test_filled_placeholder_reaches_followers_updates_and_my_day(client, db, demo):
+    gold = db.scalar(select(Match).where(Match.external_id == "15UB-D1-GOLD"))
+    thunder = entry_id(db, "Lakeshore Thunder")
+    assert str(gold.id) not in client.get("/v1/events/demo-championships/my-day", params={"entry_ids": thunder}).json()["data"]["matches"]
+    after = client.get("/v1/events/demo-championships/changes").json()["latest_id"]
+
+    start = gold.scheduled_start.isoformat()
+    csv = (
+        "external_match_id,division,round,scheduled_start,venue,court,home_entry_id,away_entry_id,home_placeholder,away_placeholder,status\n"
+        f"15UB-D1-GOLD,15U Boys D1,Gold medal,{start},{gold.court.venue.name},{gold.court.label},15UB-D1-1,,,2nd Pool A,scheduled\n"
+    ).encode()
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": str(gold.source_id), "kind": "matches"},
+        files={"file": ("matches.csv", csv, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()
+    assert [(c["event_type"], c["entry_ids"]) for c in feed["data"]] == [("next_match_set", [thunder])]
+    assert feed["data"][0]["diff"]["round"] == "Gold medal"
+    assert feed["data"][0]["diff"]["filled"][0]["team_name"] == "Lakeshore Thunder"
+    my_day = client.get("/v1/events/demo-championships/my-day", params={"entry_ids": thunder}).json()["data"]
+    assert str(gold.id) in my_day["matches"]
+
+
+def test_imported_work_team_shows_as_a_work_duty_in_my_day(client, db, demo):
+    detail = client.get(f"/v1/admin/events/{demo.id}", headers=ADMIN).json()["data"]
+    source = next(s["id"] for s in detail["sources"] if s["name"].startswith("Demo fixture A"))
+    start = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0).isoformat()
+    csv = (
+        "external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,work_entry_id,round,status\n"
+        f"15UB-D1-M2,15U Boys D1,{start},Hall A,Court 2,15UB-D1-3,15UB-D1-4,15UB-D1-1,Pool A,scheduled\n"
+    ).encode()
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": source, "kind": "matches"},
+        files={"file": ("matches.csv", csv, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+
+    thunder = entry_id(db, "Lakeshore Thunder")
+    data = client.get("/v1/events/demo-championships/my-day", params={"entry_ids": thunder}).json()["data"]
+    [duty] = data["work_duties"]
+    assert duty["entry_id"] == thunder
+    assert duty["match_id"] not in data["upcoming_ids"] + data["completed_ids"] + data["awaiting_schedule_ids"]
+    worked = data["matches"][duty["match_id"]]
+    assert (worked["home"]["team_name"], worked["away"]["team_name"]) == ("Cedar Ridge Rally", "Kingston Tide")
+    assert worked["court"]["label"] == "Court 2"
+    assert datetime.fromisoformat(worked["scheduled_start"]) == datetime.fromisoformat(start)
+    assert worked["work_entry"] == {"entry_id": thunder, "team_name": "Lakeshore Thunder"}
+
+    others = client.get("/v1/events/demo-championships/my-day", params={"entry_ids": entry_id(db, "North Bay Breakers")}).json()["data"]
+    assert others["work_duties"] == []
+
+
+def test_change_feed_names_the_division_of_each_change(client, db, demo):
+    division = db.scalar(select(Division).where(Division.name == "TLS Girls D1"))
+    match = db.scalar(select(Match).where(Match.division_id == division.id, Match.status == "scheduled").limit(1))
+    after = client.get("/v1/events/demo-championships/changes").json()["latest_id"]
+    client.post(
+        f"/v1/admin/events/{demo.id}/simulate-change",
+        json={"match_id": str(match.id), "court_label": "Court 9"},
+        headers=ADMIN,
+    )
+    notice = client.post(
+        f"/v1/admin/events/{demo.id}/announcements",
+        json={"title": "TLS pool moved", "body": "Pool A plays in Hall C.", "category": "schedule", "division_id": str(division.id)},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/announcements/{notice['id']}/publish", headers=ADMIN)
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()["data"]
+    assert [(c["event_type"], c["division_id"]) for c in feed] == [
+        ("announcement_published", str(division.id)),
+        ("court_changed", str(division.id)),
+    ]
 
 
 def aes_source(client, fetch) -> str:

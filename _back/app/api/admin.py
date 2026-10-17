@@ -214,6 +214,23 @@ def update_venue(venue_id: str, body: VenueIn, request: Request, db: DB, princip
     return {"data": P.venue_public(venue)}
 
 
+class CourtIn(BaseModel):
+    area: str | None = Field(None, max_length=100)
+
+
+@router.patch("/courts/{court_id}")
+def update_court(court_id: str, body: CourtIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    court = db.get(Court, parse_uuid(court_id))
+    if court is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    require_event_role(principal, court.venue.event_id, STAFF)
+    before = court.area
+    court.area = (body.area or "").strip() or None
+    audit(db, request, principal, "court.update", court.venue.event_id, court, area=[before, court.area])
+    db.commit()
+    return {"data": P.court_public(court)}
+
+
 EVENT_KEY = Field(None, min_length=8, max_length=300, pattern=r"^[A-Za-z0-9_-]+$")
 
 

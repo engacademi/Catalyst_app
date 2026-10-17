@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
-import { formatDay, formatTime } from "@/lib/format";
+import { courtPlace, formatDay, formatTime } from "@/lib/format";
+import type { Labels } from "@/lib/labels";
 import { useNow } from "@/lib/now";
 import { Badge } from "./ui";
 
@@ -22,6 +23,7 @@ const CHANGE_LABELS: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Teams confirmed",
+  next_match_set: "Next match set",
 };
 
 export function StatusBadge({ status }: { status: Match["status"] }) {
@@ -54,15 +56,23 @@ function TeamLine({
   won,
   highlight,
   sets,
+  label,
 }: {
   p: Participant;
   won: number | undefined;
   highlight: boolean;
   sets: (number | null)[];
+  label?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <span className={`truncate ${highlight ? "font-semibold" : ""} ${p.team_name ? "" : "italic text-muted"}`}>
+        {label && (
+          <>
+            <span className="mr-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand-strong">{label}</span>
+            <span className="sr-only">, </span>
+          </>
+        )}
         {name(p)}
         {!p.team_name && p.placeholder && <span className="sr-only"> (placeholder until results decide)</span>}
       </span>
@@ -80,13 +90,16 @@ export function MatchCard({
   match,
   eventId,
   followed = [],
+  labels = {},
   showDay = false,
 }: {
   match: Match;
   eventId: string;
   followed?: string[];
+  labels?: Labels;
   showDay?: boolean;
 }) {
+  const labelOf = (p: Participant) => (p.entry_id && followed.includes(p.entry_id) ? labels[p.entry_id] : undefined);
   const start = match.estimated_start ?? match.scheduled_start;
   const isFollowed = (p: Participant) => !!p.entry_id && followed.includes(p.entry_id);
   const homeSets = match.sets.map((s) => s.home);
@@ -107,12 +120,12 @@ export function MatchCard({
         </span>
         <span className="flex items-center gap-1 text-muted">
           <MapPin aria-hidden className="h-4 w-4" />
-          {match.court ? `${match.court.label}, ${match.court.venue_name}` : "Court to be confirmed"}
+          {match.court ? `${courtPlace(match.court)}, ${match.court.venue_name}` : "Court to be confirmed"}
         </span>
       </div>
       <div className="space-y-1">
-        <TeamLine p={match.home} won={match.sets_won?.home} highlight={isFollowed(match.home)} sets={homeSets} />
-        <TeamLine p={match.away} won={match.sets_won?.away} highlight={isFollowed(match.away)} sets={awaySets} />
+        <TeamLine p={match.home} won={match.sets_won?.home} highlight={isFollowed(match.home)} sets={homeSets} label={labelOf(match.home)} />
+        <TeamLine p={match.away} won={match.sets_won?.away} highlight={isFollowed(match.away)} sets={awaySets} label={labelOf(match.away)} />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
         <StatusBadge status={match.status} />

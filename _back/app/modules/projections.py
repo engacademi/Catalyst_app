@@ -68,6 +68,7 @@ def court_public(court: Court | None) -> dict[str, Any] | None:
     return {
         "id": str(court.id),
         "label": court.label,
+        "area": court.area,
         "venue_id": str(court.venue_id),
         "venue_name": court.venue.name,
     }
@@ -81,7 +82,7 @@ def venue_public(venue: Venue) -> dict[str, Any]:
         "accessible_entrance": venue.accessible_entrance,
         "directions": venue.directions,
         "map_url": venue.map_url,
-        "courts": [{"id": str(c.id), "label": c.label} for c in venue.courts],
+        "courts": [{"id": str(c.id), "label": c.label, "area": c.area} for c in venue.courts],
     }
 
 
@@ -149,6 +150,11 @@ def match_public(match: Match, event: Event, latest_change: ChangeEvent | None =
             {"set_number": s.set_number, "home": s.home_score, "away": s.away_score} for s in match.sets
         ],
         "sets_won": sets_won(match),
+        "work_entry": (
+            {"entry_id": str(match.work_entry.id), "team_name": match.work_entry.team_name}
+            if match.work_entry
+            else None
+        ),
         "source": {
             "id": str(match.source.id),
             "name": match.source.name,

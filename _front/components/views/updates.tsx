@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { Megaphone, RefreshCw } from "lucide-react";
+import { CalendarCheck, Megaphone, RefreshCw } from "lucide-react";
 import type { Change, Match } from "@/lib/api";
-import { useFollows, useLastSeen } from "@/lib/follows";
+import { useDivisionFollows, useFollows, useLastSeen } from "@/lib/follows";
 import { formatRelative, formatTime } from "@/lib/format";
 import { useChanges } from "@/lib/queries";
 import { Badge, EmptyState, ErrorState, Loading, PageTitle } from "../ui";
@@ -16,7 +16,18 @@ const TITLES: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Teams confirmed",
+  next_match_set: "Next match set",
 };
+
+type Filled = { entry_id: string; team_name: string; placeholder: string | null; opponent: string | null };
+
+// "Gold medal vs Venom Havoc, Court 12, 2:00 pm", told from the followed team's side.
+function nextMatchLine(c: Change, followed: string[], tz: string): string {
+  const d = c.diff as { filled?: Filled[]; round?: string | null; court?: string | null; scheduled_start?: string | null };
+  const filled = d.filled?.find((f) => followed.includes(f.entry_id)) ?? d.filled?.[0];
+  if (!filled) return "";
+  return [`${d.round ?? filled.team_name} vs ${filled.opponent ?? "TBD"}`, d.court ?? "court to be confirmed", formatTime(d.scheduled_start ?? null, tz)].join(", ");
+}
 
 function matchLine(m: Match | undefined) {
   if (!m) return "";
@@ -37,6 +48,7 @@ function detail(c: Change, m: Match | undefined): string {
 export function UpdatesView({ eventId }: { eventId: string }) {
   const query = useChanges(eventId);
   const { ids } = useFollows(eventId);
+  const { ids: divisionIds } = useDivisionFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
   const latest = query.data?.latest_id ?? 0;
 
@@ -51,15 +63,22 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   if (query.error) return <ErrorState error={query.error} />;
 
   // Filtering happens here on the device, so the server never learns who follows what.
-  const relevant = query.data.data.filter((c) => c.entry_ids.length === 0 || c.entry_ids.some((e) => ids.includes(e)));
+  const relevant = query.data.data.filter(
+    (c) =>
+      c.entry_ids.length === 0 ||
+      c.entry_ids.some((e) => ids.includes(e)) ||
+      (c.division_id !== null && divisionIds.includes(c.division_id)),
+  );
 
   return (
     <div>
-      <PageTitle subtitle="Event-wide notices plus changes to the teams you follow.">Updates</PageTitle>
+      <PageTitle subtitle="Event-wide notices plus changes to the teams and divisions you follow.">Updates</PageTitle>
       <div aria-live="polite">
         {relevant.length === 0 ? (
           <EmptyState title="Nothing new">
-            {ids.length ? "Changes to your teams' matches will appear here." : "Follow teams to see changes to their matches here."}
+            {ids.length || divisionIds.length
+              ? "Changes to your teams' and divisions' matches will appear here."
+              : "Follow teams or divisions to see changes to their matches here."}
           </EmptyState>
         ) : (
           <ol className="space-y-2">
@@ -80,6 +99,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
                 );
               }
               const m = query.data.matches[c.entity_id];
+              const nextMatch = c.event_type === "next_match_set";
               return (
                 <li key={c.id}>
                   <Link
@@ -87,12 +107,23 @@ export function UpdatesView({ eventId }: { eventId: string }) {
                     className={`block rounded-xl border bg-surface p-4 ${isNew ? "border-brand" : "border-border"}`}
                   >
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                      <RefreshCw aria-hidden className="h-4 w-4 text-warn" /> {TITLES[c.event_type] ?? "Match updated"}
+                      {nextMatch ? (
+                        <CalendarCheck aria-hidden className="h-4 w-4 text-brand" />
+                      ) : (
+                        <RefreshCw aria-hidden className="h-4 w-4 text-warn" />
+                      )}{" "}
+                      {TITLES[c.event_type] ?? "Match updated"}
                       {isNew && <Badge tone="brand">New</Badge>}
                       {c.simulated && <Badge tone="warn">Simulated</Badge>}
                     </p>
-                    <p className="mt-1 text-sm">{matchLine(m)}</p>
-                    <p className="text-sm text-muted">{detail(c, m)}</p>
+                    {nextMatch ? (
+                      <p className="mt-1 text-sm">{nextMatchLine(c, ids, m?.timezone ?? "America/Toronto")}</p>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-sm">{matchLine(m)}</p>
+                        <p className="text-sm text-muted">{detail(c, m)}</p>
+                      </>
+                    )}
                     <p className="mt-2 text-xs text-muted">{formatRelative(c.occurred_at)}</p>
                   </Link>
                 </li>

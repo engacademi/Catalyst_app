@@ -22,7 +22,8 @@ type WithSources<T> = { data: T; sources: SourceInfo[] };
 export const keys = {
   events: ["events"] as const,
   event: (id: string) => ["event", id] as const,
-  myDay: (id: string, entries: string[]) => ["my-day", id, [...entries].sort().join(",")] as const,
+  myDay: (id: string, entries: string[], divisions: string[] = []) =>
+    ["my-day", id, [...entries].sort().join(","), [...divisions].sort().join(",")] as const,
   teams: (id: string, q: string, division: string) => ["teams", id, q, division] as const,
   matches: (id: string, params: string) => ["matches", id, params] as const,
   entry: (id: string) => ["entry", id] as const,
@@ -40,11 +41,14 @@ export function useEvent(eventId: string) {
   return useQuery({ queryKey: keys.event(eventId), queryFn: () => apiGet<WithSources<EventDetail>>(`/v1/events/${eventId}`) });
 }
 
-export function useMyDay(eventId: string, entryIds: string[]) {
+export function useMyDay(eventId: string, entryIds: string[], divisionIds: string[] = []) {
   return useQuery({
-    queryKey: keys.myDay(eventId, entryIds),
-    queryFn: () => apiGet<WithSources<MyDay>>(`/v1/events/${eventId}/my-day?entry_ids=${entryIds.join(",")}`),
-    enabled: entryIds.length > 0,
+    queryKey: keys.myDay(eventId, entryIds, divisionIds),
+    queryFn: () =>
+      apiGet<WithSources<MyDay>>(
+        `/v1/events/${eventId}/my-day?entry_ids=${entryIds.join(",")}&division_ids=${divisionIds.join(",")}`,
+      ),
+    enabled: entryIds.length > 0 || divisionIds.length > 0,
   });
 }
 

@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from app.models import (
     ChangeEvent,
     Event,
+    EventEntry,
     Match,
     Organization,
     RosterPublication,
@@ -113,10 +114,37 @@ def test_result_and_placeholder_resolution(db, setup):
     match = db.scalar(select(Match))
     assert match.scheduled_start is None
     commit(db, run(db, event, source, "matches", matches_csv("F1,15U Boys D1,2027-04-09T10:00,Hall A,Court 1,T1,T3,,,completed,25-20 23-25 15-11")))
-    assert set(changes(db)) == {"time_changed", "result_posted", "status_changed", "participants_resolved"}
+    assert set(changes(db)) == {"time_changed", "result_posted", "status_changed", "next_match_set"}
     db.refresh(match)
     assert match.result_state == "final"
     assert [(s.home_score, s.away_score) for s in match.sets] == [(25, 20), (23, 25), (15, 11)]
+
+
+ROUND_HEADER = "external_match_id,division,round,scheduled_start,venue,court,home_entry_id,away_entry_id,home_placeholder,away_placeholder,status,set_scores\n"
+
+
+def test_filled_placeholder_announces_next_match_set_once(db, setup):
+    event, source = setup
+    commit(db, run(db, event, source, "entries", ENTRIES))
+    bracket = ROUND_HEADER + "G1,15U Boys D1,Gold medal,2027-04-09T14:00,Hall A,Court 12,{home},T2,{placeholder},,scheduled,\n"
+    commit(db, run(db, event, source, "matches", bracket.format(home="", placeholder="W7").encode()))
+    assert changes(db) == []
+
+    filled = bracket.format(home="T1", placeholder="").encode()
+    commit(db, run(db, event, source, "matches", filled))
+    change = db.scalar(select(ChangeEvent))
+    thunder = str(db.scalar(select(EventEntry.id).where(EventEntry.team_name == "Lakeshore Thunder")))
+    assert change.event_type == "next_match_set"
+    assert change.entry_ids == [thunder]
+    assert change.diff == {
+        "filled": [{"entry_id": thunder, "team_name": "Lakeshore Thunder", "placeholder": "W7", "opponent": "Kingston Tide"}],
+        "round": "Gold medal",
+        "court": "Court 12 (Hall A)",
+        "scheduled_start": "2027-04-09T14:00:00-04:00",
+    }
+
+    commit(db, run(db, event, source, "matches", filled))
+    assert changes(db) == ["next_match_set"]
 
 
 def test_stale_preview_is_rejected(db, setup):
@@ -151,3 +179,19 @@ T1,2,Jordan B.,https://example.org/b.jpg,no
     commit(db, run(db, event, source, "rosters", roster, consent_review_ref="REVIEW-1"))
     published = db.scalar(select(RosterPublication).where(RosterPublication.state == "published"))
     assert [p["photo_url"] for p in published.public_players] == ["https://example.org/a.jpg", None]
+
+
+WORK_HEADER = "external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,work_entry_id,status\n"
+
+
+def test_work_team_is_imported_and_must_be_a_known_entry(db, setup):
+    event, source = setup
+    commit(db, run(db, event, source, "entries", ENTRIES))
+    commit(db, run(db, event, source, "matches", (WORK_HEADER + "M1,15U Boys D1,2027-04-08T09:00,Hall A,Court 1,T1,T2,T3,scheduled\n").encode()))
+    match = db.scalar(select(Match))
+    summit = db.scalar(select(EventEntry).where(EventEntry.team_name == "Summit Strikers"))
+    assert match.work_entry_id == summit.id
+
+    unknown = run(db, event, source, "matches", (WORK_HEADER + "M1,15U Boys D1,2027-04-08T09:00,Hall A,Court 1,T1,T2,T9,scheduled\n").encode())
+    assert unknown.rows[0]["action"] == "error"
+    assert "unknown work_entry_id 'T9'" in unknown.rows[0]["errors"][0]

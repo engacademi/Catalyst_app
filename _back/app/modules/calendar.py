@@ -45,7 +45,10 @@ def build_ics(event: Event, matches: list[Match], *, uid_domain: str, assumed_mi
         names = []
         for p in match.participants:
             names.append(p.entry.team_name if p.entry else (p.placeholder_label or "TBD"))
-        court = f"{match.court.label}, {match.court.venue.name}" if match.court else "Court to be confirmed"
+        court = "Court to be confirmed"
+        if match.court:
+            place = f"{match.court.label} · {match.court.area}" if match.court.area else match.court.label
+            court = f"{place}, {match.court.venue.name}"
         description = (
             f"Snapshot exported {now.strftime('%Y-%m-%d %H:%M')} UTC from {match.source.name}. "
             "Times can change: check the event companion for the current schedule. "

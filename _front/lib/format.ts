@@ -1,3 +1,5 @@
+import type { Venue } from "./api";
+
 export function formatTime(iso: string | null, timeZone: string): string {
   if (!iso) return "Time to be confirmed";
   return new Intl.DateTimeFormat("en-CA", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
@@ -32,4 +34,20 @@ export function dayKey(iso: string | null, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
     new Date(iso),
   );
+}
+
+type Court = { label: string; area: string | null };
+
+/** "Court 53 · Hall C" when the court has an area, otherwise just "Court 53". */
+export function courtPlace(court: Court): string {
+  return court.area ? `${court.label} · ${court.area}` : court.label;
+}
+
+/** Courts grouped by area in first-seen order; courts without an area come last under `null`. */
+export function courtsByArea(courts: Venue["courts"]): [string | null, Venue["courts"]][] {
+  const groups = new Map<string | null, Venue["courts"]>();
+  for (const c of [...courts].sort((a, b) => Number(!a.area) - Number(!b.area))) {
+    groups.set(c.area, [...(groups.get(c.area) ?? []), c]);
+  }
+  return [...groups];
 }

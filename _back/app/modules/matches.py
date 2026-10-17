@@ -35,6 +35,7 @@ def match_load_options():
         selectinload(Match.court).selectinload(Court.venue),
         selectinload(Match.division),
         selectinload(Match.source),
+        selectinload(Match.work_entry),
     )
 
 
@@ -102,6 +103,7 @@ class MatchState:
     sets: list[tuple[int | None, int | None]] = field(default_factory=list)
     source_revision: str | None = None
     source_updated_at: datetime | None = None
+    work_entry_id: uuid.UUID | None = None
 
 
 def _slot(match: Match, slot: str) -> Slot:
@@ -124,12 +126,13 @@ def current_state(match: Match) -> MatchState:
         sets=[(s.home_score, s.away_score) for s in match.sets],
         source_revision=match.source_revision,
         source_updated_at=match.source_updated_at,
+        work_entry_id=match.work_entry_id,
     )
 
 
 def changed_fields(before: MatchState, after: MatchState) -> list[str]:
     fields = []
-    for name in ("division_id", "court_id", "round_label", "scheduled_start", "estimated_start", "status", "sets"):
+    for name in ("division_id", "court_id", "round_label", "scheduled_start", "estimated_start", "status", "sets", "work_entry_id"):
         if getattr(before, name) != getattr(after, name):
             fields.append(name)
     if (before.home, before.away) != (after.home, after.away):
@@ -142,6 +145,30 @@ def _court_label(db: Session, court_id: uuid.UUID | None) -> str | None:
         return None
     court = db.get(Court, court_id)
     return f"{court.label} ({court.venue.name})" if court else None
+
+
+def _fills(before: Slot, after: Slot) -> bool:
+    return before.entry_id is None and bool(before.placeholder) and after.entry_id is not None
+
+
+def _filled_placeholders(db: Session, before: MatchState, after: MatchState) -> list[dict]:
+    """Slots that held a placeholder and now hold an entry, with the opponent as attendees would read it."""
+    filled = []
+    for slot, other in (("home", "away"), ("away", "home")):
+        was, now = getattr(before, slot), getattr(after, slot)
+        if not _fills(was, now):
+            continue
+        opponent = getattr(after, other)
+        opponent_entry = db.get(EventEntry, opponent.entry_id) if opponent.entry_id else None
+        filled.append(
+            {
+                "entry_id": str(now.entry_id),
+                "team_name": db.get(EventEntry, now.entry_id).team_name,
+                "placeholder": was.placeholder,
+                "opponent": opponent_entry.team_name if opponent_entry else opponent.placeholder,
+            }
+        )
+    return filled
 
 
 def _result_state(before: MatchState, after: MatchState, previous: str) -> str:
@@ -180,6 +207,7 @@ def apply_match_state(
     match.scheduled_start = after.scheduled_start
     match.estimated_start = after.estimated_start
     match.status = after.status
+    match.work_entry_id = after.work_entry_id
     match.source_revision = after.source_revision
     match.source_updated_at = after.source_updated_at
     match.observed_at = utcnow()
@@ -225,8 +253,23 @@ def apply_match_state(
     if "sets" in fields:
         kind = "result_corrected" if match.result_state == "corrected" else "result_posted"
         events.append((kind, {"sets": [before.sets, after.sets]}))
+    filled = []
     if "participants" in fields:
-        events.append(("participants_resolved", {}))
+        filled = _filled_placeholders(db, before, after)
+        if any(b != a for b, a in ((before.home, after.home), (before.away, after.away)) if not _fills(b, a)):
+            events.append(("participants_resolved", {}))
+    if filled:
+        events.append(
+            (
+                "next_match_set",
+                {
+                    "filled": filled,
+                    "round": after.round_label,
+                    "court": _court_label(db, after.court_id),
+                    "scheduled_start": iso(after.scheduled_start),
+                },
+            )
+        )
 
     created = []
     for event_type, diff in events:
@@ -237,7 +280,8 @@ def apply_match_state(
             entity_revision=match.revision,
             event_type=event_type,
             diff=diff,
-            entry_ids=entry_ids,
+            # Only followers of the newly placed entry hear that their next match is set.
+            entry_ids=[f["entry_id"] for f in filled] if event_type == "next_match_set" else entry_ids,
             simulated=simulated,
         )
         db.add(change)

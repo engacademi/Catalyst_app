@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Participant } from "@/lib/api";
-import { formatDay, formatRelative, formatTime } from "@/lib/format";
+import { courtPlace, formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { StatusBadge } from "../match-card";
@@ -16,6 +16,7 @@ const LABELS: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Teams confirmed",
+  next_match_set: "Next match set",
 };
 
 function describe(change: Change, timeZone: string): string {
@@ -27,6 +28,10 @@ function describe(change: Change, timeZone: string): string {
       return `${formatTime(d.scheduled_start?.[0] as string | null, timeZone)} → ${formatTime(d.scheduled_start?.[1] as string | null, timeZone)}`;
     case "status_changed":
       return `${d.status?.[0]} → ${d.status?.[1]}`;
+    case "next_match_set": {
+      const filled = (change.diff.filled ?? []) as { placeholder: string | null; team_name: string }[];
+      return filled.map((f) => `${f.placeholder ?? "TBD"} → ${f.team_name}`).join(", ");
+    }
     default:
       return "";
   }
@@ -71,7 +76,7 @@ export function MatchView({ eventId, matchId }: { eventId: string; matchId: stri
           <MapPin aria-hidden className="h-4 w-4 text-brand" />
           {m.court ? (
             <Link href={`/events/${eventId}/guide#venue-${m.court.venue_id}`} className="underline">
-              {m.court.label}, {m.court.venue_name}
+              {courtPlace(m.court)}, {m.court.venue_name}
             </Link>
           ) : (
             "Court to be confirmed"

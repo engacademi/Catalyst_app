@@ -7,6 +7,7 @@ import { Search } from "lucide-react";
 import { useFollows } from "@/lib/follows";
 import { useEvent, useTeams } from "@/lib/queries";
 import { FollowButton } from "../follow-button";
+import { FollowDivisionButton } from "../follow-division-button";
 import { EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
 export function TeamsView({ eventId }: { eventId: string }) {
@@ -19,6 +20,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
   const event = useEvent(eventId);
   const teams = useTeams(eventId, q, division);
   const { ids } = useFollows(eventId);
+  const selectedDivision = event.data?.data.divisions.find((d) => d.id === division);
 
   // Keep the search in the URL so it survives refresh and can be shared.
   useEffect(() => {
@@ -41,7 +43,20 @@ export function TeamsView({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <PageTitle subtitle={ids.length ? `Following ${ids.length}` : "Tap Follow on every team you care about."}>
+      <PageTitle
+        subtitle={
+          ids.length ? (
+            <>
+              Following {ids.length} ·{" "}
+              <Link href={`/events/${eventId}/my-teams`} className="font-semibold text-brand underline">
+                My teams
+              </Link>
+            </>
+          ) : (
+            "Tap Follow on every team you care about."
+          )
+        }
+      >
         Teams
       </PageTitle>
       <div className="space-y-2">
@@ -71,6 +86,14 @@ export function TeamsView({ eventId }: { eventId: string }) {
             ))}
           </select>
         </label>
+        {selectedDivision && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+            <p className="text-sm">
+              Follow <span className="font-semibold">{selectedDivision.name}</span> to see all its matches in My Day.
+            </p>
+            <FollowDivisionButton eventId={eventId} divisionId={selectedDivision.id} name={selectedDivision.name} />
+          </div>
+        )}
       </div>
 
       <div className="mt-4" aria-live="polite">

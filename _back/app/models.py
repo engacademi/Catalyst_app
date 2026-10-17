@@ -117,6 +117,7 @@ class Court(UUIDPk, Base):
 
     venue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("venues.id", ondelete="CASCADE"))
     label: Mapped[str] = mapped_column(String(50))
+    area: Mapped[str | None] = mapped_column(String(100))
 
     venue: Mapped[Venue] = relationship(back_populates="courts")
 
@@ -192,6 +193,8 @@ class Match(UUIDPk, Base):
     external_id: Mapped[str] = mapped_column(String(200))
     division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id", ondelete="SET NULL"))
     court_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courts.id", ondelete="SET NULL"))
+    # The work team the source assigns to referee this match, if any.
+    work_entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id", ondelete="SET NULL"))
     round_label: Mapped[str | None] = mapped_column(String(100))
     scheduled_start: Mapped[datetime | None]
     estimated_start: Mapped[datetime | None]
@@ -206,6 +209,7 @@ class Match(UUIDPk, Base):
 
     division: Mapped[Division | None] = relationship()
     court: Mapped[Court | None] = relationship()
+    work_entry: Mapped["EventEntry | None"] = relationship()
     source: Mapped[Source] = relationship()
     participants: Mapped[list["MatchParticipant"]] = relationship(
         back_populates="match", order_by="MatchParticipant.slot.desc()", cascade="all, delete-orphan"
@@ -217,6 +221,7 @@ class Match(UUIDPk, Base):
     __table_args__ = (
         UniqueConstraint("source_id", "external_id"),
         Index("ix_matches_event_start", "event_id", "scheduled_start"),
+        Index("ix_matches_work_entry", "work_entry_id"),
     )
 
 

@@ -24,7 +24,7 @@ export type Venue = {
   accessible_entrance: string | null;
   directions: string | null;
   map_url: string | null;
-  courts: { id: string; label: string }[];
+  courts: { id: string; label: string; area: string | null }[];
 };
 
 export type EventSummary = {
@@ -63,6 +63,7 @@ export type Change = {
   event_type: string;
   diff: Record<string, unknown>;
   entry_ids: string[];
+  division_id: string | null;
   simulated: boolean;
   occurred_at: string;
 };
@@ -77,13 +78,14 @@ export type Match = {
   scheduled_start: string | null;
   estimated_start: string | null;
   timezone: string;
-  court: { id: string; label: string; venue_id: string; venue_name: string } | null;
+  court: { id: string; label: string; area: string | null; venue_id: string; venue_name: string } | null;
   home: Participant;
   away: Participant;
   sets: { set_number: number; home: number | null; away: number | null }[];
   sets_won: { home: number; away: number } | null;
   source: { id: string; name: string; mode: string; observed_at: string; source_updated_at: string | null; freshness: Freshness };
   latest_change: Change | null;
+  work_entry: { entry_id: string; team_name: string } | null;
 };
 
 export type Announcement = {
@@ -125,6 +127,8 @@ export type Partner = {
 
 export type RosterPlayer = { jersey: number | null; display_name: string; position: string | null; photo_url: string | null };
 
+export type WorkDuty = { match_id: string; entry_id: string };
+
 export type MyDay = {
   next_match_id: string | null;
   next_by_entry: Record<string, string>;
@@ -133,8 +137,17 @@ export type MyDay = {
   completed_ids: string[];
   conflicts: { match_ids: string[]; different_venues: boolean }[];
   assumed_match_minutes: number;
+  work_duties: WorkDuty[];
   entries: Entry[];
+  division_sections: DivisionSection[];
   matches: Record<string, Match>;
+};
+
+export type DivisionSection = {
+  division: Division;
+  upcoming_ids: string[];
+  awaiting_schedule_ids: string[];
+  completed_ids: string[];
 };
 
 export class ApiError extends Error {
