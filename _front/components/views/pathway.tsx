@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +12,7 @@ import { FreshnessNote } from "../freshness";
 import { EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
 export function PathwayView({ eventId }: { eventId: string }) {
+  const hydrated = useHydrated();
   const event = useEvent(eventId);
   const [chosen, choose] = useState("");
   const params = useSearchParams();
@@ -28,6 +30,7 @@ export function PathwayView({ eventId }: { eventId: string }) {
       }>(`/v1/events/${eventId}/pathway?division_id=${division}`),
     enabled: !!division,
   });
+  if (!hydrated) return <Loading />;
   return (
     <div>
       <PageTitle subtitle="Follow the official pool and playoff path, including positions still to be decided.">

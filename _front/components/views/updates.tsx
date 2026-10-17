@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
 import { useEffect } from "react";
@@ -45,6 +46,7 @@ function detail(c: Change, m: Match | undefined): string {
 }
 
 export function UpdatesView({ eventId }: { eventId: string }) {
+  const hydrated = useHydrated();
   const query = useChanges(eventId);
   const { ids, divisionIds } = useFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
@@ -57,7 +59,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
     return () => clearTimeout(t);
   }, [latest, lastSeen, markSeen]);
 
-  if (query.isPending) return <Loading label="Loading updates" />;
+  if (!hydrated || query.isPending) return <Loading label="Loading updates" />;
   if (query.error) return <ErrorState error={query.error} />;
 
   // Filtering happens here on the device, so the server never learns who follows what.
@@ -84,7 +86,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
               : "Follow teams to see changes to their matches here."}
           </EmptyState>
         ) : (
-          <ol className="space-y-2">
+          <ol className="updates-list">
             {relevant.map((c) => {
               const isNew = c.id > lastSeen;
               if (c.entity_type === "announcement") {
@@ -93,7 +95,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
                 return (
                   <li
                     key={c.id}
-                    className={`rounded-xl border bg-surface p-4 ${isNew ? "border-brand" : "border-border"}`}
+                    className={`update-card ${isNew ? "update-card-new" : ""}`}
                   >
                     <p className="flex items-center gap-2 text-sm font-semibold">
                       <Megaphone aria-hidden className="h-4 w-4 text-brand" />{" "}
@@ -112,7 +114,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
                 <li key={c.id}>
                   <Link
                     href={`/events/${eventId}/matches/${c.entity_id}`}
-                    className={`block rounded-xl border bg-surface p-4 ${isNew ? "border-brand" : "border-border"}`}
+                    className={`update-card ${isNew ? "update-card-new" : ""}`}
                   >
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                       <RefreshCw aria-hidden className="h-4 w-4 text-warn" />{" "}

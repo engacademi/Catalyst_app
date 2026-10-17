@@ -1,12 +1,15 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 import Link from "next/link";
 import { useFollows, useTeamLabel } from "@/lib/follows";
 import { useEntry, useEvent } from "@/lib/queries";
 import { Card, PageTitle, Loading, ErrorState } from "../ui";
 import { FollowButton } from "../follow-button";
 export function MyTeamsView({ eventId }: { eventId: string }) {
+  const hydrated = useHydrated();
   const { directTeamIds, divisionIds, toggle } = useFollows(eventId);
   const event = useEvent(eventId);
+  if (!hydrated) return <Loading />;
   return (
     <div>
       <PageTitle subtitle="One follow list for this event. Private labels stay on this device.">
@@ -18,7 +21,7 @@ export function MyTeamsView({ eventId }: { eventId: string }) {
       >
         Find more teams & divisions →
       </Link>
-      <ul className="space-y-3">
+      <ul className="team-grid">
         {directTeamIds.map((id) => (
           <li key={id}>
             <LabelEditor eventId={eventId} id={id} />

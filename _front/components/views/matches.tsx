@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -31,6 +32,7 @@ const FILTERS = [
 ] as const;
 
 export function MatchesView({ eventId }: { eventId: string }) {
+  const hydrated = useHydrated();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -69,20 +71,19 @@ export function MatchesView({ eventId }: { eventId: string }) {
     groups.set(key, [...(groups.get(key) ?? []), m]);
   }
 
+  if (!hydrated) return <Loading />;
   return (
     <div>
-      <PageTitle>Matches</PageTitle>
+      <PageTitle subtitle="Every court. Every team. The latest published schedule and results.">
+        Match centre
+      </PageTitle>
       <Link
         href={`/events/${eventId}/pathway`}
         className="mb-4 inline-flex min-h-11 items-center rounded-full border border-brand bg-surface px-4 text-sm font-semibold text-brand"
       >
         View pool & playoff path →
       </Link>
-      <div
-        role="group"
-        aria-label="Match status"
-        className="grid grid-cols-4 gap-1 rounded-full border border-border bg-surface p-1"
-      >
+      <div role="group" aria-label="Match status" className="status-tabs">
         {STATUS_TABS.map((t) => (
           <button
             key={t.value}
@@ -96,7 +97,7 @@ export function MatchesView({ eventId }: { eventId: string }) {
         ))}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="filter-panel mt-4">
         <Select
           label="Venue"
           value={params.get("venue_id") ?? ""}
@@ -165,7 +166,7 @@ export function MatchesView({ eventId }: { eventId: string }) {
                       list[0].timezone,
                     )}
               </SectionTitle>
-              <ul className="space-y-2">
+              <ul className="match-list">
                 {list.map((m) => (
                   <li key={m.id}>
                     <MatchCard match={m} eventId={eventId} followed={ids} />

@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
 import { ArrowLeft, Clock, MapPin } from "lucide-react";
@@ -56,8 +57,9 @@ export function MatchView({
   eventId: string;
   matchId: string;
 }) {
+  const hydrated = useHydrated();
   const query = useMatch(matchId);
-  if (query.isPending) return <Loading label="Loading match" />;
+  if (!hydrated || query.isPending) return <Loading label="Loading match" />;
   if (query.error) return <ErrorState error={query.error} />;
   const m = query.data.data;
 
@@ -72,7 +74,7 @@ export function MatchView({
       <p className="text-sm text-muted">
         {[m.division?.name, m.round_label].filter(Boolean).join(" · ")}
       </p>
-      <h1 className="mt-1 text-xl font-bold leading-snug">
+      <h1 className="mt-3 font-display text-2xl font-bold leading-snug sm:text-3xl">
         <Team p={m.home} eventId={eventId} />{" "}
         <span className="font-normal text-muted">vs</span>{" "}
         <Team p={m.away} eventId={eventId} />
@@ -125,7 +127,7 @@ export function MatchView({
       )}
       <SectionTitle>Score</SectionTitle>
       {m.sets.length ? (
-        <Card className="p-0">
+        <Card className="overflow-x-auto p-0">
           <table className="w-full text-center text-sm tabular-nums">
             <caption className="sr-only">Set scores</caption>
             <thead className="border-b border-border text-xs text-muted">
@@ -197,7 +199,7 @@ export function MatchView({
       )}
 
       <p className="mt-6 text-xs text-muted">
-        From {m.source.name}. Seen by Courtside{" "}
+        From {m.source.name}. Seen by Olley{" "}
         {formatRelative(m.source.observed_at)}
         {m.source.source_updated_at
           ? `; source updated ${formatRelative(m.source.source_updated_at)}`

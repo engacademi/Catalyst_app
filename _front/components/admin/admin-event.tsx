@@ -107,25 +107,45 @@ export function AdminEvent({ eventId }: { eventId: string }) {
       </div>
       <FormError error={update.error} />
 
-      <div
-        role="group"
-        aria-label="Event tools"
-        className="mt-4 flex gap-1 overflow-x-auto border-b border-border"
-      >
+      <div role="tablist" aria-label="Event tools" className="staff-tabs">
         {tabs.map((t) => (
           <button
             key={t}
 
-            aria-pressed={tab === t}
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`min-h-11 shrink-0 border-b-2 px-3 text-sm ${tab === t ? "border-brand font-semibold text-brand" : "border-transparent text-muted"}`}
+            id={`staff-tab-${t.replaceAll(" ", "-")}`}
+            aria-controls="staff-panel"
+            tabIndex={tab === t ? 0 : -1}
+            onKeyDown={(e) => {
+              const index = tabs.indexOf(t);
+              let next = index;
+              if (e.key === "ArrowRight") next = (index + 1) % tabs.length;
+              else if (e.key === "ArrowLeft")
+                next = (index - 1 + tabs.length) % tabs.length;
+              else if (e.key === "Home") next = 0;
+              else if (e.key === "End") next = tabs.length - 1;
+              else return;
+              e.preventDefault();
+              setTab(tabs[next]);
+              e.currentTarget.parentElement
+                ?.querySelectorAll("button")
+                [next]?.focus();
+            }}
           >
             {t}
           </button>
         ))}
       </div>
 
-      <div className="pt-4">
+      <div
+        id="staff-panel"
+        className="pt-4"
+        role="tabpanel"
+        aria-labelledby={`staff-tab-${tab.replaceAll(" ", "-")}`}
+        tabIndex={0}
+      >
         {tab === "Announcements" && <AnnouncementsPanel event={event} />}
         {tab === "Imports" && <ImportsPanel event={event} />}
         {tab === "Content" && <ContentPanel event={event} />}

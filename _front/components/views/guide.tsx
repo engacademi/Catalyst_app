@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 
 import {
   Accessibility,
@@ -14,7 +15,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useGuide } from "@/lib/queries";
-import { Badge, Card, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
+import {
+  Badge,
+  Card,
+  ErrorState,
+  Loading,
+  PageTitle,
+  SectionTitle,
+} from "../ui";
 
 const ICONS: Record<string, LucideIcon> = {
   parking: Car,
@@ -27,8 +35,9 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 export function GuideView({ eventId }: { eventId: string }) {
+  const hydrated = useHydrated();
   const query = useGuide(eventId);
-  if (query.isPending) return <Loading label="Loading guide" />;
+  if (!hydrated || query.isPending) return <Loading label="Loading guide" />;
   if (query.error) return <ErrorState error={query.error} />;
   const { venues, items, partners } = query.data.data;
   const general = items.filter((i) => i.kind !== "officials");
@@ -38,17 +47,24 @@ export function GuideView({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <PageTitle>Event guide</PageTitle>
+      <PageTitle subtitle="Find your court, grab a bite, and feel at home at the venue.">
+        Around the venue
+      </PageTitle>
 
       <SectionTitle>Venues</SectionTitle>
-      <div className="space-y-2">
+      <div className="grid gap-4">
         {venues.map((v) => (
           <Card key={v.id}>
-            <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">{v.name}</h3>
+            <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">
+              {v.name}
+            </h3>
             {v.address && <p className="text-sm text-muted">{v.address}</p>}
             {v.accessible_entrance && (
               <p className="mt-2 flex gap-2 text-sm">
-                <Accessibility aria-hidden className="h-4 w-4 shrink-0 text-brand" />
+                <Accessibility
+                  aria-hidden
+                  className="h-4 w-4 shrink-0 text-brand"
+                />
                 <span>
                   <span className="font-medium">Accessible entrance: </span>
                   {v.accessible_entrance}
@@ -61,9 +77,18 @@ export function GuideView({ eventId }: { eventId: string }) {
                 <span>{v.directions}</span>
               </p>
             )}
-            {v.courts.length > 0 && <p className="mt-2 text-sm text-muted">Courts: {v.courts.map((c) => c.label).join(", ")}</p>}
+            {v.courts.length > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                Courts: {v.courts.map((c) => c.label).join(", ")}
+              </p>
+            )}
             {v.map_url && (
-              <a href={v.map_url} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand underline" rel="noopener" target="_blank">
+              <a
+                href={v.map_url}
+                className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand underline"
+                rel="noopener"
+                target="_blank"
+              >
                 Open map <ExternalLink aria-hidden className="h-3.5 w-3.5" />
                 <span className="sr-only">(opens in a new tab)</span>
               </a>
@@ -73,7 +98,7 @@ export function GuideView({ eventId }: { eventId: string }) {
       </div>
 
       <SectionTitle>Getting around</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         {general.map((i) => {
           const Icon = ICONS[i.kind] ?? LifeBuoy;
           return (
@@ -83,8 +108,14 @@ export function GuideView({ eventId }: { eventId: string }) {
               </h3>
               <p className="mt-1 whitespace-pre-line text-sm">{i.body}</p>
               {i.link_url && (
-                <a href={i.link_url} className="mt-2 inline-block text-sm font-semibold text-brand underline" rel="noopener" target="_blank">
-                  More information<span className="sr-only"> (opens in a new tab)</span>
+                <a
+                  href={i.link_url}
+                  className="mt-2 inline-block text-sm font-semibold text-brand underline"
+                  rel="noopener"
+                  target="_blank"
+                >
+                  More information
+                  <span className="sr-only"> (opens in a new tab)</span>
                 </a>
               )}
             </Card>
@@ -95,7 +126,7 @@ export function GuideView({ eventId }: { eventId: string }) {
       {offers.length > 0 && (
         <>
           <SectionTitle>Tickets, merchandise and the 50/50</SectionTitle>
-          <div className="space-y-2">
+          <div className="grid gap-4">
             {offers.map((p) => (
               <Card key={p.id}>
                 <div className="flex items-start gap-3">
@@ -107,7 +138,11 @@ export function GuideView({ eventId }: { eventId: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{p.name}</p>
                     <p className="text-sm">{p.body}</p>
-                    {p.booth_location && <p className="mt-1 text-sm text-muted">Find it: {p.booth_location}</p>}
+                    {p.booth_location && (
+                      <p className="mt-1 text-sm text-muted">
+                        Find it: {p.booth_location}
+                      </p>
+                    )}
                     {p.link_url && (
                       <a
                         href={p.link_url}
@@ -115,11 +150,14 @@ export function GuideView({ eventId }: { eventId: string }) {
                         target="_blank"
                         className="mt-2 inline-flex min-h-11 items-center gap-1 rounded-full border border-brand px-4 text-sm font-semibold text-brand"
                       >
-                        Go to seller&apos;s site <ExternalLink aria-hidden className="h-3.5 w-3.5" />
+                        Go to seller&apos;s site{" "}
+                        <ExternalLink aria-hidden className="h-3.5 w-3.5" />
                         <span className="sr-only">(opens in a new tab)</span>
                       </a>
                     )}
-                    {p.seller_note && <p className="mt-1 text-xs text-muted">{p.seller_note}</p>}
+                    {p.seller_note && (
+                      <p className="mt-1 text-xs text-muted">{p.seller_note}</p>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -132,19 +170,36 @@ export function GuideView({ eventId }: { eventId: string }) {
         <>
           <SectionTitle>
             <span className="flex items-center gap-2">
-              <Whistle aria-hidden className="h-4 w-4 text-brand" /> Referees and scorekeepers
+              <Whistle aria-hidden className="h-4 w-4 text-brand" /> Referees
+              and scorekeepers
             </span>
           </SectionTitle>
           {officials.map((i) => (
             <Card key={i.id} className="mb-2">
               <p className="font-semibold">{i.title}</p>
               <p className="mt-1 whitespace-pre-line text-sm">{i.body}</p>
-              {i.link_url && <a href={i.link_url} target="_blank" rel="noopener" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline">Open official resource<span className="sr-only"> (opens in a new tab)</span></a>}
+              {i.link_url && (
+                <a
+                  href={i.link_url}
+                  target="_blank"
+                  rel="noopener"
+                  className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline"
+                >
+                  Open official resource
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
             </Card>
           ))}
           <p className="text-sm">
             Officials can sign in to see their own court assignments in the{" "}
-            <a href="/admin/assignments" className="font-semibold text-brand underline">officials area</a>.
+            <a
+              href="/admin/assignments"
+              className="font-semibold text-brand underline"
+            >
+              officials area
+            </a>
+            .
           </p>
         </>
       )}
@@ -152,16 +207,26 @@ export function GuideView({ eventId }: { eventId: string }) {
       {sponsors.length > 0 && (
         <>
           <SectionTitle>Event partners</SectionTitle>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {sponsors.map((p) => (
               <Card key={p.id}>
                 <Badge>Sponsored</Badge>
                 <p className="mt-2 font-semibold">{p.name}</p>
                 <p className="text-sm">{p.body}</p>
-                {p.booth_location && <p className="mt-1 text-sm text-muted">Booth: {p.booth_location}</p>}
+                {p.booth_location && (
+                  <p className="mt-1 text-sm text-muted">
+                    Booth: {p.booth_location}
+                  </p>
+                )}
                 {p.link_url && (
-                  <a href={p.link_url} rel="noopener sponsored" target="_blank" className="mt-2 inline-block text-sm font-semibold text-brand underline">
-                    Visit {p.name}<span className="sr-only"> (opens in a new tab)</span>
+                  <a
+                    href={p.link_url}
+                    rel="noopener sponsored"
+                    target="_blank"
+                    className="mt-2 inline-block text-sm font-semibold text-brand underline"
+                  >
+                    Visit {p.name}
+                    <span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 )}
               </Card>

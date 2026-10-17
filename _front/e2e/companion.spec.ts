@@ -45,7 +45,7 @@ test("division follows persist; labels stay private and divisions stay below own
     .fill("Maya's team");
   await page.goto(base + "/my-day");
   await expect(
-    page.getByRole("heading", { name: "Next match", exact: true }),
+    page.getByRole("heading", { name: "Next on court", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Maya's team", { exact: true }).first(),
@@ -116,7 +116,7 @@ test("staff schedule a division notice and manage an expiring court estimate", a
     page.getByText("Division briefing", { exact: true }).first(),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Courts & clock", exact: true })
+    .getByRole("tab", { name: "Courts & clock", exact: true })
     .click();
   await page.getByRole("combobox", { name: "Court", exact: true }).selectOption({ index: 1 });
   await page.getByLabel("Area label", { exact: true }).fill("Hall C");
@@ -133,6 +133,7 @@ test("staff schedule a division notice and manage an expiring court estimate", a
 test("core phone journeys have no serious accessibility findings or horizontal overflow", async ({
   page,
 }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(base + "/teams");
   await page
     .getByRole("button", { name: `Follow ${team.team_name}`, exact: true })

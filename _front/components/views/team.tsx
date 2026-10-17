@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -17,15 +18,16 @@ export function TeamView({
   eventId: string;
   entryId: string;
 }) {
+  const hydrated = useHydrated();
   const query = useEntry(entryId);
   const { ids } = useFollows(eventId);
-  if (query.isPending) return <Loading label="Loading team" />;
+  if (!hydrated || query.isPending) return <Loading label="Loading team" />;
   if (query.error) return <ErrorState error={query.error} />;
   const team = query.data.data;
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3">
+      <div className="team-profile flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">
             {team.team_name}
@@ -61,7 +63,7 @@ export function TeamView({
       </Link>
       <SectionTitle>Matches</SectionTitle>
       {team.matches.length ? (
-        <ul className="space-y-2">
+        <ul className="match-list">
           {team.matches.map((m) => (
             <li key={m.id}>
               <MatchCard

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
-import { formatDay, formatTime } from "@/lib/format";
+import { formatDay, formatTime, formatRelative } from "@/lib/format";
 import { useNow } from "@/lib/now";
+import { TeamAvatar } from "./brand";
 import { Badge } from "./ui";
 
 const STATUS: Record<
@@ -65,9 +66,10 @@ function TeamLine({
   sets: (number | null)[];
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className="match-team">
+      <TeamAvatar name={name(p)} small />
       <span
-        className={`truncate ${highlight ? "font-semibold" : ""} ${p.team_name ? "" : "italic text-muted"}`}
+        className={`match-team-name ${highlight ? "font-semibold" : ""} ${p.team_name ? "" : "italic text-muted"}`}
       >
         {name(p)}
         {!p.team_name && p.placeholder && (
@@ -75,11 +77,11 @@ function TeamLine({
         )}
       </span>
       {won !== undefined && (
-        <span className="flex shrink-0 items-center gap-2 font-mono text-sm tabular-nums">
+        <span className="match-score shrink-0">
           <span className="text-muted">
             {sets.map((s) => s ?? "–").join(" ")}
           </span>
-          <span className="w-4 text-right font-bold">{won}</span>
+          <span className="match-score-total">{won}</span>
         </span>
       )}
     </div>
@@ -105,13 +107,9 @@ export function MatchCard({
   return (
     <Link
       href={`/events/${eventId}/matches/${match.id}`}
-      className={`block rounded-xl border bg-surface p-4 transition hover:border-brand ${
-        match.status === "cancelled"
-          ? "border-danger/30 opacity-80"
-          : "border-border"
-      }`}
+      className={`match-card ${match.status === "cancelled" ? "match-card-cancelled" : ""}`}
     >
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+      <div className="match-card-header">
         <span className="flex items-center gap-1 font-semibold">
           <Clock aria-hidden className="h-4 w-4 text-brand" />
           {showDay && start ? `${formatDay(start, match.timezone)}, ` : ""}
@@ -157,7 +155,7 @@ export function MatchCard({
           sets={awaySets}
         />
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+      <div className="match-card-meta">
         <StatusBadge status={match.status} />
         <ChangeBadge change={match.latest_change} />
         {match.division && (
@@ -165,6 +163,12 @@ export function MatchCard({
         )}
         {match.round_label && <span>· {match.round_label}</span>}
       </div>
+      <p className="match-card-source">
+        From {match.source.name} ·{" "}
+        {match.source.freshness === "imported_snapshot"
+          ? "Imported snapshot"
+          : `Checked ${formatRelative(match.source.observed_at)}`}
+      </p>
     </Link>
   );
 }

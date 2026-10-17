@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -6,11 +7,13 @@ import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { useFollows } from "@/lib/follows";
 import { useEvent, useTeams } from "@/lib/queries";
+import { TeamAvatar } from "../brand";
 import { LoadMore } from "../load-more";
 import { FollowButton } from "../follow-button";
 import { EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
 export function TeamsView({ eventId }: { eventId: string }) {
+  const hydrated = useHydrated();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -40,6 +43,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
     router.replace(`${pathname}?${next}`, { scroll: false });
   };
 
+  if (!hydrated) return <Loading />;
   return (
     <div>
       <PageTitle
@@ -51,7 +55,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
       >
         Teams
       </PageTitle>
-      <div className="space-y-2">
+      <div className="filter-panel">
         <label className="relative block">
           <span className="sr-only">Search teams, clubs or divisions</span>
           <Search
@@ -128,18 +132,16 @@ export function TeamsView({ eventId }: { eventId: string }) {
             <p className="mb-2 text-xs text-muted">
               {teams.data!.total} team{teams.data!.total === 1 ? "" : "s"}
             </p>
-            <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+            <ul className="team-grid">
               {teams.data!.data.map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center justify-between gap-3 px-4 py-3"
-                >
+                <li key={t.id} className="team-tile">
+                  <TeamAvatar name={t.team_name} />
                   <Link
                     href={`/events/${eventId}/teams/${t.id}`}
                     className="min-w-0 flex-1"
                   >
-                    <p className="truncate font-semibold">{t.team_name}</p>
-                    <p className="truncate text-sm text-muted">
+                    <p className="break-words font-semibold">{t.team_name}</p>
+                    <p className="text-xs text-muted">
                       {[t.club_name, t.division?.name]
                         .filter(Boolean)
                         .join(" · ")}

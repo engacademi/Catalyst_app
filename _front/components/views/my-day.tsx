@@ -1,8 +1,10 @@
 "use client";
+import { useHydrated } from "@/lib/hydration";
 import Link from "next/link";
 import { API_BASE, type Match } from "@/lib/api";
 import { useFollows, useTeamLabel } from "@/lib/follows";
 import { useEvent, useMyDay } from "@/lib/queries";
+import { WelcomeBanner } from "../brand";
 import { MatchCard } from "../match-card";
 import { FreshnessNote } from "../freshness";
 import {
@@ -18,19 +20,32 @@ export function MyDayView({ eventId }: { eventId: string }) {
   const { directTeamIds, divisionIds } = useFollows(eventId);
   const query = useMyDay(eventId, directTeamIds);
   const event = useEvent(eventId);
+  const hydrated = useHydrated();
+  if (!hydrated) return <Loading label="Building your day" />;
   if (!directTeamIds.length && !divisionIds.length)
     return (
       <>
         <PageTitle>My Day</PageTitle>
-        <EmptyState title="Make the event yours">
-          <p>Follow your teams or a division to see what happens next.</p>
-          <Link
-            href={`/events/${eventId}/teams`}
-            className="mt-3 inline-flex min-h-11 items-center font-semibold text-brand underline"
-          >
-            Find teams & divisions →
+        <WelcomeBanner title="Your day starts with your teams." compact>
+          <p>
+            Follow the teams you love or a whole division. We&apos;ll keep your
+            next court close.
+          </p>
+          <Link href={`/events/${eventId}/teams`} className="primary-link">
+            Find your teams
           </Link>
-        </EmptyState>
+        </WelcomeBanner>
+        <div className="mt-5">
+          <EmptyState title="Make the event yours">
+            <p>Follow your teams or a division to see what happens next.</p>
+            <Link
+              href={`/events/${eventId}/teams`}
+              className="mt-3 inline-flex min-h-11 items-center font-semibold text-brand underline"
+            >
+              Find teams & divisions →
+            </Link>
+          </EmptyState>
+        </div>
       </>
     );
   const day = query.data?.data;
@@ -54,12 +69,12 @@ export function MyDayView({ eventId }: { eventId: string }) {
         ) : (
           day && (
             <>
-              <section aria-labelledby="next-match">
-                <h2
-                  id="next-match"
-                  className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted"
-                >
-                  Next match
+              <section
+                aria-labelledby="next-match"
+                className="next-match-feature"
+              >
+                <h2 id="next-match" className="eyebrow text-brand">
+                  Next on court
                 </h2>
                 {next ? (
                   <LabelledMatch
@@ -109,7 +124,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
                     Your team is assigned to officiate these matches by the
                     competition source.
                   </p>
-                  <ul className="space-y-2">
+                  <ul className="match-list">
                     {day.work_duties.map((m) => (
                       <li key={m.id}>
                         <Card className="border-info/30">
@@ -219,7 +234,7 @@ function MatchSection({
   return ids.length ? (
     <section>
       <SectionTitle>{title}</SectionTitle>
-      <ul className="space-y-3">
+      <ul className="match-list">
         {ids.map((id) => (
           <li key={id}>
             <LabelledMatch
@@ -246,7 +261,7 @@ function DivisionDay({
   return (
     <details
       onToggle={(e) => setOpen(e.currentTarget.open)}
-      className="rounded-xl border border-border bg-surface"
+      className="ui-card border border-border bg-surface"
     >
       <summary className="min-h-12 cursor-pointer p-4 text-sm font-semibold">
         {name}
