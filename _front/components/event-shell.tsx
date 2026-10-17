@@ -51,7 +51,8 @@ export function EventShell({ eventId, children }: { eventId: string; children: R
         {event?.demo_time && <DemoTimeBanner eventId={eventId} timeZone={event.timezone} />}
         {event?.replay && (
           <p role="status" className="bg-info-soft px-4 py-1 text-center text-xs font-medium text-info">
-            Replaying April results at demo time
+            Replaying {new Intl.DateTimeFormat("en-CA", { month: "long", timeZone: "UTC" }).format(new Date(event.start_date))}{" "}
+            results at demo time
           </p>
         )}
         {event?.is_demo && (
