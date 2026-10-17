@@ -8,7 +8,7 @@ T0 = datetime(2027, 4, 8, 13, 0, tzinfo=timezone.utc)
 VENUE_A, VENUE_B = uuid.uuid4(), uuid.uuid4()
 
 
-def match(start, home, away, status="scheduled", venue=VENUE_A):
+def match(start, home, away, status="scheduled", venue=VENUE_A, work=None):
     return SimpleNamespace(
         id=uuid.uuid4(),
         external_id=str(start),
@@ -16,6 +16,7 @@ def match(start, home, away, status="scheduled", venue=VENUE_A):
         scheduled_start=start,
         estimated_start=None,
         court=SimpleNamespace(venue_id=venue),
+        work_entry_id=work,
         participants=[SimpleNamespace(entry_id=home), SimpleNamespace(entry_id=away)],
     )
 
@@ -49,3 +50,20 @@ def test_unscheduled_and_finished_matches_are_kept_apart():
     assert result["awaiting_schedule_ids"] == [str(tbd.id)]
     assert result["completed_ids"] == [str(done.id)]
     assert result["next_match_id"] is None
+
+
+def test_work_duty_is_its_own_item_not_a_team_match():
+    a, x, y = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    own = match(T0 + timedelta(hours=1), a, x)
+    duty = match(T0, x, y, work=a)
+    result = build_my_day([own, duty], {a}, assumed_minutes=75)
+    assert result["work_duties"] == [{"match_id": str(duty.id), "entry_id": str(a)}]
+    assert result["upcoming_ids"] == [str(own.id)]
+    assert result["next_match_id"] == str(own.id)
+    assert result["conflicts"] == []
+
+
+def test_no_work_duty_when_source_assigns_none():
+    a, x = uuid.uuid4(), uuid.uuid4()
+    result = build_my_day([match(T0, a, x)], {a}, assumed_minutes=75)
+    assert result["work_duties"] == []

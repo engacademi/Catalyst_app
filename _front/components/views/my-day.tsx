@@ -9,6 +9,7 @@ import { dayKey, formatDay } from "@/lib/format";
 import { useMyDay } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
+import { WorkDuties } from "../work-duties";
 import { Card, EmptyState, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
 
 export function MyDayView({ eventId }: { eventId: string }) {
@@ -96,6 +97,8 @@ export function MyDayView({ eventId }: { eventId: string }) {
           ))}
         </section>
       )}
+
+      <WorkDuties duties={day.work_duties} matches={day.matches} showTeam={day.entries.length > 1} />
 
       {[...byDay.entries()].map(([key, matchIds]) => (
         <section key={key}>

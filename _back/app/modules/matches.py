@@ -35,6 +35,7 @@ def match_load_options():
         selectinload(Match.court).selectinload(Court.venue),
         selectinload(Match.division),
         selectinload(Match.source),
+        selectinload(Match.work_entry),
     )
 
 
@@ -102,6 +103,7 @@ class MatchState:
     sets: list[tuple[int | None, int | None]] = field(default_factory=list)
     source_revision: str | None = None
     source_updated_at: datetime | None = None
+    work_entry_id: uuid.UUID | None = None
 
 
 def _slot(match: Match, slot: str) -> Slot:
@@ -124,12 +126,13 @@ def current_state(match: Match) -> MatchState:
         sets=[(s.home_score, s.away_score) for s in match.sets],
         source_revision=match.source_revision,
         source_updated_at=match.source_updated_at,
+        work_entry_id=match.work_entry_id,
     )
 
 
 def changed_fields(before: MatchState, after: MatchState) -> list[str]:
     fields = []
-    for name in ("division_id", "court_id", "round_label", "scheduled_start", "estimated_start", "status", "sets"):
+    for name in ("division_id", "court_id", "round_label", "scheduled_start", "estimated_start", "status", "sets", "work_entry_id"):
         if getattr(before, name) != getattr(after, name):
             fields.append(name)
     if (before.home, before.away) != (after.home, after.away):
@@ -204,6 +207,7 @@ def apply_match_state(
     match.scheduled_start = after.scheduled_start
     match.estimated_start = after.estimated_start
     match.status = after.status
+    match.work_entry_id = after.work_entry_id
     match.source_revision = after.source_revision
     match.source_updated_at = after.source_updated_at
     match.observed_at = utcnow()

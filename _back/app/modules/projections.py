@@ -149,6 +149,11 @@ def match_public(match: Match, event: Event, latest_change: ChangeEvent | None =
             {"set_number": s.set_number, "home": s.home_score, "away": s.away_score} for s in match.sets
         ],
         "sets_won": sets_won(match),
+        "work_entry": (
+            {"entry_id": str(match.work_entry.id), "team_name": match.work_entry.team_name}
+            if match.work_entry
+            else None
+        ),
         "source": {
             "id": str(match.source.id),
             "name": match.source.name,

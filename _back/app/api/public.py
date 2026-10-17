@@ -173,6 +173,8 @@ def my_day(
     event = load_event(db, event_ref)
     followed = parse_uuid_list(entry_ids) or []
     matches = list(db.scalars(match_query(event.id, entry_ids=followed))) if followed else []
+    if followed:
+        matches += db.scalars(match_query(event.id).where(Match.work_entry_id.in_(followed)))
     entries = (
         db.scalars(
             select(EventEntry)

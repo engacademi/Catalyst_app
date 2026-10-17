@@ -212,3 +212,34 @@ def test_filled_placeholder_reaches_followers_updates_and_my_day(client, db, dem
     assert feed["data"][0]["diff"]["filled"][0]["team_name"] == "Lakeshore Thunder"
     my_day = client.get("/v1/events/demo-championships/my-day", params={"entry_ids": thunder}).json()["data"]
     assert str(gold.id) in my_day["matches"]
+
+
+def test_imported_work_team_shows_as_a_work_duty_in_my_day(client, db, demo):
+    detail = client.get(f"/v1/admin/events/{demo.id}", headers=ADMIN).json()["data"]
+    source = next(s["id"] for s in detail["sources"] if s["name"].startswith("Demo fixture A"))
+    start = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0).isoformat()
+    csv = (
+        "external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,work_entry_id,round,status\n"
+        f"15UB-D1-M2,15U Boys D1,{start},Hall A,Court 2,15UB-D1-3,15UB-D1-4,15UB-D1-1,Pool A,scheduled\n"
+    ).encode()
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": source, "kind": "matches"},
+        files={"file": ("matches.csv", csv, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+
+    thunder = entry_id(db, "Lakeshore Thunder")
+    data = client.get("/v1/events/demo-championships/my-day", params={"entry_ids": thunder}).json()["data"]
+    [duty] = data["work_duties"]
+    assert duty["entry_id"] == thunder
+    assert duty["match_id"] not in data["upcoming_ids"] + data["completed_ids"] + data["awaiting_schedule_ids"]
+    worked = data["matches"][duty["match_id"]]
+    assert (worked["home"]["team_name"], worked["away"]["team_name"]) == ("Cedar Ridge Rally", "Kingston Tide")
+    assert worked["court"]["label"] == "Court 2"
+    assert datetime.fromisoformat(worked["scheduled_start"]) == datetime.fromisoformat(start)
+    assert worked["work_entry"] == {"entry_id": thunder, "team_name": "Lakeshore Thunder"}
+
+    others = client.get("/v1/events/demo-championships/my-day", params={"entry_ids": entry_id(db, "North Bay Breakers")}).json()["data"]
+    assert others["work_duties"] == []
