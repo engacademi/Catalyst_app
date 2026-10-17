@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Tag, X } from "lucide-react";
-import { useFollows } from "@/lib/follows";
+import { useDivisionFollows, useFollows } from "@/lib/follows";
 import { LABEL_MAX_LENGTH, cleanLabel, useLabels } from "@/lib/labels";
-import { useMyDay } from "@/lib/queries";
+import { useEvent, useMyDay } from "@/lib/queries";
 import { EmptyState, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
 
 export function MyTeamsView({ eventId }: { eventId: string }) {
   const { ids, toggle } = useFollows(eventId);
   const { labelFor, setLabel, removeLabel } = useLabels(eventId);
   const query = useMyDay(eventId, ids);
+  const divisionFollows = useDivisionFollows(eventId);
+  const event = useEvent(eventId);
 
   const unfollow = (entryId: string) => {
     removeLabel(entryId);
@@ -77,6 +79,47 @@ export function MyTeamsView({ eventId }: { eventId: string }) {
                   onSave={(text) => setLabel(id, text)}
                   onRemove={() => removeLabel(id)}
                 />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <SectionTitle>Divisions</SectionTitle>
+      {divisionFollows.ids.length === 0 ? (
+        <EmptyState title="You aren't following any divisions">
+          Pick a division on the{" "}
+          <Link href={`/events/${eventId}/teams`} className="font-semibold text-brand underline">
+            Teams
+          </Link>{" "}
+          page to follow all its matches.
+        </EmptyState>
+      ) : event.isPending ? (
+        <Loading label="Loading your divisions" />
+      ) : event.error ? (
+        <ErrorState error={event.error} />
+      ) : (
+        <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+          {divisionFollows.ids.map((id) => {
+            const division = event.data.data.divisions.find((d) => d.id === id);
+            const name = division?.name ?? "Division no longer listed";
+            return (
+              <li key={id} className="flex items-center justify-between gap-3 px-4 py-3">
+                {division ? (
+                  <Link href={`/events/${eventId}/teams?division=${id}`} className="min-w-0 truncate font-semibold">
+                    {name}
+                  </Link>
+                ) : (
+                  <p className="min-w-0 truncate font-semibold italic text-muted">{name}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => divisionFollows.toggle(id)}
+                  aria-label={`Unfollow division ${name}`}
+                  className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full border border-border bg-surface px-3 text-sm font-medium text-brand-strong hover:border-danger hover:text-danger"
+                >
+                  <X aria-hidden className="h-4 w-4" /> Unfollow
+                </button>
               </li>
             );
           })}
