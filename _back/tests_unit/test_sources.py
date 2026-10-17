@@ -2,12 +2,12 @@ import json
 from pathlib import Path
 
 import pytest
+
 from app.adapters.aes import read_aes
-from app.adapters.live import parse_timu, fetch_text
 from app.adapters.csv_adapter import CsvAdapter
+from app.adapters.live import fetch_text, parse_timu
 from app.modules.operations import map_registration
 from app.modules.sync import _csv
-
 
 AES_KEY = "MjAyNl9PbnRhcmlvX0NoYW1waW9uc2hpcHNfX19FdmVudF8yX182djZHX19UTFNHX18xNVVCXw2"
 RECORDED = Path(__file__).parent.parent / "sample_data" / "aes_event2"
@@ -100,3 +100,54 @@ def test_registration_mapping_preserves_only_selected_fields():
     assert b"Contact" not in mapped and b"private@" not in mapped
     result = CsvAdapter().parse("rosters", mapped, timezone="America/Toronto")
     assert not result.errors and result.rows[0].data["jersey"] == 8
+
+
+def changed_recording(transform):
+    def get(url):
+        payload = json.loads(recorded()(url))
+        transform(url.split(AES_KEY, 1)[1], payload)
+        return json.dumps(payload)
+
+    return get
+
+
+@pytest.mark.parametrize("flag", [None, "false"])
+def test_aes_invalid_pool_flag_fails_instead_of_successful_empty_sync(flag):
+    def transform(path, payload):
+        if path.endswith("/playdays"):
+            if flag is None:
+                payload[0].pop("HasPools")
+            else:
+                payload[0]["HasPools"] = flag
+
+    with pytest.raises(ValueError):
+        read_aes({"event_key": AES_KEY}, get=changed_recording(transform))
+
+
+@pytest.mark.parametrize("bad_matches", [None, {}, "unavailable"])
+def test_aes_rejects_malformed_match_collections(bad_matches):
+    def transform(path, payload):
+        if path.startswith("/poolsheet/"):
+            payload["Matches"] = bad_matches
+
+    with pytest.raises(ValueError):
+        read_aes({"event_key": AES_KEY}, get=changed_recording(transform))
+
+
+def test_aes_rejects_missing_selected_division():
+    with pytest.raises(ValueError, match="Selected AES division missing"):
+        read_aes({"event_key": AES_KEY, "division_ids": ["missing"]}, get=recorded())
+
+
+def test_aes_partial_scores_do_not_assert_live_status_and_work_teams_survive():
+    def transform(path, payload):
+        if path == "/poolsheet/-50024":
+            match = payload["Matches"][0]
+            match["FirstTeamWon"] = match["SecondTeamWon"] = False
+            match["WorkTeamId"] = match["FirstTeamId"]
+
+    snap = read_aes({"event_key": AES_KEY}, get=changed_recording(transform))
+    match = next(m for m in snap.matches if m["work_entry_id"])
+    assert match["status"] == "scheduled"
+    assert match["set_scores"]
+    assert match["work_entry_id"] == match["home_entry_id"]

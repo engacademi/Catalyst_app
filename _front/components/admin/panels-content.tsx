@@ -1,4 +1,7 @@
 "use client";
+import { ContentEditor } from "./content-editor";
+import { VenueCourts } from "./court-editor";
+import { VenueEditor } from "./venue-editor";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -201,6 +204,38 @@ export function AnnouncementsPanel({ event }: { event: AdminEventData }) {
                   </div>
                   <p className="mt-2 font-semibold">{a.title}</p>
                   <p className="whitespace-pre-line text-sm">{a.body}</p>
+                  <ContentEditor
+                    key={`${a.id}-${a.revision}`}
+                    method="PATCH"
+                    path={`/v1/admin/announcements/${a.id}`}
+                    initial={{
+                      title: a.title,
+                      body: a.body,
+                      category: a.category,
+                      expected_revision: a.revision,
+                    }}
+                    fields={[
+                      {
+                        name: "title",
+                        label: "Title",
+                        required: true,
+                        minLength: 3,
+                        maxLength: 200,
+                      },
+                      {
+                        name: "body",
+                        label: "Message",
+                        multiline: true,
+                        required: true,
+                        maxLength: 4000,
+                      },
+                      {
+                        name: "category",
+                        label: "Category",
+                        options: ["general", "schedule", "venue", "safety"],
+                      },
+                    ]}
+                  />
                   <p className="mt-1 text-xs text-muted">
                     {a.publish_at
                       ? `Published ${formatRelative(a.publish_at)}`
@@ -278,6 +313,8 @@ function VenuesSection({ event }: { event: AdminEventData }) {
             <Card>
               <p className="font-semibold">{v.name}</p>
               <p className="text-sm text-muted">{v.address}</p>
+              <VenueEditor venue={v} />
+              <VenueCourts venue={v} />
               <p className="text-sm">
                 Courts:{" "}
                 {v.courts.map((c) => c.label).join(", ") ||
@@ -349,7 +386,7 @@ function VenuesSection({ event }: { event: AdminEventData }) {
 
 function GuideSection({ event }: { event: AdminEventData }) {
   const guide = useAdminQuery<{ data: { items: GuideItem[] } }>(
-    `/v1/events/${event.id}/guide`,
+    `/v1/admin/events/${event.id}/guide-items`,
   );
   const create = useAdminMutation(
     "POST",
@@ -368,19 +405,46 @@ function GuideSection({ event }: { event: AdminEventData }) {
   return (
     <section>
       <SectionTitle>Guide: parking, food, accessibility, help</SectionTitle>
-      {event.status !== "published" && (
-        <p className="mb-2 text-xs text-muted">
-          Guide items show here once the event is published.
-        </p>
-      )}
+
       <ul className="mb-3 space-y-2">
         {guide.data?.data.items.map((i) => (
           <li key={i.id}>
-            <Card className="flex items-start justify-between gap-3">
+            <Card>
               <div>
                 <Badge>{i.kind}</Badge>
                 <p className="mt-1 font-semibold">{i.title}</p>
                 <p className="text-sm">{i.body}</p>
+                <ContentEditor
+                  key={`${i.id}-${i.revision}`}
+                  path={`/v1/admin/guide-items/${i.id}`}
+                  initial={{
+                    kind: i.kind,
+                    title: i.title,
+                    body: i.body,
+                    link_url: i.link_url,
+                    venue_id: i.venue_id,
+                    sort: i.sort,
+                    expected_revision: i.revision,
+                  }}
+                  fields={[
+                    { name: "kind", label: "Type", options: GUIDE_KINDS },
+                    {
+                      name: "title",
+                      label: "Title",
+                      required: true,
+                      minLength: 2,
+                      maxLength: 200,
+                    },
+                    {
+                      name: "body",
+                      label: "Details",
+                      multiline: true,
+                      maxLength: 4000,
+                    },
+                    { name: "link_url", label: "Link", type: "url" },
+                    { name: "sort", label: "Display order", type: "number" },
+                  ]}
+                />
               </div>
               <SmallButton
                 tone="danger"
@@ -488,11 +552,49 @@ function PartnersSection({ event }: { event: AdminEventData }) {
       <ul className="mb-3 grid gap-2 sm:grid-cols-2">
         {list.data?.data.map((p) => (
           <li key={p.id}>
-            <Card className="flex items-start justify-between gap-3">
+            <Card className="space-y-3">
               <div>
                 <Badge>{p.kind}</Badge>
                 <p className="mt-1 font-semibold">{p.name}</p>
                 <p className="text-sm text-muted">{p.booth_location}</p>
+                <ContentEditor
+                  key={`${p.id}-${p.revision}`}
+                  path={`/v1/admin/partners/${p.id}`}
+                  initial={{
+                    kind: p.kind,
+                    name: p.name,
+                    body: p.body,
+                    link_url: p.link_url,
+                    logo_url: p.logo_url,
+                    booth_location: p.booth_location,
+                    seller_note: p.seller_note,
+                    sort: p.sort,
+                    active: p.active,
+                    expected_revision: p.revision,
+                  }}
+                  fields={[
+                    { name: "kind", label: "Type", options: PARTNER_KINDS },
+                    {
+                      name: "name",
+                      label: "Name",
+                      required: true,
+                      minLength: 2,
+                      maxLength: 200,
+                    },
+                    {
+                      name: "body",
+                      label: "Description",
+                      multiline: true,
+                      maxLength: 2000,
+                    },
+                    { name: "link_url", label: "Website", type: "url" },
+                    { name: "logo_url", label: "Logo URL" },
+                    { name: "booth_location", label: "Booth" },
+                    { name: "seller_note", label: "Seller note" },
+                    { name: "sort", label: "Display order", type: "number" },
+                    { name: "active", label: "Visible" },
+                  ]}
+                />
               </div>
               <SmallButton
                 tone="danger"

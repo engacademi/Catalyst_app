@@ -47,9 +47,9 @@ Staff upload a CSV for a source (entries, then matches, then rosters). The API c
 
 Rosters are published only with a consent review reference. Player photos appear only when the row marks them approved; otherwise the importer drops the URL before it reaches the database.
 
-Live AES, TIMU and MyTeam.click adapters are not built yet. They would emit the same normalized rows as the CSV parser once OVA has access and permission to use each feed. Until then a source can be marked `aes`, `timu` or `myteam` for labeling, and data still arrives by CSV.
+AES JSON and TIMU HTML adapters emit the same normalized rows as CSV imports and use the shared refresh/polling pipeline. MyTeam.click still requires a converted CSV export. Automatic polling requires both `authorized` and `auto_sync` in source configuration; `aes-load` performs an explicit refresh but does not enable automatic polling.
 
-To load a real event from AES, run `uv run python -m app.cli aes-load <event_key>` with the key from the AES event URL. It creates the event from AES (title, dates, venue from the event location, America/Toronto), adds an AES source with that `event_key`, syncs pool play into teams and matches. The event keeps AES's real dates and times. Running it again re-syncs the same event instead of creating another. Tests use the recorded Event 2 responses in `sample_data/aes_event2/` and never call AES.
+To load a real event from AES, run `uv run python -m app.cli aes-load <event_key>` with the key from the AES event URL. It creates the event from AES (title, dates, venue from the event location, America/Toronto), adds an AES source with that `event_key`, syncs pool play into teams and matches. The event keeps AES's real dates and times. The AES key identifies subsequent refreshes even if the upstream title changes. A title/slug collision with another source is refused; connect the source explicitly through the staff workspace instead. Existing staff content and venue coordinates are preserved. Tests use the recorded Event 2 responses in `sample_data/aes_event2/` and never call AES.
 
 ## Main endpoints
 
@@ -75,3 +75,11 @@ Staff roles are granted only from the CLI:
 uv run python -m app.cli grant --subject user_2abc... --role admin
 uv run python -m app.cli grant --subject user_2xyz... --role staff --event demo-championships
 ```
+
+## Compatibility with mobile flows (PRs 22 and 23)
+
+The `seed`, `seed-testing`, `grant` and `aes-load` commands coexist. Railway pre-deploy migrates through `0004` and seeds the two synthetic tournaments only; it does not fetch AES. Run `aes-load` explicitly for approved events. No additional migration or environment variable is required for AES.
+
+AES events use real dates and completed results, without a demo flag or replay clock. The April 2026 Championships therefore appears in Discover under Past or All dates, rather than Upcoming & ongoing. To include it in Nearby, use the staff venue editor to enter verified city/latitude/longitude. No coordinates are inferred from its name. PR 22's access controls also apply to AES events: local official-match edits return 409; update the schedule in AES and refresh. Staff can still edit venue, guide and sponsor content.
+
+The adapter currently loads pool play only. Bracket-only days are not fetched. Published partial set scores do not prove live status; only a winner confirms completion in the supported AES payload. Missing pool flags, malformed collections, missing selected divisions and unresolved participant IDs fail visibly.

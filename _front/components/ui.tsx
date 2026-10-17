@@ -1,3 +1,4 @@
+import { ApiError } from "@/lib/api";
 import type { ReactNode } from "react";
 import { AlertTriangle, Loader2, Volleyball } from "lucide-react";
 
@@ -81,11 +82,8 @@ export function ErrorState({ error }: { error: unknown }) {
     >
       <AlertTriangle aria-hidden className="h-5 w-5 shrink-0" />
       <div>
-        <p className="font-semibold">Couldn&apos;t load this right now.</p>
-        <p>
-          {message}. We&apos;ll keep trying. Nothing here means the schedule is
-          empty.
-        </p>
+        <p className="font-semibold">{error instanceof ApiError && [401,403].includes(error.status) ? "Account access needs attention" : "Couldn’t load this right now."}</p>
+        <p>{message}</p>
       </div>
     </div>
   );
@@ -111,7 +109,6 @@ export function EmptyState({
 
 export function PageTitle({
   children,
-  subtitle,
 }: {
   children: ReactNode;
   subtitle?: ReactNode;
@@ -119,7 +116,6 @@ export function PageTitle({
   return (
     <div className="page-heading">
       <h1 className="font-display">{children}</h1>
-      {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
     </div>
   );
 }

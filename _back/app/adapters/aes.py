@@ -8,14 +8,25 @@ import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
+
 from app.adapters.live import Snapshot, fetch_text
 
 
-def read_aes(config, get=fetch_text):
-    key = str(config.get("event_key", ""))
+def aes_event_url(event_key):
+    key = str(event_key)
     if not re.fullmatch("[A-Za-z0-9_=-]{1,300}", key):
         raise ValueError("Enter the AES event key from the official event URL")
-    base = "https://results.advancedeventsystems.com/api/event/" + quote(key, safe="")
+    return "https://results.advancedeventsystems.com/api/event/" + quote(key, safe="")
+
+
+def collection(value):
+    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
+        raise ValueError("AES collection format changed; previous data retained")
+    return value
+
+
+def read_aes(config, get=fetch_text):
+    base = aes_event_url(config.get("event_key", ""))
 
     def read(path=""):
         return json.loads(get(base + path))
@@ -46,19 +57,23 @@ def _read(config, read):
     )
     selected = {str(x) for x in config.get("division_ids", [])}
     entries, jobs = {}, []
-    for d in divisions:
+    for d in collection(divisions):
         did = str(d["DivisionId"])
         if selected and did not in selected:
             continue
         out.divisions.append(
             {"name": d["Name"], "code": d.get("CodeAlias"), "external_id": did}
         )
-        for day in read(f"/division/{quote(did, safe='')}/playdays"):
-            if not day.get("HasPools"):
+        for day in collection(read(f"/division/{quote(did, safe='')}/playdays")):
+            if not isinstance(day["HasPools"], bool):
+                raise TypeError("AES pool flag format changed")
+            if not day["HasPools"]:
                 continue
             date = day["DateTime"][:10]
-            for pool in read(f"/division/{quote(did, safe='')}/pools/{date}"):
-                for t in pool["Teams"]:
+            for pool in collection(
+                read(f"/division/{quote(did, safe='')}/pools/{date}")
+            ):
+                for t in collection(pool["Teams"]):
                     club = t.get("Club") or {}
                     entries.setdefault(
                         str(t["TeamId"]),
@@ -71,6 +86,8 @@ def _read(config, read):
                         },
                     )
                 jobs.append((str(pool["PlayId"]), d["Name"], pool.get("FullName")))
+    if selected and selected != {d["external_id"] for d in out.divisions}:
+        raise ValueError("Selected AES division missing; previous data retained")
     if len(jobs) > 2000:
         raise ValueError(
             "Select fewer AES divisions; one connection supports up to 2000 pools"
@@ -81,7 +98,7 @@ def _read(config, read):
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         for (_, division, pool_name), data in executor.map(sheet, jobs):
-            for m in data["Matches"]:
+            for m in collection(data["Matches"]):
                 sets = [
                     f"{s['FirstTeamScore']}-{s['SecondTeamScore']}"
                     for s in m.get("Sets") or []
@@ -91,7 +108,8 @@ def _read(config, read):
                 if m.get("FirstTeamWon") or m.get("SecondTeamWon"):
                     status = "completed"
                 else:
-                    status = "in_progress" if sets else "scheduled"
+                    # Published set scores alone do not confirm a match is live.
+                    status = "scheduled"
                 row = {
                     "external_match_id": str(m["MatchId"]),
                     "division": division,
@@ -109,6 +127,10 @@ def _read(config, read):
                 }
                 for side, prefix in (("home", "First"), ("away", "Second")):
                     tid = m.get(prefix + "TeamId")
+                    if tid is not None and str(tid) not in entries:
+                        raise ValueError(
+                            "AES match team missing; previous data retained"
+                        )
                     row[side + "_entry_id"] = str(tid) if tid is not None else ""
                     row[side + "_placeholder"] = (
                         ""

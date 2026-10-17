@@ -93,11 +93,13 @@ export function MatchCard({
   eventId,
   followed = [],
   showDay = false,
+  showSource = true,
 }: {
   match: Match;
   eventId: string;
   followed?: string[];
   showDay?: boolean;
+  showSource?: boolean;
 }) {
   const start = match.estimated_start ?? match.scheduled_start;
   const isFollowed = (p: Participant) =>
@@ -163,12 +165,14 @@ export function MatchCard({
         )}
         {match.round_label && <span>· {match.round_label}</span>}
       </div>
-      <p className="match-card-source">
-        From {match.source.name} ·{" "}
-        {match.source.freshness === "imported_snapshot"
-          ? "Imported snapshot"
-          : `Checked ${formatRelative(match.source.observed_at)}`}
-      </p>
+      {showSource && (
+        <p className="match-card-source">
+          From {match.source.name} ·{" "}
+          {match.source.freshness === "imported_snapshot"
+            ? "Imported snapshot"
+            : `Checked ${formatRelative(match.source.observed_at)}`}
+        </p>
+      )}
     </Link>
   );
 }

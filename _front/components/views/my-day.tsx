@@ -55,12 +55,6 @@ export function MyDayView({ eventId }: { eventId: string }) {
       <PageTitle subtitle="Your teams first. The wider competition just below.">
         My Day
       </PageTitle>
-      <Link
-        href={`/events/${eventId}/my-teams`}
-        className="mb-4 inline-flex min-h-11 items-center rounded-full border border-border bg-surface px-4 text-sm font-semibold text-brand"
-      >
-        Manage my teams & labels →
-      </Link>
       {!!directTeamIds.length &&
         (query.isPending ? (
           <Loading label="Building your day" />

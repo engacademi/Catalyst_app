@@ -17,6 +17,7 @@ from urllib.parse import quote
 
 from sqlalchemy import select
 
+from app.adapters.aes import aes_event_url
 from app.adapters.live import fetch_text
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
@@ -44,6 +45,7 @@ def grant(
             db.add(user)
             db.flush()
         import uuid
+
         from app.models import EventEntry
 
         entry = db.get(EventEntry, uuid.UUID(entry_id)) if entry_id else None
@@ -71,11 +73,24 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
     """Create or refresh an event from AES by its key."""
     from app.modules.sync import sync_source
 
+    url = aes_event_url(event_key)
     key = quote(event_key, safe="")
-    data = json.loads(get(f"https://results.advancedeventsystems.com/api/event/{key}"))
+    data = json.loads(get(url))
     slug = re.sub(r"[^a-z0-9]+", "-", data["Name"].lower()).strip("-")[:100]
     with get_sessionmaker()() as db:
-        event = db.scalar(select(Event).where(Event.slug == slug))
+        # The vendor key is the identity; titles can change or share a slug.
+        sources = list(db.scalars(select(Source).where(Source.mode == "aes")))
+        matching = [s for s in sources if s.config.get("event_key") == event_key]
+        if len(matching) > 1:
+            raise ValueError(
+                "Multiple AES sources use this key; resolve them before loading"
+            )
+        source = matching[0] if matching else None
+        event = db.get(Event, source.event_id) if source else None
+        if event is None and db.scalar(select(Event.id).where(Event.slug == slug)):
+            raise ValueError(
+                "Event slug already belongs to another source; connect AES in the staff workspace"
+            )
         if event is None:
             org = db.scalar(select(Organization).limit(1))
             if org is None:
@@ -103,19 +118,15 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
                         address=address.rstrip(")") or None,
                     )
                 )
-            db.add(
-                Source(
-                    event_id=event.id,
-                    name="AES",
-                    mode="aes",
-                    official_url=f"https://results.advancedeventsystems.com/event/{key}",
-                    config={"authorized": True, "event_key": event_key},
-                )
+            source = Source(
+                event_id=event.id,
+                name="AES",
+                mode="aes",
+                official_url=f"https://results.advancedeventsystems.com/event/{key}",
+                config={"authorized": True, "event_key": event_key},
             )
+            db.add(source)
         db.commit()
-        source = db.scalar(
-            select(Source).where(Source.event_id == event.id, Source.mode == "aes")
-        )
         result = sync_source(source.id)
         if not result["ok"]:
             sys.exit(result["message"])
@@ -126,6 +137,10 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser(
+        "seed-testing",
+        help="Add two varied synthetic tournaments without resetting data",
+    )
     seed_cmd = sub.add_parser("seed", help="Load the synthetic demo event")
     seed_cmd.add_argument(
         "--reset", action="store_true", help="Delete and recreate the demo event"
@@ -145,7 +160,13 @@ def main() -> None:
     aes_cmd.add_argument("event_key", help="The key in the AES event URL")
     args = parser.parse_args()
 
-    if args.command == "seed":
+    if args.command == "seed-testing":
+        from app.seed import seed_testing
+
+        with get_sessionmaker()() as db:
+            events = seed_testing(db)
+            print(f"Testing tournaments added: {len(events)}")
+    elif args.command == "seed":
         with get_sessionmaker()() as db:
             event = seed(db, reset=args.reset)
             print(f"Demo event ready: /events/{event.slug}")

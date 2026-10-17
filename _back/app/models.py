@@ -13,6 +13,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Identity,
     Index,
@@ -60,7 +61,7 @@ class User(UUIDPk, Base):
 
 
 class RoleGrant(UUIDPk, Base):
-    """admin: whole organization. staff: one event's content and imports. official: own assignments."""
+    """OVA grants event editing to staff, coaches and referees; assignments stay private."""
 
     __tablename__ = "role_grants"
 
@@ -103,6 +104,9 @@ class Venue(UUIDPk, Base):
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     address: Mapped[str | None] = mapped_column(String(300))
+    city: Mapped[str | None] = mapped_column(String(150))
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
     accessible_entrance: Mapped[str | None] = mapped_column(Text)
     directions: Mapped[str | None] = mapped_column(Text)
     map_url: Mapped[str | None] = mapped_column(String(500))
@@ -389,4 +393,22 @@ class AuditEntry(Base):
     new_revision: Mapped[int | None] = mapped_column(Integer)
     request_id: Mapped[str | None] = mapped_column(String(64))
     summary: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class AccountProfile(Base):
+    __tablename__ = "account_profiles"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    account_type: Mapped[str] = mapped_column(String(20), default="spectator")
+    officer_type: Mapped[str | None] = mapped_column(String(20))
+    team_entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id", ondelete="SET NULL"))
+    discoverable: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+
+class AccountFollow(Base):
+    __tablename__ = "account_follows"
+    __table_args__ = (Index("ix_account_follows_player", "player_id"),)
+    follower_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
