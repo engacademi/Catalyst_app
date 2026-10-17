@@ -1,58 +1,65 @@
 import json
+from pathlib import Path
+
 import pytest
 from app.adapters.aes import read_aes
 from app.adapters.live import parse_timu, fetch_text
 from app.adapters.csv_adapter import CsvAdapter
 from app.modules.operations import map_registration
+from app.modules.sync import _csv
 
 
-def test_aes_hierarchy_preserves_ids_scores_and_placeholders():
-    payloads = {
-        "": {"divisions": [{"id": 7, "name": "15U D1", "code": "15U"}]},
-        "/timestamp": {"updated": "v2"},
-        "/division/7/playdays": ["2026-04-19"],
-        "/division/7/pools/2026-04-19": [{"playId": 9, "name": "Gold"}],
-        "/poolsheet/9": {
-            "teams": [{"id": 1, "name": "Example A"}, {"id": 2, "name": "Example B"}],
-            "matches": [
-                {
-                    "id": 20,
-                    "homeTeamId": 1,
-                    "awayPlaceholder": "W7",
-                    "scheduledStart": "2026-04-19T10:00:00-04:00",
-                    "court": 53,
-                    "venueName": "Enercare",
-                    "sets": [{"home": 25, "away": 18}],
-                    "workTeamId": 2,
-                }
-            ],
-        },
-    }
-    root = "https://results.advancedeventsystems.com/api/event/key"
-    calls = []
+AES_KEY = "MjAyNl9PbnRhcmlvX0NoYW1waW9uc2hpcHNfX19FdmVudF8yX182djZHX19UTFNHX18xNVVCXw2"
+RECORDED = Path(__file__).parent.parent / "sample_data" / "aes_event2"
+
+
+def recorded(calls=None):
+    """Serve the recorded AES Event 2 responses by URL; tests never call AES live."""
 
     def get(url):
-        path = url.removeprefix(root)
-        calls.append(path)
-        return json.dumps(payloads[path])
+        path = url.split(AES_KEY, 1)[1].strip("/")
+        if calls is not None:
+            calls.append(path)
+        return (RECORDED / f"{path.replace('/', '_') or 'event'}.json").read_text()
 
-    snap = read_aes({"event_key": "key"}, get=get)
-    assert len(snap.entries) == 2 and snap.matches[0]["home_entry_id"] == "1"
-    assert (
-        snap.matches[0]["away_placeholder"] == "W7"
-        and snap.matches[0]["work_entry_id"] == "2"
-    )
-    assert snap.matches[0]["set_scores"] == "25-18"
-    calls.clear()
-    assert read_aes(
-        {
-            "event_key": "key",
-            "last_sync_success": True,
-            "last_timestamp": {"updated": "v2"},
-        },
-        get=get,
-    ).unchanged
-    assert calls == ["", "/timestamp"]
+    return get
+
+
+def test_aes_reads_recorded_event_teams_clubs_and_matches():
+    snap = read_aes({"event_key": AES_KEY}, get=recorded())
+    assert [(d["name"], d["code"]) for d in snap.divisions] == [
+        ("15U Boys Division 2", "15UB D2"),
+        ("TLS Girls Division 7", "TLSG D7"),
+    ]
+    assert len(snap.entries) == 46 and len(snap.matches) == 148
+    assert len({e["club_name"] for e in snap.entries}) == 38
+    rise = next(e for e in snap.entries if e["external_entry_id"] == "-53785")
+    assert rise["team_name"] == "Niagara Rapids Rise"
+    assert rise["club_name"] == "Niagara Rapids Volleyball Club"
+    match = next(m for m in snap.matches if m["external_match_id"] == "-50085")
+    assert match["home_entry_id"] == "-54264" and match["away_entry_id"] == "-54313"
+    assert (match["venue"], match["court"]) == ("Enercare Centre", "Court 51")
+    assert match["status"] == "completed" and match["set_scores"] == "25-11 25-10"
+    for kind, rows in (("entries", snap.entries), ("matches", snap.matches)):
+        parsed = CsvAdapter().parse(
+            kind, _csv(rows), timezone="America/Toronto", strict=True
+        )
+        assert not parsed.errors and not any(r.errors for r in parsed.rows)
+        if kind == "matches":
+            row = next(r for r in parsed.rows if r.external_id == "-50085")
+            assert row.data["scheduled_start"] == "2026-04-19T15:00:00-04:00"
+
+
+def test_aes_unchanged_timestamp_skips_the_hierarchy():
+    snap = read_aes({"event_key": AES_KEY}, get=recorded())
+    calls = []
+    config = {
+        "event_key": AES_KEY,
+        "last_sync_success": True,
+        "last_timestamp": snap.timestamp,
+    }
+    assert read_aes(config, get=recorded(calls)).unchanged
+    assert calls == ["", "timestamp"]
 
 
 def test_aes_changed_schema_does_not_become_empty_schedule():
