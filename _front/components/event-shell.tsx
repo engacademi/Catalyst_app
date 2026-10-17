@@ -49,6 +49,11 @@ export function EventShell({ eventId, children }: { eventId: string; children: R
           </div>
         </div>
         {event?.demo_time && <DemoTimeBanner eventId={eventId} timeZone={event.timezone} />}
+        {event?.replay && (
+          <p role="status" className="bg-info-soft px-4 py-1 text-center text-xs font-medium text-info">
+            Replaying April results at demo time
+          </p>
+        )}
         {event?.is_demo && (
           <p className="bg-warn-soft px-4 py-1 text-center text-xs font-medium text-warn">
             Demo event with fictional teams and simulated changes. Not a live feed.

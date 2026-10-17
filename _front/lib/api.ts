@@ -41,6 +41,8 @@ export type EventSummary = {
   /** The event's current time: demo time while it is on, otherwise the server's clock. */
   now: string;
   demo_time: boolean;
+  /** A finished AES event shown as it stood at demo time: later results stay hidden. */
+  replay: boolean;
 };
 
 export type EventDetail = EventSummary & {

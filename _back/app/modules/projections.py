@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.modules.clock import demo_time_on, event_now
 from app.modules.delays import estimated_start, expected_soon
+from app.modules.replay import replaying
 
 SNAPSHOT_MODES = {"manual_import", "demo_fixture"}
 
@@ -104,6 +105,8 @@ def event_public(event: Event) -> dict[str, Any]:
         # Screens use this instead of the device clock; demo_time says it isn't the real time.
         "now": iso(event_now(event)),
         "demo_time": demo_time_on(event),
+        # A finished AES event shown as it stood at demo time (modules/replay.py).
+        "replay": replaying(event),
     }
 
 
