@@ -129,7 +129,7 @@ const change = {
 async function fixtures(page: Page) {
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
-    const path = url.pathname;
+    const path = url.pathname.replace(/^\/api\/backend/, "");
     const wrap = (data: unknown) => ({ data, sources: [source] });
     let body: unknown;
     if (path === "/v1/events")
