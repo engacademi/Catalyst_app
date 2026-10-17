@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.api.public import load_event
 from app.core.auth import CurrentPrincipal, Principal, require_event_role
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.http import parse_uuid
 from app.models import (
@@ -39,6 +40,7 @@ from app.models import (
     utcnow,
 )
 from app.modules import projections as P
+from app.modules.clock import clear_demo_time, jump_demo_time, set_demo_time
 from app.modules.imports import commit_import, stage_import
 from app.modules.matches import (
     MATCH_STATUSES,
@@ -655,6 +657,55 @@ def simulate_change(event_id: str, body: SimulateIn, request: Request, db: DB, p
     event.revision += 1
     db.commit()
     return {"data": {"revision": match.revision, "change_events": [c.event_type for c in changes]}}
+
+
+# ---- demo clock ------------------------------------------------------------------------
+
+
+class DemoTimeIn(BaseModel):
+    demo_time: datetime
+
+
+class DemoJumpIn(BaseModel):
+    minutes: int = Field(15, ge=1, le=24 * 60)
+
+
+def demo_clock_event(db: Session, principal: Principal, event_id: str) -> Event:
+    event = staff_event(db, principal, event_id)
+    if not get_settings().demo_mode:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Demo time is only available when the API runs in demo mode")
+    return event
+
+
+@router.put("/events/{event_id}/demo-clock")
+def set_demo_clock(event_id: str, body: DemoTimeIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    event = demo_clock_event(db, principal, event_id)
+    if body.demo_time.tzinfo is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Demo time needs a time zone offset")
+    set_demo_time(event, body.demo_time)
+    audit(db, request, principal, "event.demo_time.set", event.id, event, demo_time=body.demo_time.isoformat())
+    db.commit()
+    return {"data": P.event_public(event)}
+
+
+@router.post("/events/{event_id}/demo-clock/jump")
+def jump_demo_clock(event_id: str, body: DemoJumpIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    event = demo_clock_event(db, principal, event_id)
+    if event.demo_time is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Set a demo time first")
+    jump_demo_time(event, body.minutes)
+    audit(db, request, principal, "event.demo_time.jump", event.id, event, minutes=body.minutes)
+    db.commit()
+    return {"data": P.event_public(event)}
+
+
+@router.delete("/events/{event_id}/demo-clock")
+def clear_demo_clock(event_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    event = staff_event(db, principal, event_id)
+    clear_demo_time(event)
+    audit(db, request, principal, "event.demo_time.clear", event.id, event)
+    db.commit()
+    return {"data": P.event_public(event)}
 
 
 # ---- audit -------------------------------------------------------------------------------

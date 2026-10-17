@@ -87,6 +87,9 @@ class Event(UUIDPk, Base):
     end_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | published | archived
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Demo clock: the event's time was demo_time at the real moment demo_time_set_at.
+    demo_time: Mapped[datetime | None]
+    demo_time_set_at: Mapped[datetime | None]
     revision: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)

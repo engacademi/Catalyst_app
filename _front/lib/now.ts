@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { useEvent } from "./queries";
 
 let now = Date.now();
 const listeners = new Set<() => void>();
@@ -28,4 +29,16 @@ export function useNow(): number {
     () => now,
     () => 0,
   );
+}
+
+/**
+ * The event's current time. While demo time is on it runs from the event's demo time
+ * instead of the device clock; otherwise it is the device clock.
+ */
+export function useEventNow(eventId: string): { now: number; demoTime: boolean } {
+  const device = useNow();
+  const { data, dataUpdatedAt } = useEvent(eventId);
+  const event = data?.data;
+  if (!event?.demo_time || !device) return { now: device, demoTime: false };
+  return { now: device + (Date.parse(event.now) - dataUpdatedAt), demoTime: true };
 }
