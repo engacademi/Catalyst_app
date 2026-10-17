@@ -38,7 +38,7 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/api/public.py` | Public reads under `/v1` |
 | `app/api/admin.py` | Staff workspace under `/v1/admin` |
 | `app/api/me.py` | Signed-in user's own data (official assignments) |
-| `app/cli.py` | `seed` and `grant` commands |
+| `app/cli.py` | `seed`, `grant` and `aes-load` commands |
 | `sample_data/` | Example CSVs and the column reference |
 
 ## How data gets in
@@ -48,6 +48,8 @@ Staff upload a CSV for a source (entries, then matches, then rosters). The API c
 Rosters are published only with a consent review reference. Player photos appear only when the row marks them approved; otherwise the importer drops the URL before it reaches the database.
 
 Live AES, TIMU and MyTeam.click adapters are not built yet. They would emit the same normalized rows as the CSV parser once OVA has access and permission to use each feed. Until then a source can be marked `aes`, `timu` or `myteam` for labeling, and data still arrives by CSV.
+
+To load a real event from AES, run `uv run python -m app.cli aes-load <event_key>` with the key from the AES event URL. It creates the event from AES (title, dates, venue from the event location, America/Toronto), adds an AES source with that `event_key`, syncs pool play into teams and matches, and sets the demo clock to 2026-04-19 09:40 Toronto time. The clock only runs on demo events, so the event is marked as one. Running it again re-syncs the same event instead of creating another. Tests use the recorded Event 2 responses in `sample_data/aes_event2/` and never call AES.
 
 ## Main endpoints
 
