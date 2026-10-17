@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { CalendarCheck, Megaphone, RefreshCw } from "lucide-react";
 import type { Change, Match } from "@/lib/api";
-import { useFollows, useLastSeen } from "@/lib/follows";
+import { useDivisionFollows, useFollows, useLastSeen } from "@/lib/follows";
 import { formatRelative, formatTime } from "@/lib/format";
 import { useChanges } from "@/lib/queries";
 import { Badge, EmptyState, ErrorState, Loading, PageTitle } from "../ui";
@@ -48,6 +48,7 @@ function detail(c: Change, m: Match | undefined): string {
 export function UpdatesView({ eventId }: { eventId: string }) {
   const query = useChanges(eventId);
   const { ids } = useFollows(eventId);
+  const { ids: divisionIds } = useDivisionFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
   const latest = query.data?.latest_id ?? 0;
 
@@ -62,15 +63,22 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   if (query.error) return <ErrorState error={query.error} />;
 
   // Filtering happens here on the device, so the server never learns who follows what.
-  const relevant = query.data.data.filter((c) => c.entry_ids.length === 0 || c.entry_ids.some((e) => ids.includes(e)));
+  const relevant = query.data.data.filter(
+    (c) =>
+      c.entry_ids.length === 0 ||
+      c.entry_ids.some((e) => ids.includes(e)) ||
+      (c.division_id !== null && divisionIds.includes(c.division_id)),
+  );
 
   return (
     <div>
-      <PageTitle subtitle="Event-wide notices plus changes to the teams you follow.">Updates</PageTitle>
+      <PageTitle subtitle="Event-wide notices plus changes to the teams and divisions you follow.">Updates</PageTitle>
       <div aria-live="polite">
         {relevant.length === 0 ? (
           <EmptyState title="Nothing new">
-            {ids.length ? "Changes to your teams' matches will appear here." : "Follow teams to see changes to their matches here."}
+            {ids.length || divisionIds.length
+              ? "Changes to your teams' and divisions' matches will appear here."
+              : "Follow teams or divisions to see changes to their matches here."}
           </EmptyState>
         ) : (
           <ol className="space-y-2">
