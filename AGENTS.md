@@ -16,3 +16,13 @@ Done when the work's commits are on its branch and `git status` in the main chec
 After the branch merges: `git worktree remove .worktrees/<branch>` then `git branch -d <branch>`.
 
 Continuing existing work: `git worktree list` shows the open worktrees; resume in the matching one.
+
+## Case study
+
+`docs/requirements/` holds the hackathon case study:
+
+- `source/`: the organizer's original files, kept exactly as received.
+- `resources.md`: index of every link and file, one row each.
+- `requirements.md`: structured requirements, each citing its resource.
+
+Read `requirements.md` before planning or building a feature. Record decisions as ADRs in `docs/adr/`.
