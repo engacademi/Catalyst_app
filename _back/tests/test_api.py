@@ -165,3 +165,30 @@ def test_demo_reset_deletes_cleanly(client, db, demo):
     fresh = seed(db, reset=True)
     assert fresh.id != demo.id
     assert client.get("/v1/events/demo-championships").json()["data"]["counts"]["entries"] == 12
+
+
+def test_filled_placeholder_reaches_followers_updates_and_my_day(client, db, demo):
+    gold = db.scalar(select(Match).where(Match.external_id == "15UB-D1-GOLD"))
+    thunder = entry_id(db, "Lakeshore Thunder")
+    assert str(gold.id) not in client.get("/v1/events/demo-championships/my-day", params={"entry_ids": thunder}).json()["data"]["matches"]
+    after = client.get("/v1/events/demo-championships/changes").json()["latest_id"]
+
+    start = gold.scheduled_start.isoformat()
+    csv = (
+        "external_match_id,division,round,scheduled_start,venue,court,home_entry_id,away_entry_id,home_placeholder,away_placeholder,status\n"
+        f"15UB-D1-GOLD,15U Boys D1,Gold medal,{start},{gold.court.venue.name},{gold.court.label},15UB-D1-1,,,2nd Pool A,scheduled\n"
+    ).encode()
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": str(gold.source_id), "kind": "matches"},
+        files={"file": ("matches.csv", csv, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()
+    assert [(c["event_type"], c["entry_ids"]) for c in feed["data"]] == [("next_match_set", [thunder])]
+    assert feed["data"][0]["diff"]["round"] == "Gold medal"
+    assert feed["data"][0]["diff"]["filled"][0]["team_name"] == "Lakeshore Thunder"
+    my_day = client.get("/v1/events/demo-championships/my-day", params={"entry_ids": thunder}).json()["data"]
+    assert str(gold.id) in my_day["matches"]
