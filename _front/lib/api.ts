@@ -1,6 +1,6 @@
-export const API_BASE = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+// Keep browser requests on the app's origin, including previews and file uploads.
+// next.config.ts forwards this fixed prefix to the configured FastAPI service.
+export const API_BASE = "/api/backend";
 
 export type Freshness =
   | "current"

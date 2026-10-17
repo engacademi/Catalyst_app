@@ -15,6 +15,14 @@ npm run dev
 
 Open http://localhost:3000. The seeded demo event lives at `/events/demo-championships`. Without a Clerk key, `/admin` shows a dev user picker (`dev-admin`, `dev-official`, or a guest with no roles).
 
+## API connection in deployments
+
+Set `API_BASE_URL` to the HTTPS FastAPI origin in both Vercel Production and Preview environments, then rebuild. The existing `NEXT_PUBLIC_API_BASE_URL` setting remains supported. Vercel builds fail with a configuration error if neither is set, rather than shipping requests to a visitor's localhost.
+
+Browsers use `/api/backend/v1/...` on the app's own origin. Next.js forwards that fixed prefix to FastAPI, including authorization headers, CSV uploads and calendar downloads. Authentication and role checks remain in FastAPI. New preview domains therefore do not need to be added to the backend CORS allowlist just to load data; Clerk's authorized-party checks still apply to signed-in requests.
+
+Run `npm run test:transport` for browser and HTTP regression checks against a local backend without CORS headers. These verify token forwarding, denied anonymous staff requests, CSV bodies and calendar attachments. `npm run test:ui` checks the application screens using fixtures.
+
 ## Screens
 
 | Route | What it does |
