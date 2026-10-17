@@ -257,6 +257,8 @@ def _post_delay(db: Session, request: Request, principal: Principal, event: Even
         court=court.label, minutes=notice.minutes, expires_at=P.iso(notice.expires_at),
         replaced=str(replaced.id) if replaced else None,
     )
+    if replaced:
+        record_change(db, replaced, DELAY_CLEARED)
     record_change(db, notice, DELAY_POSTED)
     return notice
 

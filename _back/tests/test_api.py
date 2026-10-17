@@ -559,6 +559,19 @@ def test_a_delay_reaches_no_one_when_nothing_on_the_court_is_still_to_play(clien
     assert len(feed) == 2
 
 
+def test_replacing_a_delay_tells_followers_the_old_one_is_cleared(client, demo, delay_court):
+    court = delay_court["court"]
+    first = client.post(f"/v1/admin/courts/{court}/delay-notices", json={"minutes": 20}, headers=ADMIN).json()["data"]
+    after = client.get("/v1/events/demo-championships/changes").json()["latest_id"]
+    second = client.post(f"/v1/admin/courts/{court}/delay-notices", json={"minutes": 35}, headers=ADMIN).json()["data"]
+
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()["data"]
+    assert sorted((c["event_type"], c["entity_id"]) for c in feed) == sorted(
+        [("delay_cleared", first["id"]), ("delay_posted", second["id"])]
+    )
+    assert all(c["entry_ids"] for c in feed)
+
+
 def test_staff_see_active_delay_notices_with_their_court(client, demo, delay_court):
     client.post(f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 20}, headers=ADMIN)
     replacement = client.post(
