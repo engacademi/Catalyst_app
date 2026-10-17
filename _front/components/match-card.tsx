@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
-import { courtPlace, formatDay, formatTime } from "@/lib/format";
+import { courtPlace, estimateLine, formatDay, formatTime } from "@/lib/format";
 import type { Labels } from "@/lib/labels";
 import { useNow } from "@/lib/now";
 import { Badge } from "./ui";
@@ -100,7 +100,8 @@ export function MatchCard({
   showDay?: boolean;
 }) {
   const labelOf = (p: Participant) => (p.entry_id && followed.includes(p.entry_id) ? labels[p.entry_id] : undefined);
-  const start = match.estimated_start ?? match.scheduled_start;
+  const start = match.scheduled_start;
+  const estimate = estimateLine(match);
   const isFollowed = (p: Participant) => !!p.entry_id && followed.includes(p.entry_id);
   const homeSets = match.sets.map((s) => s.home);
   const awaySets = match.sets.map((s) => s.away);
@@ -115,8 +116,8 @@ export function MatchCard({
         <span className="flex items-center gap-1 font-semibold">
           <Clock aria-hidden className="h-4 w-4 text-brand" />
           {showDay && start ? `${formatDay(start, match.timezone)}, ` : ""}
-          {formatTime(start, match.timezone)}
-          {match.estimated_start && <span className="font-normal text-muted">(estimated)</span>}
+          {estimate && start ? `Official ${formatTime(start, match.timezone)}` : formatTime(start, match.timezone)}
+          {estimate && <span className="font-normal text-warn">· {estimate}</span>}
         </span>
         <span className="flex items-center gap-1 text-muted">
           <MapPin aria-hidden className="h-4 w-4" />

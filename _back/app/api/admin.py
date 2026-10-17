@@ -29,6 +29,7 @@ from app.models import (
     AuditEntry,
     ChangeEvent,
     Court,
+    DelayNotice,
     Event,
     EventEntry,
     GuideItem,
@@ -41,7 +42,14 @@ from app.models import (
     utcnow,
 )
 from app.modules import projections as P
-from app.modules.clock import clear_demo_time, jump_demo_time, set_demo_time
+from app.modules.clock import clear_demo_time, event_now, jump_demo_time, set_demo_time
+from app.modules.delays import (
+    active_notices,
+    clear_notice,
+    is_active,
+    post_notice,
+    record_change,
+)
 from app.modules.imports import commit_import, stage_import
 from app.modules.matches import (
     MATCH_STATUSES,
@@ -231,6 +239,51 @@ def update_court(court_id: str, body: CourtIn, request: Request, db: DB, princip
     audit(db, request, principal, "court.update", court.venue.event_id, court, area=[before, court.area])
     db.commit()
     return {"data": P.court_public(court)}
+
+
+class DelayNoticeIn(BaseModel):
+    minutes: int = Field(ge=1, le=600)
+    duration_minutes: int = Field(60, ge=5, le=24 * 60)
+
+
+@router.post("/courts/{court_id}/delay-notices", status_code=201)
+def post_delay_notice(court_id: str, body: DelayNoticeIn, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    court = db.get(Court, parse_uuid(court_id))
+    if court is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    require_event_role(principal, court.venue.event_id, STAFF)
+    event = db.get(Event, court.venue.event_id)
+    notice, replaced = post_notice(
+        db, event, court.id, body.minutes, body.duration_minutes, principal.user.id, event_now(event)
+    )
+    audit(
+        db, request, principal, "delay_notice.post", event.id, notice,
+        court=court.label, minutes=notice.minutes, expires_at=P.iso(notice.expires_at),
+        replaced=str(replaced.id) if replaced else None,
+    )
+    record_change(db, notice, "delay_posted", 1)
+    db.commit()
+    return {"data": P.delay_notice_public(notice)}
+
+
+@router.get("/events/{event_id}/delay-notices")
+def list_delay_notices(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
+    event = staff_event(db, principal, event_id)
+    notices = active_notices(db, event.id, event_now(event)).values()
+    return {"data": [{**P.delay_notice_public(n), "court": P.court_public(n.court)} for n in notices]}
+
+
+@router.post("/delay-notices/{notice_id}/clear")
+def clear_delay_notice(notice_id: str, request: Request, db: DB, principal: CurrentPrincipal) -> dict:
+    notice = get_owned(db, principal, DelayNotice, notice_id)
+    event = db.get(Event, notice.event_id)
+    now = event_now(event)
+    if is_active(notice, now):
+        clear_notice(notice, principal.user.id, now)
+        audit(db, request, principal, "delay_notice.clear", event.id, notice, court=notice.court.label, minutes=notice.minutes)
+        record_change(db, notice, "delay_cleared", 2)
+        db.commit()
+    return {"data": P.delay_notice_public(notice)}
 
 
 EVENT_KEY = Field(None, min_length=8, max_length=300, pattern=r"^[A-Za-z0-9_-]+$")

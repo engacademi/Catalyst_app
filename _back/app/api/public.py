@@ -27,6 +27,7 @@ from app.models import (
 from app.modules import projections as P
 from app.modules.calendar import build_ics
 from app.modules.clock import event_now
+from app.modules.delays import active_notices, notice_for
 from app.modules.matches import (
     STATUS_GROUPS,
     latest_changes,
@@ -58,9 +59,10 @@ def sources_envelope(event: Event) -> list[dict]:
     return [P.source_public(s) for s in event.sources]
 
 
-def project_matches(db: Session, event: Event, matches: list[Match]) -> list[dict]:
-    latest = latest_changes(db, [m.id for m in matches])
-    return [P.match_public(m, event, latest.get(m.id)) for m in matches]
+def project_matches(db: Session, event: Event, matches: list[Match], *, latest: bool = True) -> list[dict]:
+    changes = latest_changes(db, [m.id for m in matches]) if latest else {}
+    notices = active_notices(db, event.id, event_now(event))
+    return [P.match_public(m, event, changes.get(m.id), notice_for(m, notices)) for m in matches]
 
 
 @router.get("/events")
@@ -250,7 +252,7 @@ def change_feed(
             {**P.change_public(r), "division_id": str(d) if (d := division_of.get(r.entity_id)) else None}
             for r in rows
         ],
-        "matches": {str(m.id): P.match_public(m, event) for m in matches},
+        "matches": {m["id"]: m for m in project_matches(db, event, matches, latest=False)},
         "announcements": {str(a.id): P.announcement_public(a) for a in announcements if a.state == "published"},
         "latest_id": rows[0].id if rows else after,
         "sources": sources_envelope(event),
@@ -358,9 +360,10 @@ def get_match(match_id: str, request: Request, db: DB) -> Response:
         .limit(20)
     )
     history = list(history)
+    notice = notice_for(match, active_notices(db, event.id, event_now(event)))
     payload = {
         "data": {
-            **P.match_public(match, event, history[0] if history else None),
+            **P.match_public(match, event, history[0] if history else None, notice),
             "event": P.event_public(event),
             "history": [P.change_public(h) for h in history],
         },

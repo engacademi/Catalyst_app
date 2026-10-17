@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { CalendarCheck, Megaphone, RefreshCw } from "lucide-react";
+import { CalendarCheck, Hourglass, Megaphone, RefreshCw } from "lucide-react";
 import type { Change, Match } from "@/lib/api";
 import { useDivisionFollows, useFollows, useLastSeen } from "@/lib/follows";
 import { formatRelative, formatTime } from "@/lib/format";
-import { useChanges } from "@/lib/queries";
+import { useChanges, useEvent } from "@/lib/queries";
 import { Badge, EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
 const TITLES: Record<string, string> = {
@@ -29,6 +29,16 @@ function nextMatchLine(c: Change, followed: string[], tz: string): string {
   return [`${d.round ?? filled.team_name} vs ${filled.opponent ?? "TBD"}`, d.court ?? "court to be confirmed", formatTime(d.scheduled_start ?? null, tz)].join(", ");
 }
 
+type DelayDiff = { court: string; area: string | null; venue: string; minutes: number; expires_at: string };
+
+// "Court 53 · Hall C is running about 20 minutes late", or the clearing of that notice.
+function delayLine(c: Change, tz: string): string {
+  const d = c.diff as DelayDiff;
+  const court = d.area ? `${d.court} · ${d.area}` : d.court;
+  if (c.event_type === "delay_cleared") return `${court}, ${d.venue}: the delay notice was cleared. Official start times apply.`;
+  return `${court}, ${d.venue} is running about ${d.minutes} minutes late, until ${formatTime(d.expires_at, tz)}. Official start times are unchanged.`;
+}
+
 function matchLine(m: Match | undefined) {
   if (!m) return "";
   return `${m.home.team_name ?? m.home.placeholder} vs ${m.away.team_name ?? m.away.placeholder}`;
@@ -47,6 +57,7 @@ function detail(c: Change, m: Match | undefined): string {
 
 export function UpdatesView({ eventId }: { eventId: string }) {
   const query = useChanges(eventId);
+  const timeZone = useEvent(eventId).data?.data.timezone ?? "America/Toronto";
   const { ids } = useFollows(eventId);
   const { ids: divisionIds } = useDivisionFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
@@ -95,6 +106,19 @@ export function UpdatesView({ eventId }: { eventId: string }) {
                     </p>
                     <p className="mt-1 whitespace-pre-line text-sm">{a.body}</p>
                     <p className="mt-2 text-xs text-muted">{formatRelative(c.occurred_at)}</p>
+                  </li>
+                );
+              }
+              if (c.entity_type === "delay_notice") {
+                return (
+                  <li key={c.id} className={`rounded-xl border bg-surface p-4 ${isNew ? "border-brand" : "border-border"}`}>
+                    <p className="flex items-center gap-2 text-sm font-semibold">
+                      <Hourglass aria-hidden className="h-4 w-4 text-warn" />{" "}
+                      {c.event_type === "delay_cleared" ? "Delay cleared" : "Court running late"}
+                      {isNew && <Badge tone="brand">New</Badge>}
+                    </p>
+                    <p className="mt-1 text-sm">{delayLine(c, timeZone)}</p>
+                    <p className="mt-2 text-xs text-muted">OVA staff · {formatRelative(c.occurred_at)}</p>
                   </li>
                 );
               }

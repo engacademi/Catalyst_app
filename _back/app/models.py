@@ -127,6 +127,26 @@ class Court(UUIDPk, Base):
     __table_args__ = (UniqueConstraint("venue_id", "label"),)
 
 
+class DelayNotice(UUIDPk, Base):
+    """A staff notice that one court is running about `minutes` late. Official starts never change.
+
+    Times are on the event clock (demo time when it is on), so expiry follows the event's now.
+    """
+
+    __tablename__ = "delay_notices"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    court_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courts.id", ondelete="CASCADE"), index=True)
+    minutes: Mapped[int] = mapped_column(Integer)
+    posted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    posted_at: Mapped[datetime]
+    expires_at: Mapped[datetime]
+    cleared_at: Mapped[datetime | None]
+    cleared_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+
+    court: Mapped[Court] = relationship()
+
+
 class Division(UUIDPk, Base):
     __tablename__ = "divisions"
 
