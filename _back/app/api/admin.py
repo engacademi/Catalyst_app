@@ -353,6 +353,10 @@ def update_source(source_id: str, body: SourcePatch, request: Request, db: DB, p
     before = source.status
     for key, value in body.model_dump(exclude_unset=True).items():
         setattr(source, key, str(value) if key == "official_url" and value else value)
+    if source.status == "unavailable" and source.unavailable_since is None:
+        source.unavailable_since = utcnow()
+    elif source.status != "unavailable":
+        source.unavailable_since = None
     audit(db, request, principal, "source.update", source.event_id, source, status=[before, source.status])
     db.commit()
     return {"data": P.source_public(source)}

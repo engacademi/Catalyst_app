@@ -12,6 +12,7 @@ cp .env.example .env              # point DATABASE_URL at your database
 uv sync
 uv run alembic upgrade head
 uv run python -m app.cli seed     # synthetic demo event, loaded through the CSV importer
+uv run python -m app.cli demo-setup   # the two demo-script events: AES Event 2 and a simulated CSV event
 uv run uvicorn app.main:app --reload
 ```
 
@@ -39,8 +40,9 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/api/public.py` | Public reads under `/v1` |
 | `app/api/admin.py` | Staff workspace under `/v1/admin` |
 | `app/api/me.py` | Signed-in user's own data (official assignments) |
-| `app/cli.py` | `seed` and `grant` commands |
-| `sample_data/` | Example CSVs and the column reference |
+| `app/cli.py` | `seed`, `demo-setup` and `grant` commands |
+| `app/demo_setup.py` | Builds the two demo-script events (see the root README) |
+| `sample_data/` | Example CSVs and the column reference; `demo/` holds Event B's files, `aes_event2/` the recorded AES responses |
 
 ## How data gets in
 
@@ -48,7 +50,7 @@ Staff upload a CSV for a source (entries, then matches, then rosters). The API c
 
 Rosters are published only with a consent review reference. Player photos appear only when the row marks them approved; otherwise the importer drops the URL before it reaches the database.
 
-An AES source reads the AES results site by its event key (ADR 0003). Staff press refresh (`POST /v1/admin/sources/{id}/refresh`), which stages divisions, clubs and teams (`kind: entries`) or pool matches (`kind: matches`) for the same preview and commit as an upload. Refresh and commit teams before matches. Matches come from each pool's poolsheet with teams, court, official start, set scores and work team. AES courts go under the event's venue with their AES labels; if the event has no venue yet, the AES location becomes one. AES team, division, court and match ids become external mappings, so a renamed team stays the same entry. The AES last-update time becomes the source's upstream update time. If AES times out, returns an HTTP error or sends something other than JSON, the refresh fails, the last committed data stays, and the source shows as unavailable until the next good refresh. Tests replay recorded responses from `tests/fixtures/aes/` and never call AES.
+An AES source reads the AES results site by its event key (ADR 0003). Staff press refresh (`POST /v1/admin/sources/{id}/refresh`), which stages divisions, clubs and teams (`kind: entries`) or pool matches (`kind: matches`) for the same preview and commit as an upload. Refresh and commit teams before matches. Matches come from each pool's poolsheet with teams, court, official start, set scores and work team. AES courts go under the event's venue with their AES labels; if the event has no venue yet, the AES location becomes one. AES team, division, court and match ids become external mappings, so a renamed team stays the same entry. The AES last-update time becomes the source's upstream update time. If AES times out, returns an HTTP error or sends something other than JSON, the refresh fails, the last committed data stays, and the source shows as unavailable until the next good refresh. Tests replay the recorded responses in `sample_data/aes_event2/` and never call AES.
 
 TIMU and MyTeam.click adapters are not built yet. A source can be marked `timu` or `myteam` for labeling, and their data arrives by CSV.
 
@@ -73,6 +75,8 @@ Staff, with a role grant: events, venues, sources, imports, announcements (draft
 With `DEMO_MODE=true`, staff can also set an event's demo time (`PUT /v1/admin/events/{id}/demo-clock`), jump it ahead (`POST .../demo-clock/jump`, 15 minutes by default) and clear it (`DELETE .../demo-clock`). Demo time ticks forward with real time from the moment it is set. Event responses carry `now` (the event's current time) and `demo_time` (true while demo time is on), and My Day picks the next match by that time. Without demo mode, setting demo time is refused and `now` is the real time.
 
 Staff can post a delay notice for a court (`POST /v1/admin/courts/{id}/delay-notices` with `minutes` and an optional `duration_minutes`, 60 by default), list the active ones (`GET /v1/admin/events/{id}/delay-notices`) and clear one early (`POST /v1/admin/delay-notices/{id}/clear`). Posting and clearing are audited, and each writes a change event for followers of teams still to play on that court. A notice expires by the event's current time, so demo time counts. While it is active, every match on the court that hasn't started keeps its official `scheduled_start` and gets an `estimated_start` of official start plus the delay, with `estimated_start_by: "ova_staff"` and the notice in `delay_notice`. When the source publishes its own estimated start, that time is used instead (`estimated_start_by: "source"`) and the notice is still shown.
+
+Staff can switch a source to unavailable from the console (`PATCH /v1/admin/sources/{id}` with `status: unavailable`); the source then shows "unavailable since" that moment until it is set back to active.
 
 Staff roles are granted only from the CLI:
 

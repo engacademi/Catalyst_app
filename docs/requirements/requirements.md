@@ -189,18 +189,23 @@ Each source goes through an adapter that maps it into the shared data model. Scr
 
 Use fictional players throughout and label simulated data as simulated [catalogue §11].
 
-| Step | What the judges see | Outcomes |
-| ---- | ------------------- | -------- |
-| 1 | A parent scans a QR code, finds their child's team and a division in a few taps, follows both and labels the team "Maya's team", with no account. | J1, J2 |
-| 2 | My Day (demo time Sat April 19, 9:40 am) shows Maya's next match with "Court 53 · Hall C", a work duty later that morning, and the division in its own section. | J1, J2 |
-| 3 | The data on screen is real Ontario Championships Event 2 data pulled live from AES, next to a second event imported from CSV, on the same screens, each with its source and check time. | J3, J6 |
-| 4 | Staff post "Hall C courts ~20 min late". Maya's card shows "Official 10:00 · Est. ~10:20, OVA staff", and My Day now warns that it overlaps another followed match. | J1, J4 |
-| 5 | Jump the demo clock ahead. A playoff slot fills in, and Updates shows "Next match set: Gold medal, Court 12, 2:00 pm". | J1, J2 |
-| 6 | Staff import an updated CSV for the second event; the preview shows one court change, they commit it, and followers see old and new courts. Staff also publish a parking announcement in under a minute. | J3, J4 |
-| 7 | A coach reviews a roster imported from the registration export; one photo isn't approved, so the public team page leaves it out. | J4, B-08 |
-| 8 | The guide shows sponsor cards, a merchandise link and the 50/50 draw; the staff console shows views and clicks per sponsor. | J7 |
-| 9 | The AES source is switched off; the app keeps the last schedule and shows a "source unavailable since…" warning. | J3, J1 |
-| 10 | My Day is used with a screen reader and at 200% zoom. | J5 |
+The demo uses two events, both prepared by one command (`uv run python -m app.cli demo-setup`, see the README) with demo time set to April 19, 9:40 am:
+
+- Event A is the real Ontario Championships Event 2, read from AES by its event key. The event is over, so every match shows its result. It shows the live connection, real results and source freshness. Its court areas are demo groupings until OVA supplies a court map (Org Q-11). If AES can't be reached, the command loads recorded Event 2 responses and the source says so.
+- Event B is simulated: fictional teams imported from CSV in place of a MyTeam.click or TIMU event, with upcoming matches at demo time. It carries Next Match, delays, work duties and the playoff fill.
+
+| Step | Event | What the judges see | Outcomes |
+| ---- | ----- | ------------------- | -------- |
+| 1 | B | A parent scans a QR code, finds their child's team, a sibling's team and a division in a few taps, follows all three and labels the first team "Maya's team", with no account. | J1, J2 |
+| 2 | B | My Day (demo time April 19, 9:40 am) shows Maya's next match with "Court 53 · Hall C", a work duty later that morning, and the division in its own section. | J1, J2 |
+| 3 | A and B | Event A shows real Ontario Championships Event 2 data pulled from AES; Event B shows an event imported from CSV. Both use the same screens, and each shows its source and check time. | J3, J6 |
+| 4 | B | Staff post "Hall C courts ~20 min late". Maya's card shows "Official 10:00 · Est. ~10:20, OVA staff", and My Day now warns that it overlaps the sibling's 11:00 match. | J1, J4 |
+| 5 | B | Jump the demo clock ahead and import the playoff results file. The Gold medal slot (W7 vs W8) fills in, and Updates shows "Next match set: Gold medal, Court 12, 2:00 pm". | J1, J2 |
+| 6 | B | Staff import an updated CSV; the preview shows one court change, they commit it, and followers see old and new courts. Staff also publish a parking announcement in under a minute. | J3, J4 |
+| 7 | B | A coach reviews a roster imported from the registration export; one photo isn't approved, so the public team page leaves it out. | J4, B-08 |
+| 8 | B | The guide shows sponsor cards, a merchandise link and the 50/50 draw; the staff console shows views and clicks per sponsor. | J7 |
+| 9 | A | The AES source is switched off; the app keeps the last schedule and shows a "source unavailable since…" warning. | J3, J1 |
+| 10 | B | My Day is used with a screen reader and at 200% zoom. | J5 |
 
 ## 10. Build plan
 

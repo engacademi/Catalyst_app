@@ -1,0 +1,16 @@
+external_match_id,division,round,scheduled_start,venue,court,home_entry_id,away_entry_id,home_placeholder,away_placeholder,work_entry_id,status,set_scores
+16UG-M1,16U Girls Division 1,Pool A · Match 1,2026-04-19T08:00:00,Enercare Centre,Court 53,B16G-1,B16G-2,,,B16G-3,completed,25-21 25-19
+16UG-M2,16U Girls Division 1,Pool A · Match 2,2026-04-19T09:00:00,Enercare Centre,Court 53,B16G-3,B16G-4,,,B16G-2,in_progress,25-22
+16UG-M3,16U Girls Division 1,Pool A · Match 3,2026-04-19T10:00:00,Enercare Centre,Court 53,B16G-1,B16G-3,,,B16G-4,scheduled,
+16UG-M4,16U Girls Division 1,Pool A · Match 4,2026-04-19T11:00:00,Enercare Centre,Court 53,B16G-2,B16G-4,,,B16G-1,scheduled,
+16UG-M5,16U Girls Division 1,Pool A · Match 5,2026-04-19T12:00:00,Enercare Centre,Court 53,B16G-1,B16G-4,,,B16G-3,scheduled,
+16UG-M6,16U Girls Division 1,Pool A · Match 6,2026-04-19T12:00:00,Enercare Centre,Court 54,B16G-2,B16G-3,,,,scheduled,
+16UG-M7,16U Girls Division 1,Semifinal · Match 7,2026-04-19T13:00:00,Enercare Centre,Court 53,,,1st Pool A,4th Pool A,,scheduled,
+16UG-M8,16U Girls Division 1,Semifinal · Match 8,2026-04-19T13:00:00,Enercare Centre,Court 54,,,2nd Pool A,3rd Pool A,,scheduled,
+16UG-GOLD,16U Girls Division 1,Gold medal,2026-04-19T14:00:00,Enercare Centre,Court 12,,,W7,W8,,scheduled,
+14UB-M1,14U Boys Division 1,Pool A · Match 1,2026-04-19T08:00:00,Enercare Centre,Court 12,B14B-1,B14B-2,,,B14B-3,completed,25-18 21-25 15-13
+14UB-M2,14U Boys Division 1,Pool A · Match 2,2026-04-19T09:00:00,Enercare Centre,Court 12,B14B-3,B14B-4,,,B14B-1,in_progress,
+14UB-M3,14U Boys Division 1,Pool A · Match 3,2026-04-19T10:00:00,Enercare Centre,Court 12,B14B-2,B14B-4,,,B14B-3,scheduled,
+14UB-M4,14U Boys Division 1,Pool A · Match 4,2026-04-19T11:00:00,Enercare Centre,Court 12,B14B-1,B14B-3,,,B14B-2,scheduled,
+14UB-M5,14U Boys Division 1,Pool A · Match 5,2026-04-19T13:00:00,Enercare Centre,Court 14,B14B-1,B14B-4,,,,scheduled,
+14UB-M6,14U Boys Division 1,Pool A · Match 6,2026-04-19T13:00:00,Enercare Centre,Court 12,B14B-2,B14B-3,,,B14B-4,scheduled,
