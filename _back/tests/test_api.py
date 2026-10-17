@@ -165,3 +165,23 @@ def test_demo_reset_deletes_cleanly(client, db, demo):
     fresh = seed(db, reset=True)
     assert fresh.id != demo.id
     assert client.get("/v1/events/demo-championships").json()["data"]["counts"]["entries"] == 12
+
+
+def test_court_area_label_reaches_public_data(client, db, demo):
+    match = db.scalar(select(Match).where(Match.court_id.is_not(None)).limit(1))
+    court = str(match.court_id)
+    assert client.get(f"/v1/matches/{match.id}").json()["data"]["court"]["area"] is None
+    assert client.patch(f"/v1/admin/courts/{court}", json={"area": "Hall C, north side"}, headers=OFFICIAL).status_code == 403
+
+    updated = client.patch(f"/v1/admin/courts/{court}", json={"area": "Hall C, north side"}, headers=ADMIN)
+    assert updated.status_code == 200 and updated.json()["data"]["area"] == "Hall C, north side"
+    assert client.get(f"/v1/matches/{match.id}").json()["data"]["court"]["area"] == "Hall C, north side"
+    listed = client.get("/v1/events/demo-championships/matches").json()["data"]
+    assert any(m["court"] and m["court"]["area"] == "Hall C, north side" for m in listed)
+    guide = client.get("/v1/events/demo-championships/guide").json()["data"]
+    courts = [c for v in guide["venues"] for c in v["courts"]]
+    assert {"id": court, "label": match.court.label, "area": "Hall C, north side"} in courts
+
+    client.patch(f"/v1/admin/courts/{court}", json={"area": "  "}, headers=ADMIN)
+    assert client.get(f"/v1/matches/{match.id}").json()["data"]["court"]["area"] is None
+    assert any(a["action"] == "court.update" for a in client.get(f"/v1/admin/events/{demo.id}/audit", headers=ADMIN).json()["data"])

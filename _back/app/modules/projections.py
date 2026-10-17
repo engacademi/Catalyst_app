@@ -67,6 +67,7 @@ def court_public(court: Court | None) -> dict[str, Any] | None:
     return {
         "id": str(court.id),
         "label": court.label,
+        "area": court.area,
         "venue_id": str(court.venue_id),
         "venue_name": court.venue.name,
     }
@@ -80,7 +81,7 @@ def venue_public(venue: Venue) -> dict[str, Any]:
         "accessible_entrance": venue.accessible_entrance,
         "directions": venue.directions,
         "map_url": venue.map_url,
-        "courts": [{"id": str(c.id), "label": c.label} for c in venue.courts],
+        "courts": [{"id": str(c.id), "label": c.label, "area": c.area} for c in venue.courts],
     }
 
 

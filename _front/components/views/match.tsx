@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Participant } from "@/lib/api";
-import { formatDay, formatRelative, formatTime } from "@/lib/format";
+import { courtPlace, formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { StatusBadge } from "../match-card";
@@ -71,7 +71,7 @@ export function MatchView({ eventId, matchId }: { eventId: string; matchId: stri
           <MapPin aria-hidden className="h-4 w-4 text-brand" />
           {m.court ? (
             <Link href={`/events/${eventId}/guide#venue-${m.court.venue_id}`} className="underline">
-              {m.court.label}, {m.court.venue_name}
+              {courtPlace(m.court)}, {m.court.venue_name}
             </Link>
           ) : (
             "Court to be confirmed"

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Announcement, GuideItem, Partner } from "@/lib/api";
+import type { Announcement, GuideItem, Partner, Venue } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
 import { Badge, Card, ErrorState, Loading, SectionTitle } from "../ui";
 import type { AdminEventData } from "./admin-event";
@@ -136,16 +136,30 @@ export function ContentPanel({ event }: { event: AdminEventData }) {
 function VenuesSection({ event }: { event: AdminEventData }) {
   const create = useAdminMutation("POST", `/v1/admin/events/${event.id}/venues`);
   const [form, setForm] = useState({ name: "", address: "", accessible_entrance: "", directions: "" });
+  const areas = [...new Set(event.venues.flatMap((v) => v.courts.map((c) => c.area).filter((a): a is string => !!a)))];
   return (
     <section>
       <SectionTitle>Venues</SectionTitle>
+      <datalist id="court-areas">
+        {areas.map((a) => (
+          <option key={a} value={a} />
+        ))}
+      </datalist>
       <ul className="mb-3 grid gap-2 sm:grid-cols-2">
         {event.venues.map((v) => (
           <li key={v.id}>
             <Card>
               <p className="font-semibold">{v.name}</p>
               <p className="text-sm text-muted">{v.address}</p>
-              <p className="text-sm">Courts: {v.courts.map((c) => c.label).join(", ") || "added by match imports"}</p>
+              {v.courts.length === 0 ? (
+                <p className="text-sm">Courts: added by match imports</p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {v.courts.map((c) => (
+                    <CourtAreaRow key={`${c.id}:${c.area ?? ""}`} court={c} areas={areas} />
+                  ))}
+                </ul>
+              )}
             </Card>
           </li>
         ))}
@@ -177,6 +191,33 @@ function VenuesSection({ event }: { event: AdminEventData }) {
         </form>
       </Card>
     </section>
+  );
+}
+
+function CourtAreaRow({ court, areas }: { court: Venue["courts"][number]; areas: string[] }) {
+  const save = useAdminMutation<{ area: string | null }>("PATCH", `/v1/admin/courts/${court.id}`);
+  const [area, setArea] = useState(court.area ?? "");
+  const changed = area.trim() !== (court.area ?? "");
+  return (
+    <li>
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate({ area: area.trim() || null });
+        }}
+      >
+        <div className="flex-1">
+          <Field label={`${court.label} area`} hint={areas.length ? undefined : "For example Hall C, north side"}>
+            <input value={area} onChange={(e) => setArea(e.target.value)} list="court-areas" maxLength={100} className={inputClass} />
+          </Field>
+        </div>
+        <button type="submit" disabled={!changed || save.isPending} className="min-h-11 rounded-full border border-border px-4 text-sm font-medium disabled:opacity-50">
+          {save.isPending ? "Saving…" : "Save"}
+        </button>
+      </form>
+      <FormError error={save.error} />
+    </li>
   );
 }
 

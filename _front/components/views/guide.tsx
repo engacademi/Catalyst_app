@@ -13,6 +13,7 @@ import {
   Whistle,
   type LucideIcon,
 } from "lucide-react";
+import { courtsByArea } from "@/lib/format";
 import { useGuide } from "@/lib/queries";
 import { Badge, Card, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
 
@@ -61,7 +62,16 @@ export function GuideView({ eventId }: { eventId: string }) {
                 <span>{v.directions}</span>
               </p>
             )}
-            {v.courts.length > 0 && <p className="mt-2 text-sm text-muted">Courts: {v.courts.map((c) => c.label).join(", ")}</p>}
+            {v.courts.length > 0 && (
+              <dl className="mt-2 space-y-1 text-sm">
+                {courtsByArea(v.courts).map(([area, courts]) => (
+                  <div key={area ?? ""}>
+                    <dt className="inline font-medium">{area ?? (v.courts.some((c) => c.area) ? "Other courts" : "Courts")}: </dt>
+                    <dd className="inline text-muted">{courts.map((c) => c.label).join(", ")}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
             {v.map_url && (
               <a href={v.map_url} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand underline" rel="noopener" target="_blank">
                 Open map <ExternalLink aria-hidden className="h-3.5 w-3.5" />
