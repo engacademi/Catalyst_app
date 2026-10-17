@@ -44,6 +44,10 @@ _Avoid_: ETA, predicted time, live time
 A team assigned by the source to referee or keep score for another match.
 _Avoid_: Ref team, duty team
 
+**Work duty**:
+A match a followed entry is assigned to as the work team. It shows in My Day apart from the entry's own matches.
+_Avoid_: Ref assignment, shift
+
 ## Data and trust
 
 **Source**:

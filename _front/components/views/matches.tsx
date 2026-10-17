@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFollows } from "@/lib/follows";
-import { courtPlace, dayKey, formatDay } from "@/lib/format";
+import { courtPlace, dayKey, effectiveStart, formatDay } from "@/lib/format";
 import { useEvent, useMatches } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
@@ -46,7 +46,7 @@ export function MatchesView({ eventId }: { eventId: string }) {
 
   const groups = new Map<string, NonNullable<typeof matches.data>["data"]>();
   for (const m of matches.data?.data ?? []) {
-    const key = dayKey(m.estimated_start ?? m.scheduled_start, m.timezone);
+    const key = dayKey(effectiveStart(m), m.timezone);
     groups.set(key, [...(groups.get(key) ?? []), m]);
   }
 
@@ -104,7 +104,7 @@ export function MatchesView({ eventId }: { eventId: string }) {
         ) : (
           [...groups.entries()].map(([key, list]) => (
             <section key={key}>
-              <SectionTitle>{key === "tbd" ? "Time to be confirmed" : formatDay(list[0].estimated_start ?? list[0].scheduled_start, list[0].timezone)}</SectionTitle>
+              <SectionTitle>{key === "tbd" ? "Time to be confirmed" : formatDay(effectiveStart(list[0]), list[0].timezone)}</SectionTitle>
               <ul className="space-y-2">
                 {list.map((m) => (
                   <li key={m.id}>

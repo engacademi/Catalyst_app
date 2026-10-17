@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.models import DelayNotice, Match
-from app.modules.delays import estimated_start, expected_soon, notice_for
+from app.modules.delays import effective_start, expected_soon, notice_for
 
 OPEN_STATUSES = {"scheduled", "in_progress", "postponed"}
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -18,7 +18,7 @@ EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 def _starts(matches: list[Match], notices: dict[uuid.UUID, DelayNotice]):
     """The start each match is ordered by: its estimated start when present, else its official start."""
-    starts = {m.id: estimated_start(m, notice_for(m, notices))[0] or m.scheduled_start for m in matches}
+    starts = {m.id: effective_start(m, notice_for(m, notices)) for m in matches}
     return lambda m: starts[m.id]
 
 

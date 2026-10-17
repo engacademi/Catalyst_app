@@ -26,7 +26,7 @@ function nextMatchLine(c: Change, followed: string[], tz: string): string {
   const d = c.diff as { filled?: Filled[]; round?: string | null; court?: string | null; scheduled_start?: string | null };
   const filled = d.filled?.find((f) => followed.includes(f.entry_id)) ?? d.filled?.[0];
   if (!filled) return "";
-  return [`${d.round ?? filled.team_name} vs ${filled.opponent ?? "TBD"}`, d.court ?? "court to be confirmed", formatTime(d.scheduled_start ?? null, tz)].join(", ");
+  return [`${d.round ?? filled.team_name} vs ${filled.opponent ?? "To be decided"}`, d.court ?? "court to be confirmed", formatTime(d.scheduled_start ?? null, tz)].join(", ");
 }
 
 type DelayDiff = { court: string; area: string | null; venue: string; minutes: number; expires_at: string };

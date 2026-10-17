@@ -44,7 +44,7 @@ def build_ics(event: Event, matches: list[Match], *, uid_domain: str, assumed_mi
             continue
         names = []
         for p in match.participants:
-            names.append(p.entry.team_name if p.entry else (p.placeholder_label or "TBD"))
+            names.append(p.entry.team_name if p.entry else (p.placeholder_label or "To be decided"))
         court = "Court to be confirmed"
         if match.court:
             place = f"{match.court.label} · {match.court.area}" if match.court.area else match.court.label
