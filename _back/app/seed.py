@@ -204,7 +204,7 @@ def seed(db: Session, *, reset: bool = False) -> Event:
             venue = "Hall A" if source is primary and n == 0 else "Hall B"
             court_offset = 1 if venue == "Hall A" else 3
             if source is secondary:
-                court_offset = 3
+                court_offset = 5
             match_rows += _matches(name, today, court_offset, venue, now)
         _import(db, event, source, "matches", match_rows)
 

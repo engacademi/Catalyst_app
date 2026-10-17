@@ -40,7 +40,7 @@ def test_my_day_merges_two_sources_and_dedupes(client, db, demo):
     # Lakeshore Thunder plays North Bay Breakers once; that match appears once.
     ids = data["upcoming_ids"] + data["completed_ids"] + data["awaiting_schedule_ids"]
     assert len(ids) == len(set(ids))
-    assert data["assumed_match_minutes"] == 75
+    assert data["assumed_match_minutes"] == 60
 
 
 def test_public_roster_omits_withheld_photo(client, db, demo):
@@ -155,3 +155,13 @@ def test_admin_creates_beach_event(client):
     )
     assert created.status_code == 201 and created.json()["data"]["kind"] == "beach"
     assert client.get("/v1/events/beach-2027").status_code == 404, "drafts stay private"
+
+
+def test_demo_reset_deletes_cleanly(client, db, demo):
+    from app.seed import seed
+
+    match = db.scalar(select(Match).where(Match.status == "scheduled").limit(1))
+    client.post(f"/v1/admin/events/{demo.id}/simulate-change", json={"match_id": str(match.id), "court_label": "Court 8"}, headers=ADMIN)
+    fresh = seed(db, reset=True)
+    assert fresh.id != demo.id
+    assert client.get("/v1/events/demo-championships").json()["data"]["counts"]["entries"] == 12

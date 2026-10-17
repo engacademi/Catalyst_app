@@ -139,7 +139,7 @@ class EventEntry(UUIDPk, Base):
     __tablename__ = "event_entries"
 
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
-    division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id"))
+    division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id", ondelete="SET NULL"))
     team_name: Mapped[str] = mapped_column(String(200))
     club_name: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
@@ -183,10 +183,10 @@ class Match(UUIDPk, Base):
     __tablename__ = "matches"
 
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
-    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sources.id"))
+    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"))
     external_id: Mapped[str] = mapped_column(String(200))
-    division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id"))
-    court_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courts.id"))
+    division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id", ondelete="SET NULL"))
+    court_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courts.id", ondelete="SET NULL"))
     round_label: Mapped[str | None] = mapped_column(String(100))
     scheduled_start: Mapped[datetime | None]
     estimated_start: Mapped[datetime | None]
@@ -220,7 +220,7 @@ class MatchParticipant(UUIDPk, Base):
 
     match_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("matches.id", ondelete="CASCADE"))
     slot: Mapped[str] = mapped_column(String(10))  # home | away
-    entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id"), index=True)
+    entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id", ondelete="SET NULL"), index=True)
     placeholder_label: Mapped[str | None] = mapped_column(String(100))
 
     match: Mapped[Match] = relationship(back_populates="participants")
@@ -246,8 +246,8 @@ class Announcement(UUIDPk, Base):
     __tablename__ = "announcements"
 
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
-    entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id"))
-    division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id"))
+    entry_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("event_entries.id", ondelete="SET NULL"))
+    division_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("divisions.id", ondelete="SET NULL"))
     category: Mapped[str] = mapped_column(String(20), default="general")  # general | schedule | venue | safety
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
@@ -316,10 +316,10 @@ class Assignment(UUIDPk, Base):
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
     person_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     match_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("matches.id", ondelete="SET NULL"))
-    court_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courts.id"))
+    court_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courts.id", ondelete="SET NULL"))
     role: Mapped[str] = mapped_column(String(50))  # first referee, second referee, scorekeeper, line judge
     reporting_time: Mapped[datetime | None]
-    source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sources.id"))
+    source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sources.id", ondelete="SET NULL"))
     revision: Mapped[int] = mapped_column(Integer, default=1)
 
     match: Mapped[Match | None] = relationship()

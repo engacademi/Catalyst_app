@@ -2,7 +2,7 @@
 
 Revision ID: 0001
 Revises: 
-Create Date: 2026-10-17 10:54:13.974716
+Create Date: 2026-10-17 11:14:51.593913
 """
 from typing import Sequence, Union
 
@@ -172,7 +172,7 @@ def upgrade() -> None:
     sa.Column('club_name', sa.String(length=200), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('id', sa.Uuid(), nullable=False),
-    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
+    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['event_id'], ['events.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -240,8 +240,8 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
-    sa.ForeignKeyConstraint(['entry_id'], ['event_entries.id'], ),
+    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['entry_id'], ['event_entries.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['event_id'], ['events.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -263,10 +263,10 @@ def upgrade() -> None:
     sa.Column('observed_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('id', sa.Uuid(), nullable=False),
-    sa.ForeignKeyConstraint(['court_id'], ['courts.id'], ),
-    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
+    sa.ForeignKeyConstraint(['court_id'], ['courts.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['event_id'], ['events.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['source_id'], ['sources.id'], ),
+    sa.ForeignKeyConstraint(['source_id'], ['sources.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('source_id', 'external_id')
     )
@@ -297,11 +297,11 @@ def upgrade() -> None:
     sa.Column('source_id', sa.Uuid(), nullable=True),
     sa.Column('revision', sa.Integer(), nullable=False),
     sa.Column('id', sa.Uuid(), nullable=False),
-    sa.ForeignKeyConstraint(['court_id'], ['courts.id'], ),
+    sa.ForeignKeyConstraint(['court_id'], ['courts.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['event_id'], ['events.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['match_id'], ['matches.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['person_user_id'], ['users.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['source_id'], ['sources.id'], ),
+    sa.ForeignKeyConstraint(['source_id'], ['sources.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_assignments_person_user_id'), 'assignments', ['person_user_id'], unique=False)
@@ -311,7 +311,7 @@ def upgrade() -> None:
     sa.Column('entry_id', sa.Uuid(), nullable=True),
     sa.Column('placeholder_label', sa.String(length=100), nullable=True),
     sa.Column('id', sa.Uuid(), nullable=False),
-    sa.ForeignKeyConstraint(['entry_id'], ['event_entries.id'], ),
+    sa.ForeignKeyConstraint(['entry_id'], ['event_entries.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['match_id'], ['matches.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('match_id', 'slot')

@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  /* OVA brand: lime mark and slate type. Lime is for accents only; text and buttons use the
+     darker green so they pass WCAG AA contrast on white. */
+  --background: #f6f7f5;
+  --surface: #ffffff;
+  --foreground: #1f2328;
+  --muted: #59606a;
+  --border: #d9ddd6;
+  --brand: #2f6b1f;
+  --brand-strong: #24541a;
+  --brand-lime: #7ac143;
+  --brand-soft: #eaf5e1;
+  --slate: #4d4d4f;
+  --warn: #8a4b00;
+  --warn-soft: #fff1dc;
+  --danger: #a1260d;
+  --danger-soft: #fde8e3;
+  --info-soft: #e6f0fb;
+  --info: #1d4f91;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-lime: var(--brand-lime);
+  --color-brand-soft: var(--brand-soft);
+  --color-slate: var(--slate);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

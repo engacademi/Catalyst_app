@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     clerk_authorized_parties: Annotated[list[str], NoDecode] = []
 
     # Assumed match window for My Day overlap warnings. Labeled as an assumption in the UI.
-    assumed_match_minutes: int = 75
+    assumed_match_minutes: int = 60
     import_max_bytes: int = 5 * 1024 * 1024
     import_max_rows: int = 10_000
 

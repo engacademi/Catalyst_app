@@ -6,11 +6,15 @@ from typing import Any
 from fastapi import HTTPException, Request, Response, status
 
 
-def json_response(request: Request, payload: Any, *, max_age: int = 10, private: bool = False) -> Response:
-    """JSON with an ETag so polling clients get a cheap 304 when nothing changed."""
+def json_response(request: Request, payload: Any, *, max_age: int = 0, private: bool = False) -> Response:
+    """JSON with an ETag so polling clients get a cheap 304 when nothing changed.
+
+    Schedule data defaults to no-cache: browsers revalidate every poll instead of reusing
+    a copy that might hide a court change.
+    """
     body = json.dumps(payload, separators=(",", ":"), default=str).encode()
     etag = '"' + hashlib.sha256(body).hexdigest()[:32] + '"'
-    cache = "private, no-store" if private else f"public, max-age={max_age}"
+    cache = "private, no-store" if private else (f"public, max-age={max_age}" if max_age else "public, no-cache")
     headers = {"ETag": etag, "Cache-Control": cache}
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
