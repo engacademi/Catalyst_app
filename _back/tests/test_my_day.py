@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from app.modules.my_day import build_my_day
 
 T0 = datetime(2027, 4, 8, 13, 0, tzinfo=timezone.utc)
+EARLY = T0 - timedelta(days=1)
 VENUE_A, VENUE_B = uuid.uuid4(), uuid.uuid4()
 
 
@@ -25,7 +26,7 @@ def test_overlap_across_venues_is_one_conflict_group():
     first = match(T0, a, other)
     second = match(T0 + timedelta(minutes=30), b, other, venue=VENUE_B)
     later = match(T0 + timedelta(hours=3), a, other)
-    result = build_my_day([first, second, later], {a, b}, assumed_minutes=75)
+    result = build_my_day([first, second, later], {a, b}, assumed_minutes=75, now=EARLY)
     assert result["conflicts"] == [{"match_ids": [str(first.id), str(second.id)], "different_venues": True}]
     assert result["next_match_id"] == str(first.id)
     assert result["next_by_entry"] == {str(a): str(first.id), str(b): str(second.id)}
@@ -35,7 +36,7 @@ def test_match_between_two_followed_teams_appears_once():
     a, b = uuid.uuid4(), uuid.uuid4()
     shared = match(T0, a, b)
     # The query returns the row once per followed participant.
-    result = build_my_day([shared, shared], {a, b}, assumed_minutes=75)
+    result = build_my_day([shared, shared], {a, b}, assumed_minutes=75, now=EARLY)
     assert result["upcoming_ids"] == [str(shared.id)]
     assert result["conflicts"] == []
 
@@ -45,7 +46,21 @@ def test_unscheduled_and_finished_matches_are_kept_apart():
     tbd = match(None, a, None)
     done = match(T0 - timedelta(hours=2), a, None, status="completed")
     cancelled = match(T0, a, None, status="cancelled")
-    result = build_my_day([tbd, done, cancelled], {a}, assumed_minutes=75)
+    result = build_my_day([tbd, done, cancelled], {a}, assumed_minutes=75, now=EARLY)
     assert result["awaiting_schedule_ids"] == [str(tbd.id)]
     assert result["completed_ids"] == [str(done.id)]
     assert result["next_match_id"] is None
+
+
+def test_next_match_is_the_first_not_yet_finished_by_the_event_clock():
+    a, other = uuid.uuid4(), uuid.uuid4()
+    morning = match(T0, a, other)
+    late_start = match(T0 + timedelta(minutes=90), a, other)
+    afternoon = match(T0 + timedelta(hours=4), a, other)
+    # 9:40-style clock: the first match has had its assumed hour; the 90-minute one hasn't started.
+    result = build_my_day([morning, late_start, afternoon], {a}, assumed_minutes=60, now=T0 + timedelta(minutes=70))
+    assert result["next_match_id"] == str(late_start.id)
+    assert result["next_by_entry"] == {str(a): str(late_start.id)}
+    # A match already under way stays the next match until its assumed length has passed.
+    result = build_my_day([morning, late_start, afternoon], {a}, assumed_minutes=60, now=T0 + timedelta(minutes=100))
+    assert result["next_match_id"] == str(late_start.id)

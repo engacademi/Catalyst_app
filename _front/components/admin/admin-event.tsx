@@ -9,7 +9,7 @@ import { Badge, Card, ErrorState, Loading, SectionTitle } from "../ui";
 import { useAdminMutation, useAdminQuery } from "./hooks";
 import { Field, FormError, inputClass, PrimaryButton, SmallButton } from "./form";
 import { AnnouncementsPanel, ContentPanel } from "./panels-content";
-import { DemoPanel, ImportsPanel, RostersPanel } from "./panels-data";
+import { DemoClockPanel, DemoPanel, ImportsPanel, RostersPanel } from "./panels-data";
 
 export type AdminEventData = EventSummary & {
   venues: Venue[];
@@ -17,7 +17,7 @@ export type AdminEventData = EventSummary & {
   entries: { id: string; team_name: string; club_name: string | null }[];
 };
 
-const TABS = ["Announcements", "Imports", "Content", "Rosters", "Sources", "Demo tools", "Audit"] as const;
+const TABS = ["Announcements", "Imports", "Content", "Rosters", "Sources", "Demo clock", "Demo tools", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AdminEvent({ eventId }: { eventId: string }) {
@@ -77,6 +77,7 @@ export function AdminEvent({ eventId }: { eventId: string }) {
         {tab === "Content" && <ContentPanel event={event} />}
         {tab === "Rosters" && <RostersPanel event={event} />}
         {tab === "Sources" && <SourcesPanel event={event} />}
+        {tab === "Demo clock" && <DemoClockPanel event={event} />}
         {tab === "Demo tools" && <DemoPanel event={event} />}
         {tab === "Audit" && <AuditPanel eventId={event.id} />}
       </div>

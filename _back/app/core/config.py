@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     clerk_jwks_url: str | None = None
     clerk_authorized_parties: Annotated[list[str], NoDecode] = []
 
+    # Lets staff set an event's demo time. Off in production so no screen misstates the date.
+    demo_mode: bool = False
+
     # Assumed match window for My Day overlap warnings. Labeled as an assumption in the UI.
     assumed_match_minutes: int = 60
     import_max_bytes: int = 5 * 1024 * 1024

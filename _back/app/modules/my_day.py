@@ -25,22 +25,26 @@ def _venue_id(match: Match) -> uuid.UUID | None:
     return match.court.venue_id if match.court else None
 
 
-def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes: int) -> dict:
+def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes: int, *, now: datetime) -> dict:
     """Return ids grouped for the My Day screen.
 
     matches may contain duplicates (one per followed participant); each match appears once.
+    now is the event clock (demo time when it is on). The next match is the first one whose
+    assumed length hasn't run out by then.
     """
     unique = list({m.id: m for m in matches}.values())
     open_matches = [m for m in unique if m.status in OPEN_STATUSES]
     timed = sorted((m for m in open_matches if _start(m)), key=lambda m: (_start(m), m.external_id))
     awaiting = [m for m in open_matches if not _start(m)]
 
+    window = timedelta(minutes=assumed_minutes)
+    ahead = [m for m in timed if _start(m) + window > now]
+
     next_by_entry: dict[str, str] = {}
-    for m in timed:
+    for m in ahead:
         for entry_id in _followed_in(m, followed):
             next_by_entry.setdefault(str(entry_id), str(m.id))
 
-    window = timedelta(minutes=assumed_minutes)
     conflicts: list[dict] = []
     group: list[Match] = []
     group_end: datetime | None = None
@@ -57,7 +61,7 @@ def build_my_day(matches: list[Match], followed: set[uuid.UUID], assumed_minutes
         conflicts.append(_conflict(group))
 
     return {
-        "next_match_id": str(timed[0].id) if timed else None,
+        "next_match_id": str(ahead[0].id) if ahead else None,
         "next_by_entry": next_by_entry,
         "upcoming_ids": [str(m.id) for m in timed],
         "awaiting_schedule_ids": [str(m.id) for m in awaiting],

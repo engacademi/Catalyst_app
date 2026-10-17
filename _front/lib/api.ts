@@ -37,6 +37,9 @@ export type EventSummary = {
   status: string;
   is_demo: boolean;
   revision: number;
+  /** The event's current time: demo time while it is on, otherwise the server's clock. */
+  now: string;
+  demo_time: boolean;
 };
 
 export type EventDetail = EventSummary & {

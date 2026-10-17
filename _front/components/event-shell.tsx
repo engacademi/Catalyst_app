@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { Bell, CalendarDays, Info, ListOrdered, Users } from "lucide-react";
 import { useChanges, useEvent } from "@/lib/queries";
 import { useFollows, useLastSeen } from "@/lib/follows";
+import { formatDay, formatTime } from "@/lib/format";
+import { useEventNow } from "@/lib/now";
 
 const TABS = [
   { href: "my-day", label: "My Day", icon: CalendarDays },
@@ -46,6 +48,7 @@ export function EventShell({ eventId, children }: { eventId: string; children: R
             )}
           </div>
         </div>
+        {event?.demo_time && <DemoTimeBanner eventId={eventId} timeZone={event.timezone} />}
         {event?.is_demo && (
           <p className="bg-warn-soft px-4 py-1 text-center text-xs font-medium text-warn">
             Demo event with fictional teams and simulated changes. Not a live feed.
@@ -89,5 +92,16 @@ export function EventShell({ eventId, children }: { eventId: string; children: R
         </ul>
       </nav>
     </div>
+  );
+}
+
+function DemoTimeBanner({ eventId, timeZone }: { eventId: string; timeZone: string }) {
+  const { now, demoTime } = useEventNow(eventId);
+  if (!demoTime) return null;
+  const iso = new Date(now).toISOString();
+  return (
+    <p role="status" className="bg-info-soft px-4 py-1 text-center text-xs font-semibold text-info">
+      Demo time: {formatDay(iso, timeZone)}, {formatTime(iso, timeZone)}. Schedules show this time, not today&apos;s date.
+    </p>
   );
 }
