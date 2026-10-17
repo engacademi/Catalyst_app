@@ -1,0 +1,5 @@
+external_match_id,external_event_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,home_placeholder,away_placeholder,round,status,set_scores,source_updated_at
+EX-M1,EX-EVENT,15U Boys D1,2027-04-08T09:00:00-04:00,Hall A,Court 1,EX-15UB-1,EX-15UB-2,,,Pool A,completed,25-21 22-25 15-12,2027-04-08T10:20:00-04:00
+EX-M2,EX-EVENT,15U Boys D1,2027-04-08T09:00:00-04:00,Hall A,Court 2,EX-15UB-3,EX-15UB-4,,,Pool A,scheduled,,
+EX-M3,EX-EVENT,15U Boys D1,2027-04-08T10:00:00-04:00,Hall A,Court 1,EX-15UB-1,EX-15UB-3,,,Pool A,scheduled,,
+EX-GOLD,EX-EVENT,15U Boys D1,,Hall A,Court 1,,,1st Pool A,2nd Pool A,Gold medal,scheduled,,
