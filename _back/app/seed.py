@@ -224,6 +224,14 @@ def seed(db: Session, *, reset: bool = False) -> Event:
             )
     _import(db, event, primary, "rosters", roster_rows, consent_review_ref="DEMO-REVIEW-001")
 
+    add_event_content(db, event)
+    ensure_dev_users(db, org, event)
+    db.commit()
+    return event
+
+
+def add_event_content(db: Session, event: Event) -> None:
+    """Fictional announcements, guide items and partner cards for a demo event."""
     db.add_all(
         [
             Announcement(
@@ -293,23 +301,27 @@ def seed(db: Session, *, reset: bool = False) -> Event:
         ]
     )
 
-    ensure_dev_users(db, org, event)
-    db.commit()
-    return event
+
+def ensure_admin(db: Session, org: Organization) -> None:
+    """The local-only dev-admin identity (AUTH_MODE=dev), an organization admin."""
+    admin = db.scalar(select(User).where(User.clerk_subject == "dev-admin")) or User(
+        clerk_subject="dev-admin", display_name="Dev admin"
+    )
+    db.add(admin)
+    db.flush()
+    if not db.scalar(select(RoleGrant).where(RoleGrant.user_id == admin.id, RoleGrant.role == "admin")):
+        db.add(RoleGrant(user_id=admin.id, organization_id=org.id, role="admin"))
+    db.flush()
 
 
 def ensure_dev_users(db: Session, org: Organization, event: Event) -> None:
     """Local-only identities for AUTH_MODE=dev: dev-admin (admin) and dev-official (official)."""
-    admin = db.scalar(select(User).where(User.clerk_subject == "dev-admin")) or User(
-        clerk_subject="dev-admin", display_name="Dev admin"
-    )
+    ensure_admin(db, org)
     official = db.scalar(select(User).where(User.clerk_subject == "dev-official")) or User(
         clerk_subject="dev-official", display_name="Dev official"
     )
-    db.add_all([admin, official])
+    db.add(official)
     db.flush()
-    if not db.scalar(select(RoleGrant).where(RoleGrant.user_id == admin.id, RoleGrant.role == "admin")):
-        db.add(RoleGrant(user_id=admin.id, organization_id=org.id, role="admin"))
     db.add(RoleGrant(user_id=official.id, organization_id=org.id, event_id=event.id, role="official"))
     db.flush()
     matches = list(

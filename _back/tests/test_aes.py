@@ -12,7 +12,7 @@ from app.models import ChangeEvent, Court, Event, EventEntry, Match, Organizatio
 from app.modules.imports import commit_import
 from app.modules.refresh import SourceUnavailable, refresh_source
 
-FIXTURES = Path(__file__).parent / "fixtures" / "aes"
+FIXTURES = Path(__file__).parent.parent / "sample_data" / "aes_event2"
 EVENT_KEY = "MjAyNl9PbnRhcmlvX0NoYW1waW9uc2hpcHNfX19FdmVudF8yX182djZHX19UTFNHX18xNVVCXw2"
 BASE = f"https://results.advancedeventsystems.com/api/event/{EVENT_KEY}"
 
