@@ -10,11 +10,18 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import get_settings
 from app.models import ChangeEvent, DelayNotice, Event, Match
+from app.modules.clock import event_now
+from app.modules.replay import present
+from app.modules.started import has_started
 
 ESTIMATE_BY_SOURCE = "source"
 ESTIMATE_BY_STAFF = "ova_staff"
-UNSTARTED_STATUSES = {"scheduled", "postponed"}
+DELAY_POSTED = "delay_posted"
+DELAY_CLEARED = "delay_cleared"
+# A notice's change-feed revisions: posting is its first state, clearing its second and last.
+CHANGE_REVISIONS = {DELAY_POSTED: 1, DELAY_CLEARED: 2}
 
 
 def is_active(notice: DelayNotice, now: datetime) -> bool:
@@ -29,13 +36,6 @@ def active_notices(db: Session, event_id: uuid.UUID, now: datetime) -> dict[uuid
         .order_by(DelayNotice.posted_at)
     )
     return {n.court_id: n for n in rows}
-
-
-def has_started(match: Match) -> bool:
-    """The source marked it in progress or completed, or it has set scores."""
-    if match.status not in UNSTARTED_STATUSES:
-        return True
-    return any(s.home_score is not None or s.away_score is not None for s in match.sets)
 
 
 def notice_for(match: Match, notices: dict[uuid.UUID, DelayNotice]) -> DelayNotice | None:
@@ -53,6 +53,11 @@ def estimated_start(match: Match, notice: DelayNotice | None) -> tuple[datetime 
     return None, None
 
 
+def effective_start(match: Match, notice: DelayNotice | None) -> datetime | None:
+    """The start a match is grouped and ordered by: its estimated start, else its official start."""
+    return estimated_start(match, notice)[0] or match.scheduled_start
+
+
 def expected_soon(match: Match, notice: DelayNotice | None, now: datetime) -> bool:
     """Its estimated (or official) start has passed but the source hasn't marked it started.
 
@@ -60,7 +65,7 @@ def expected_soon(match: Match, notice: DelayNotice | None, now: datetime) -> bo
     """
     if match.status != "scheduled" or has_started(match):
         return False
-    start = estimated_start(match, notice)[0] or match.scheduled_start
+    start = effective_start(match, notice)
     return start is not None and start <= now
 
 
@@ -89,23 +94,43 @@ def clear_notice(notice: DelayNotice, actor_id, now: datetime) -> None:
     notice.cleared_by = actor_id
 
 
-def record_change(db: Session, notice: DelayNotice, event_type: str, revision: int) -> ChangeEvent:
-    """A delay_posted or delay_cleared change for followers of entries still to play on the court."""
+def still_to_play(match: Match, notice: DelayNotice | None, now: datetime) -> bool:
+    """Not started, and its start isn't so long past that the match would be over by now.
+
+    A match the source never marked started whose start plus the assumed match length has
+    passed is stale, not upcoming.
+    """
+    if has_started(match):
+        return False
+    start = effective_start(match, notice)
+    return start is None or start + timedelta(minutes=get_settings().assumed_match_minutes) > now
+
+
+def record_change(db: Session, notice: DelayNotice, event_type: str) -> ChangeEvent | None:
+    """A delay_posted or delay_cleared change for followers of entries still to play on the court.
+
+    Returns None, and records nothing, when no entry is affected: a change without entries
+    would read as event-wide news. The audit log keeps the staff action either way.
+    """
+    event = db.get(Event, notice.event_id)
+    now = event_now(event)
     matches = db.scalars(
         select(Match)
         .where(Match.court_id == notice.court_id)
         .options(selectinload(Match.participants), selectinload(Match.sets), selectinload(Match.source))
     )
-    from app.modules.replay import present  # replay builds on has_started
-
-    shown = present(db.get(Event, notice.event_id), list(matches))
-    entry_ids = sorted({str(p.entry_id) for m in shown if not has_started(m) for p in m.participants if p.entry_id})
+    shown = present(event, list(matches), now)
+    entry_ids = sorted(
+        {str(p.entry_id) for m in shown if still_to_play(m, notice, now) for p in m.participants if p.entry_id}
+    )
+    if not entry_ids:
+        return None
     court = notice.court
     change = ChangeEvent(
         event_id=notice.event_id,
         entity_type="delay_notice",
         entity_id=notice.id,
-        entity_revision=revision,
+        entity_revision=CHANGE_REVISIONS[event_type],
         event_type=event_type,
         diff={
             "court_id": str(court.id),

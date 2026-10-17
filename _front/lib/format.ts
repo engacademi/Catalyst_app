@@ -36,6 +36,11 @@ export function dayKey(iso: string | null, timeZone: string): string {
   );
 }
 
+/** The start a match is grouped and ordered by: its estimated start, else its official start. */
+export function effectiveStart(match: Pick<Match, "estimated_start" | "scheduled_start">): string | null {
+  return match.estimated_start ?? match.scheduled_start;
+}
+
 type Court = { label: string; area: string | null };
 
 /** "Court 53 · Hall C" when the court has an area, otherwise just "Court 53". */

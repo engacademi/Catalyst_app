@@ -5,7 +5,7 @@ import { AlertTriangle, CalendarPlus, ChevronDown, HelpCircle } from "lucide-rea
 import { API_BASE, type DivisionSection, type Match } from "@/lib/api";
 import { useDivisionFollows, useFollows } from "@/lib/follows";
 import { type Labels, useLabels } from "@/lib/labels";
-import { dayKey, formatDay } from "@/lib/format";
+import { dayKey, effectiveStart, formatDay } from "@/lib/format";
 import { useMyDay } from "@/lib/queries";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
@@ -43,7 +43,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
   const byDay = new Map<string, string[]>();
   for (const id of upcoming) {
     const match = m(id);
-    const key = dayKey(match.estimated_start ?? match.scheduled_start, match.timezone);
+    const key = dayKey(effectiveStart(match), match.timezone);
     byDay.set(key, [...(byDay.get(key) ?? []), id]);
   }
 
@@ -108,7 +108,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
 
       {[...byDay.entries()].map(([key, matchIds]) => (
         <section key={key}>
-          <SectionTitle>{formatDay(m(matchIds[0]).scheduled_start ?? m(matchIds[0]).estimated_start, m(matchIds[0]).timezone)}</SectionTitle>
+          <SectionTitle>{formatDay(effectiveStart(m(matchIds[0])), m(matchIds[0]).timezone)}</SectionTitle>
           <ul className="space-y-2">
             {matchIds.map((id) => (
               <li key={id} className={conflictIds.has(id) ? "rounded-xl ring-2 ring-warn/50" : ""}>

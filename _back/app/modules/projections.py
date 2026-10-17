@@ -128,7 +128,7 @@ def participant_public(match: Match, slot: str) -> dict[str, Any]:
                 "club_name": p.entry.club_name if p.entry else None,
                 "placeholder": p.placeholder_label,
             }
-    return {"entry_id": None, "team_name": None, "club_name": None, "placeholder": "TBD"}
+    return {"entry_id": None, "team_name": None, "club_name": None, "placeholder": "To be decided"}
 
 
 def sets_won(match: Match) -> dict[str, int] | None:

@@ -523,6 +523,55 @@ def test_posting_and_clearing_a_delay_reach_followers_of_teams_still_to_play_on_
     assert set(feed[0]["entry_ids"]) == still_to_play
 
 
+def test_a_delay_reaches_no_one_when_nothing_on_the_court_is_still_to_play(client, db, demo, delay_court):
+    """Court 9's only match was due at 7:00 and the source never marked it started. At 9:40 it isn't upcoming."""
+    overdue = (
+        b"external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,round,status,estimated_start\n"
+        b"DLY-5,15U Boys D1,2026-04-19T07:00:00-04:00,Hall A,Court 9,15UB-D1-1,15UB-D1-4,Pool C,scheduled,\n"
+    )
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": delay_court["source"], "kind": "matches"},
+        files={"file": ("matches.csv", overdue, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+    court_9 = db.scalar(select(Match).where(Match.external_id == "DLY-5")).court_id
+    court_8 = public_match(client, delay_court["DLY-4"])["court"]
+    for court in (delay_court["court"], court_8["id"], str(court_9)):
+        client.patch(f"/v1/admin/courts/{court}", json={"area": "Hall A north"}, headers=ADMIN)
+    after = client.get("/v1/events/demo-championships/changes").json()["latest_id"]
+
+    notices = client.post(
+        f"/v1/admin/venues/{court_8['venue_id']}/delay-notices", json={"area": "Hall A north", "minutes": 25}, headers=ADMIN
+    ).json()["data"]
+    assert sorted(n["court"]["label"] for n in notices) == ["Court 7", "Court 8", "Court 9"]
+
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()["data"]
+    assert sorted(c["diff"]["court"] for c in feed) == ["Court 7", "Court 8"]
+    assert all(c["entry_ids"] for c in feed), "a change with no entries would show to everyone"
+    audit = client.get(f"/v1/admin/events/{demo.id}/audit", headers=ADMIN).json()["data"]
+    assert sum(a["action"] == "delay_notice.post" for a in audit) == 3
+
+    [court_9_notice] = [n for n in notices if n["court"]["label"] == "Court 9"]
+    client.post(f"/v1/admin/delay-notices/{court_9_notice['id']}/clear", headers=ADMIN)
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()["data"]
+    assert len(feed) == 2
+
+
+def test_replacing_a_delay_tells_followers_the_old_one_is_cleared(client, demo, delay_court):
+    court = delay_court["court"]
+    first = client.post(f"/v1/admin/courts/{court}/delay-notices", json={"minutes": 20}, headers=ADMIN).json()["data"]
+    after = client.get("/v1/events/demo-championships/changes").json()["latest_id"]
+    second = client.post(f"/v1/admin/courts/{court}/delay-notices", json={"minutes": 35}, headers=ADMIN).json()["data"]
+
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()["data"]
+    assert sorted((c["event_type"], c["entity_id"]) for c in feed) == sorted(
+        [("delay_cleared", first["id"]), ("delay_posted", second["id"])]
+    )
+    assert all(c["entry_ids"] for c in feed)
+
+
 def test_staff_see_active_delay_notices_with_their_court(client, demo, delay_court):
     client.post(f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 20}, headers=ADMIN)
     replacement = client.post(

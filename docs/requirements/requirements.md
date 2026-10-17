@@ -154,7 +154,7 @@ Priority: **Must** is needed for the demo script in section 9, **Should** is bui
 - **R-18** (Must) Edit venue, parking, food and sponsor content. [B-06; brief §04]
 - **R-19** (Must) Connect an event to its source by configuration: the AES event key, or a CSV import. The AES connector reads divisions, teams, pools, matches, courts, set scores, work teams and the update timestamp; brackets are included if they share the pool format. [B-04; tech §9; grilling Q4; ADR 0003]
 - **R-20** (Must) CSV import shows a preview of added, changed and errored rows before commit; a missing row never cancels a match. [tech §9; catalogue CC-12]
-- **R-34** (Must) Demo mode lets staff set the event's current time, shown in a "Demo time" banner on every screen; My Day, Next Match, delay notices and freshness use it. The clock ticks forward from the set time, and a "+15 min" control jumps it ahead. It's unavailable outside demo mode. [grilling Q10, Q14]
+- **R-34** (Must) Demo mode lets staff set the event's current time, shown in a "Demo time" banner on every screen; My Day, Next Match and delay notices use it. Freshness ages stay on real time on purpose, because each source check is stamped with the real time it ran, so an age measured against demo time would be wrong. The clock ticks forward from the set time, and a "+15 min" control jumps it ahead. It's unavailable outside demo mode. [grilling Q10, Q14]
 - **R-21** (Must) Source health: last successful check per source, and a visible warning to attendees when a source is stale or down. [catalogue §9; tech §7]
 - **R-22** (Should) Import a roster export from the registration system and publish approved fields. [B-05; research §3.3]
 - **R-23** (Should) See view and click counts per sponsor card. [J7; catalogue CC-11]
@@ -191,7 +191,7 @@ Use fictional players throughout and label simulated data as simulated [catalogu
 
 The demo uses two events, both prepared by one command (`uv run python -m app.cli demo-setup`, see the README) with demo time set to April 19, 9:40 am:
 
-- Event A is the real Ontario Championships Event 2, read from AES by its event key. The event is over, so every match shows its result. It shows the live connection, real results and source freshness. Its court areas are demo groupings until OVA supplies a court map (Org Q-11). If AES can't be reached, the command loads recorded Event 2 responses and the source says so.
+- Event A is the real Ontario Championships Event 2, read from AES by its event key. The event is over, but at demo time it plays back as it stood that morning: matches not yet due show as upcoming, and their real results appear as demo time passes them. It shows the live connection, real results and source freshness. Its court areas are demo groupings until OVA supplies a court map (Org Q-11). If AES can't be reached, the command loads recorded Event 2 responses and the source says so.
 - Event B is simulated: fictional teams imported from CSV in place of a MyTeam.click or TIMU event, with upcoming matches at demo time. It carries Next Match, delays, work duties and the playoff fill.
 
 | Step | Event | What the judges see | Outcomes |

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from app.core.config import get_settings
 from app.models import Event, Match, Source
 from app.modules.clock import demo_time_on, event_now
-from app.modules.delays import has_started
+from app.modules.started import has_started
 
 
 def replays_source(source: Source) -> bool:

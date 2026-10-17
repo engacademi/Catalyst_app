@@ -56,6 +56,14 @@ def demo_area(court_label: str) -> str | None:
     return next((hall for last, hall in HALLS if number <= last), None)
 
 
+def halls_directions() -> str:
+    """"Courts 1 to 20 are in Hall A, 21 to 40 in Hall B and 41 to 58 in Hall C.", from HALLS."""
+    firsts = [1] + [last + 1 for last, _ in HALLS[:-1]]
+    ranges = [f"{first} to {last} in {hall}" for first, (last, hall) in zip(firsts, HALLS)]
+    ranges[0] = ranges[0].replace(" in ", " are in ")
+    return f"Courts {', '.join(ranges[:-1])} and {ranges[-1]}."
+
+
 def recorded_fetch(directory: Path = RECORDED_AES) -> Fetch:
     """Serve the recorded AES responses by path, the way the AES site would."""
 
@@ -157,7 +165,7 @@ def _event_b(db: Session, org: Organization) -> Event:
             event_id=event.id,
             name="Enercare Centre",
             address="100 Princes' Blvd, Toronto, ON",
-            directions="Simulated event. Courts 1 to 20 are in Hall A, 21 to 40 in Hall B and 41 to 58 in Hall C.",
+            directions=f"Simulated event. {halls_directions()}",
         )
     )
     source = Source(event_id=event.id, name="MyTeam.click event (simulated CSV import)", mode="demo_fixture")

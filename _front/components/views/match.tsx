@@ -30,7 +30,7 @@ function describe(change: Change, timeZone: string): string {
       return `${d.status?.[0]} → ${d.status?.[1]}`;
     case "next_match_set": {
       const filled = (change.diff.filled ?? []) as { placeholder: string | null; team_name: string }[];
-      return filled.map((f) => `${f.placeholder ?? "TBD"} → ${f.team_name}`).join(", ");
+      return filled.map((f) => `${f.placeholder ?? "To be decided"} → ${f.team_name}`).join(", ");
     }
     default:
       return "";
