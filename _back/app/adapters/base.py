@@ -1,6 +1,6 @@
 """Source adapter protocol.
 
-Every competition source (CSV today; AES, TIMU or MyTeam.click once access is authorized)
+Every competition source (CSV, AES; TIMU or MyTeam.click once access is authorized)
 turns its own format into these normalized rows. Page code and the database never see a
 vendor-specific shape.
 """
@@ -39,3 +39,7 @@ class SourceAdapter(Protocol):
     def capabilities(self) -> Capabilities: ...
 
     def parse(self, kind: str, content: bytes, *, timezone: str, strict: bool) -> ParseResult: ...
+
+
+class SourceUnavailable(Exception):
+    """A live source couldn't be read: timeout, HTTP error, non-JSON reply or unexpected shape."""

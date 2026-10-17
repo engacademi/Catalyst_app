@@ -11,6 +11,7 @@ export type SourceInfo = {
   last_checked_at: string | null;
   last_import_at: string | null;
   upstream_updated_at: string | null;
+  unavailable_since: string | null;
   freshness: Freshness;
 };
 

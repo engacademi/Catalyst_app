@@ -52,6 +52,7 @@ def source_public(source: Source) -> dict[str, Any]:
         "last_checked_at": iso(source.last_successful_check_at),
         "last_import_at": iso(source.last_import_at),
         "upstream_updated_at": iso(source.upstream_updated_at),
+        "unavailable_since": iso(source.unavailable_since),
         "freshness": source_freshness(source),
     }
 
