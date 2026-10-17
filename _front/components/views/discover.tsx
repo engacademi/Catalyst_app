@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
 import { formatTime } from "@/lib/format";
@@ -9,6 +9,7 @@ import { useEvents } from "@/lib/queries";
 import { usePreference, useLocalFollows } from "@/lib/preferences";
 import { EventTile, type DiscoveryEvent } from "../event-tile";
 import { EmptyState, ErrorState, Loading } from "../ui";
+import { SponsorRibbon } from "../sponsor-ribbon";
 import { DiscoveryGreeting } from "../discovery-greeting";
 const TORONTO = { latitude: 43.6532, longitude: -79.3832 };
 export function distanceKm(a: typeof TORONTO, b: typeof TORONTO) {
@@ -52,7 +53,7 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
   });
   const match = query.data?.data[0];
   return (
-    <div>
+    <div className="compact-pick">
       <EventTile event={event} />
       {match && (
         <Link
@@ -85,10 +86,33 @@ export function DiscoverView({
 }) {
   const events = useEvents();
   const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(search.trim()), 180);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const suggestions = useQuery({
+    queryKey: ["discovery-search", debounced],
+    queryFn: () =>
+      apiGet<{
+        data: {
+          id: string;
+          kind: string;
+          label: string;
+          context?: string;
+          href: string;
+          event_slug: string;
+        }[];
+      }>(`/v1/search?q=${encodeURIComponent(debounced)}`),
+    enabled: debounced.length >= 2,
+  });
   const [kind, setKind] = useState("all");
   const [period, setPeriod] = useState("all");
   const [location, setLocation] = useState(TORONTO);
   const [locationLabel, setLocationLabel] = useState("Toronto");
+  const [locationChoice, setLocationChoice] = useState("current");
+  const locationSelection = useRef("current");
   const [message, setMessage] = useState("");
   const [locating, setLocating] = useState(false);
   const [saved] = usePreference<string[]>("saved-events", []);
@@ -102,30 +126,64 @@ export function DiscoverView({
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (p) => {
+        if (locationSelection.current !== "current") return;
         setLocation({
           latitude: p.coords.latitude,
           longitude: p.coords.longitude,
         });
         setLocationLabel("your location");
-        setMessage(
-          "Location stays in this tab and is not sent to our servers.",
-        );
+        setMessage("");
         setLocating(false);
       },
       () => {
-        setMessage("Location wasn't shared. Showing Toronto instead.");
+        if (locationSelection.current !== "current") return;
+        setLocation(TORONTO);
+        setLocationLabel("Toronto");
+        setLocationChoice("Toronto");
+        setMessage("Location wasn’t shared. Showing Toronto instead.");
         setLocating(false);
       },
       { timeout: 10000, maximumAge: 300000, enableHighAccuracy: false },
     );
   };
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        if (locationSelection.current !== "current") return;
+        setLocation({
+          latitude: p.coords.latitude,
+          longitude: p.coords.longitude,
+        });
+        setLocationLabel("your location");
+      },
+      () => {
+        if (locationSelection.current !== "current") return;
+        setLocationChoice("Toronto");
+        setMessage("Location wasn’t shared. Showing Toronto instead.");
+      },
+      { timeout: 10000, maximumAge: 300000 },
+    );
+  }, []); // Request browser permission once; Toronto is the fallback.
+  const cities = [
+    { name: "Toronto", latitude: 43.6532, longitude: -79.3832 },
+    { name: "Ottawa", latitude: 45.4215, longitude: -75.6972 },
+    { name: "Hamilton", latitude: 43.2557, longitude: -79.8711 },
+    { name: "London", latitude: 42.9849, longitude: -81.2453 },
+    { name: "Waterloo", latitude: 43.4643, longitude: -80.5204 },
+  ];
   const all: DiscoveryEvent[] = events.data?.data ?? [];
   const filtered = all.filter(
     (e) =>
       (kind === "all" || e.kind === kind) &&
-      `${e.title} ${e.venues.join(" ")}`
+      (`${e.title} ${e.venues.join(" ")}`
         .toLowerCase()
-        .includes(search.toLowerCase()) &&
+        .includes(search.toLowerCase()) ||
+        (debounced === search.trim() &&
+          debounced.length >= 2 &&
+          suggestions.data?.data.some(
+            (result) => result.event_slug === e.slug,
+          ))) &&
       (period === "all" ||
         (period === "upcoming"
           ? e.end_date >=
@@ -160,14 +218,59 @@ export function DiscoverView({
           <h1>Find your next game.</h1>
         )}
       </div>
-      <div className="discovery-search">
+      <div
+        className="discovery-search"
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setSearchOpen(false);
+        }}
+      >
         <Search size={19} aria-hidden />
         <input
-          aria-label="Search tournaments"
-          placeholder="Search tournaments or venues"
+          aria-label="Search teams, tournaments or venues"
+          placeholder="teams, tournaments or venues"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setSearchOpen(true);
+          }}
+          onFocus={() => setSearchOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setSearchOpen(false);
+          }}
+          aria-haspopup="true"
+          aria-controls="discovery-results"
         />
+        {searchOpen && search.trim().length >= 2 && (
+          <div
+            id="discovery-results"
+            role="region"
+            className="search-results"
+            aria-label="Search results"
+          >
+            {suggestions.isFetching || search.trim() !== debounced ? (
+              <p role="status">Searching…</p>
+            ) : suggestions.error ? (
+              <p role="alert">Search is unavailable. Try again.</p>
+            ) : suggestions.data?.data.length ? (
+              suggestions.data.data.map((result) => (
+                <Link
+                  key={`${result.kind}-${result.id}`}
+                  href={result.href}
+                  onClick={() => setSearchOpen(false)}
+                >
+                  <span className="result-kind">{result.kind}</span>
+                  <strong>{result.label}</strong>
+                  {result.context && <small>{result.context}</small>}
+                </Link>
+              ))
+            ) : (
+              <p role="status">No matching teams, tournaments or venues.</p>
+            )}
+            <button type="button" onClick={() => setSearchOpen(false)}>
+              Close results
+            </button>
+          </div>
+        )}
       </div>
       <div className="discovery-filters">
         <div className="segmented" aria-label="Tournament type">
@@ -217,6 +320,7 @@ export function DiscoverView({
                   </ul>
                 </section>
               )}
+              <SponsorRibbon />
               <section className="reveal-section">
                 <h2>Near {locationLabel}</h2>
                 <div className="location-strip">
@@ -224,9 +328,32 @@ export function DiscoverView({
                     <MapPin size={17} aria-hidden />
                     Within 100 km
                   </span>
-                  <button onClick={requestLocation} disabled={locating}>
-                    {locating ? "Locating…" : "Use my location"}
-                  </button>
+                  <select
+                    aria-label="Event location"
+                    value={locationChoice}
+                    disabled={locating}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      locationSelection.current = value;
+                      setLocationChoice(value);
+                      if (value === "current") requestLocation();
+                      else {
+                        const city = cities.find((c) => c.name === value)!;
+                        setLocation(city);
+                        setLocationLabel(city.name);
+                        setMessage("");
+                      }
+                    }}
+                  >
+                    <option value="current">
+                      {locating ? "Locating…" : "Current location"}
+                    </option>
+                    {cities.map((city) => (
+                      <option key={city.name} value={city.name}>
+                        {city.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 {message && (
                   <p role="status" className="mb-3 text-xs text-muted">

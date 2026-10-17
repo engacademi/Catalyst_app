@@ -1,7 +1,7 @@
 import asyncio
-from contextlib import asynccontextmanager, suppress
 import logging
 import uuid
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,6 +55,10 @@ async def request_id(request: Request, call_next):
     request.state.request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
     response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id
+    if request.url.path.startswith(("/v1/me", "/v1/admin")):
+        response.headers["Cache-Control"] = "private, no-store"
+        vary = response.headers.get("Vary", "")
+        response.headers["Vary"] = ", ".join(filter(None, [vary, "Authorization"]))
     return response
 
 

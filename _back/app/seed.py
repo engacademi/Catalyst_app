@@ -475,3 +475,157 @@ def ensure_dev_users(db: Session, org: Organization, event: Event) -> None:
                 reporting_time=match.scheduled_start - timedelta(minutes=30),
             )
         )
+
+
+def seed_testing(db: Session) -> list[Event]:
+    """Add two synthetic tournaments without resetting or changing existing events."""
+    org = db.scalar(select(Organization).limit(1))
+    if org is None:
+        org = Organization(name="Ontario Volleyball Association")
+        db.add(org)
+        db.flush()
+    now = datetime.now(ZoneInfo(TZ)).replace(second=0, microsecond=0)
+    added = []
+    fixtures = [
+        (
+            "test-lakeside-beach",
+            "Lakeside Beach Open",
+            "beach",
+            now.date() - timedelta(days=14),
+            "Lakeside Courts",
+            43.6388,
+            -79.3816,
+            "Toronto",
+        ),
+        (
+            "test-autumn-invitational",
+            "Autumn Invitational",
+            "indoor",
+            now.date(),
+            "Hamilton Sports Hall",
+            43.2557,
+            -79.8711,
+            "Hamilton",
+        ),
+    ]
+    for slug, title, kind, day, venue, lat, lon, city in fixtures:
+        if db.scalar(select(Event.id).where(Event.slug == slug)):
+            continue
+        event = Event(
+            organization_id=org.id,
+            slug=slug,
+            title=title,
+            kind=kind,
+            timezone=TZ,
+            start_date=day,
+            end_date=day + timedelta(days=1),
+            status="published",
+            is_demo=True,
+        )
+        db.add(event)
+        db.flush()
+        db.add(
+            Venue(
+                event_id=event.id,
+                name=venue,
+                city=city,
+                latitude=lat,
+                longitude=lon,
+                directions="Synthetic testing venue. Coordinates are city reference points.",
+            )
+        )
+        source = Source(
+            event_id=event.id, name="Test tournament fixture", mode="demo_fixture"
+        )
+        db.add(source)
+        db.flush()
+        names = (
+            ["Lakeside Aces", "Hamilton Heights", "Toronto Sparks", "Waterloo Waves"]
+            if kind == "indoor"
+            else [
+                "Sunset Servers",
+                "Lakefront Rally",
+                "Sandstorm Duo",
+                "Beachside Block",
+            ]
+        )
+        _import(
+            db,
+            event,
+            source,
+            "entries",
+            [
+                {
+                    "external_entry_id": f"T{i}",
+                    "team_name": name,
+                    "club_name": f"{city} Test Club",
+                    "division": "Open",
+                    "division_code": "OPEN",
+                }
+                for i, name in enumerate(names)
+            ],
+        )
+        rows = []
+        for i, (home, away) in enumerate([(0, 1), (2, 3), (0, 2), (1, 3)]):
+            start = (
+                (now + timedelta(minutes=[-120, -20, 90, 180][i]))
+                if kind == "indoor"
+                else datetime.combine(day, time(9 + i), tzinfo=ZoneInfo(TZ))
+            )
+            status = (
+                "completed"
+                if kind == "beach" or i == 0
+                else "in_progress"
+                if i == 1
+                else "scheduled"
+            )
+            rows.append(
+                {
+                    "external_match_id": f"M{i}",
+                    "division": "Open",
+                    "scheduled_start": start.isoformat(),
+                    "venue": venue,
+                    "court": f"Court {i % 2 + 1}",
+                    "home_entry_id": f"T{home}",
+                    "away_entry_id": f"T{away}",
+                    "home_placeholder": "",
+                    "away_placeholder": "",
+                    "round": "Pool A" if i < 2 else "Final round",
+                    "status": status,
+                    "set_scores": "25-21 25-19"
+                    if status == "completed"
+                    else "25-22"
+                    if status == "in_progress"
+                    else "",
+                }
+            )
+        _import(db, event, source, "matches", rows)
+        db.add_all(
+            [
+                PartnerCard(
+                    event_id=event.id,
+                    kind="sponsor",
+                    name=name,
+                    body="Fictional sponsor for interface testing.",
+                    sort=i,
+                )
+                for i, name in enumerate(
+                    [
+                        "Rally Athletics · Example",
+                        "Courtside Hydration · Example",
+                        "Northstar Sport · Example",
+                    ]
+                )
+            ]
+        )
+        db.add(
+            GuideItem(
+                event_id=event.id,
+                kind="parking",
+                title="Venue parking",
+                body="Testing fixture: confirm real parking arrangements before travel.",
+            )
+        )
+        added.append(event)
+    db.commit()
+    return added

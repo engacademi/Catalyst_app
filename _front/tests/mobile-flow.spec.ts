@@ -215,9 +215,9 @@ test("location denial keeps Toronto and interests drive recommendations", async 
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Use my location" }).click();
+
   await expect(
-    page.getByText("Location wasn't shared. Showing Toronto instead."),
+    page.getByText("Location wasn’t shared. Showing Toronto instead."),
   ).toBeVisible();
   await expect(
     page
@@ -313,7 +313,7 @@ for (const width of [320, 390, 768]) {
       .locator("section")
       .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) });
     await expect(
-      near.getByRole("button", { name: "Use my location" }),
+      near.getByRole("combobox", { name: "Event location" }),
     ).toBeVisible();
     const rects = await page.locator(".discovery-filters").evaluate((el) => {
       const a = el.querySelector(".segmented")!.getBoundingClientRect();
@@ -435,5 +435,153 @@ test("calendar uses scaled start times and separate overlap lanes", async ({
     path: "test-results/calendar-time-grid-mobile.png",
     fullPage: true,
     animations: "disabled",
+  });
+});
+
+test("discovery searches teams with navigable suggestions", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/v1/search?**", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id: "t1",
+            kind: "Team",
+            label: "Northern Lights",
+            context: event.title,
+            event_slug: event.slug,
+            href: `/events/${event.slug}/teams/t1`,
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("textbox", { name: "Search teams, tournaments or venues" })
+    .fill("Northern");
+  const results = page.getByRole("region", { name: "Search results" });
+  await expect(
+    results.getByRole("link", { name: /Northern Lights/ }),
+  ).toHaveAttribute("href", `/events/${event.slug}/teams/t1`);
+  await expect(
+    page.locator(".event-grid").getByText(event.title),
+  ).toBeVisible();
+  await expect(page.locator(".event-grid").getByText("Beach Tour")).toHaveCount(
+    0,
+  );
+  await page
+    .getByRole("textbox", { name: "Search teams, tournaments or venues" })
+    .press("Escape");
+  await expect(results).toHaveCount(0);
+});
+
+test("current location can be replaced and event venues link to directions", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "geolocation", {
+      value: {
+        getCurrentPosition: (success: (position: unknown) => void) =>
+          success({ coords: { latitude: 45.42, longitude: -75.69 } }),
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Near your location" }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Event location" })
+    .selectOption("Toronto");
+  const nearby = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) });
+  await expect(
+    nearby.getByRole("link", { name: "Directions to Enercare Centre" }).first(),
+  ).toHaveAttribute(
+    "href",
+    /google.com\/maps\/dir\/\?api=1&destination=Enercare%20Centre%2C%20Toronto/,
+  );
+});
+
+test("compact saved picks, sponsor ribbon and profile saved-team lists", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("courtside:saved-events", '["ontario-demo"]');
+    localStorage.setItem("courtside:follows:ontario-demo", '["t1"]');
+  });
+  await page.route("**/v1/sponsors", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id: "sp1",
+            name: "Rally Sports",
+            kind: "sponsor",
+            link_url: "https://example.com/",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/v1/events/ontario-demo/teams?**", (route) =>
+    route.fulfill({
+      json: { data: [{ id: "t1", team_name: "Northern Lights" }], total: 1 },
+    }),
+  );
+  await page.goto("/");
+  const pick = page.locator(".compact-pick .event-tile").first();
+  const nearby = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) });
+  await expect(pick).toBeVisible();
+  const small = await pick.boundingBox();
+  const full = await nearby.locator(".event-tile").first().boundingBox();
+  expect(small!.height).toBeLessThan(full!.height * 0.65);
+  const sponsor = page.getByRole("region", { name: "Our sponsors" });
+  await expect(sponsor).toBeVisible();
+  expect((await sponsor.boundingBox())!.y).toBeGreaterThan(
+    (await page.locator(".saved-discovery").boundingBox())!.y,
+  );
+  expect((await sponsor.boundingBox())!.y).toBeLessThan(
+    (await nearby.boundingBox())!.y,
+  );
+  await page.goto("/profile");
+  await expect(
+    page.getByRole("heading", { name: "Saved teams" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Northern Lights Ontario Championships/ }),
+  ).toHaveAttribute("href", "/events/ontario-demo/teams/t1");
+  await expect(page.locator(".profile-page .event-tile")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/profile-saved-lists.png",
+    fullPage: true,
+  });
+});
+
+test("schedule list removes source and tournament-label clutter", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.addInitScript(() =>
+    localStorage.setItem("courtside:saved-events", '["ontario-demo"]'),
+  );
+  await page.goto("/schedule");
+  await page.getByRole("button", { name: "List", exact: true }).click();
+  await expect(page.locator(".schedule-list .match-card")).toHaveCount(1);
+  await expect(page.locator(".schedule-list .match-card-source")).toHaveCount(
+    0,
+  );
+  await expect(page.locator(".schedule-event-label")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/calendar-list-mobile.png",
+    fullPage: true,
   });
 });

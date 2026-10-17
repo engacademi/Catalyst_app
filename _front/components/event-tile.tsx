@@ -9,6 +9,8 @@ export type DiscoveryEvent = EventSummary & {
   venues: string[];
   venue_locations?: {
     city: string | null;
+    address?: string | null;
+    name?: string;
     latitude: number | null;
     longitude: number | null;
   }[];
@@ -52,24 +54,43 @@ export function EventTile({
         )}
         <SaveEventButton slug={e.slug} />
       </div>
-      <Link href={`/events/${e.slug}`} className="event-tile-body">
+      <div className="event-tile-body">
         <div className="flex flex-wrap gap-2">
           <Badge tone="brand">{e.kind === "beach" ? "Beach" : "Indoor"}</Badge>
           {e.is_demo && <Badge tone="warn">Demo data</Badge>}
         </div>
-        <h3>{e.title}</h3>
+        <h3>
+          <Link href={`/events/${e.slug}`}>{e.title}</Link>
+        </h3>
         <p>
           <CalendarDays size={14} aria-hidden />
           {formatDateRange(e.start_date, e.end_date)}
         </p>
         <p>
           <MapPin size={14} aria-hidden />
-          {e.venues.join(" · ") || "Venue to be announced"}
+          {e.venues.length ? (
+            <span className="event-venue-links">
+              {e.venues.map((venue, index) => (
+                <a
+                  key={`${venue}-${index}`}
+                  className="venue-directions"
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.venue_locations?.[index]?.address || [venue, e.venue_locations?.[index]?.city].filter(Boolean).join(", "))}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Directions to ${venue}`}
+                >
+                  {venue} ↗
+                </a>
+              ))}
+            </span>
+          ) : (
+            "Venue to be announced"
+          )}
         </p>
         {distance != null && (
           <small>About {Math.round(distance)} km away</small>
         )}
-      </Link>
+      </div>
     </article>
   );
 }

@@ -6,7 +6,8 @@
   },
   "deploy": {
     "preDeployCommand": [
-      "alembic upgrade head"
+      "alembic upgrade head",
+      "python -m app.cli seed-testing"
     ],
     "healthcheckPath": "/health/ready",
     "healthcheckTimeout": 60,

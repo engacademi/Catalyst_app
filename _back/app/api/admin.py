@@ -27,6 +27,7 @@ from app.models import (
     AuditEntry,
     ChangeEvent,
     Court,
+    Division,
     Event,
     EventEntry,
     GuideItem,
@@ -35,7 +36,6 @@ from app.models import (
     PartnerCard,
     RosterPublication,
     Source,
-    Division,
     Venue,
     utcnow,
 )
@@ -50,7 +50,7 @@ from app.modules.matches import (
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 DB = Annotated[Session, Depends(get_db)]
-STAFF = {"staff"}
+STAFF = {"staff", "coach", "official"}
 
 
 def audit(
@@ -93,7 +93,9 @@ def staff_event(db: Session, principal: Principal, event_id: str) -> Event:
 
 
 def get_owned(db: Session, principal: Principal, model, obj_id: str):
-    obj = db.get(model, parse_uuid(obj_id))
+    obj = db.scalar(
+        select(model).where(model.id == parse_uuid(obj_id)).with_for_update()
+    )
     if obj is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
     event_id = obj.event_id if hasattr(obj, "event_id") else None
@@ -102,6 +104,10 @@ def get_owned(db: Session, principal: Principal, model, obj_id: str):
     if model is Venue or model is Source:
         event_id = obj.event_id
     require_event_role(principal, event_id, STAFF)
+    if model.__name__ == "Assignment" or (
+        model is ImportBatch and obj.kind == "assignments"
+    ):
+        require_event_role(principal, event_id, {"staff"})
     return obj
 
 
@@ -122,7 +128,9 @@ def me(principal: CurrentPrincipal) -> dict:
             }
             for g in principal.grants
         ],
-        "is_staff": any(g.role in ("admin", "staff") for g in principal.grants),
+        "is_staff": any(
+            g.role in ("admin", "staff", "coach", "official") for g in principal.grants
+        ),
     }
 
 
@@ -219,6 +227,14 @@ def update_event(
     principal: CurrentPrincipal,
 ) -> dict:
     event = staff_event(db, principal, event_id)
+    db.refresh(event, with_for_update=True)
+    if any(
+        value is None
+        for value in body.model_dump(
+            exclude_unset=True, exclude={"expected_revision"}
+        ).values()
+    ):
+        raise HTTPException(422, "Event details cannot be empty")
     check_revision(event.revision, body.expected_revision)
     if (body.end_date or event.end_date) < (body.start_date or event.start_date):
         raise HTTPException(422, "End date must not precede start date")
@@ -380,6 +396,8 @@ async def upload_import(
     team_mapping: Annotated[str | None, Form()] = None,
 ) -> dict:
     event = staff_event(db, principal, event_id)
+    if kind == "assignments":
+        require_event_role(principal, event.id, {"staff"})
     source = db.get(Source, parse_uuid(source_id, "source"))
     if source is None or source.event_id != event.id:
         raise HTTPException(
@@ -459,7 +477,13 @@ def list_imports(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
         .order_by(ImportBatch.created_at.desc())
         .limit(50)
     )
-    return {"data": [_batch_summary(b) for b in batches]}
+    return {
+        "data": [
+            _batch_summary(b)
+            for b in batches
+            if b.kind != "assignments" or principal.has_role({"staff"}, event.id)
+        ]
+    }
 
 
 # ---- announcements -----------------------------------------------------------------
@@ -600,6 +624,7 @@ def archive_announcement(
 
 
 class GuideItemIn(BaseModel):
+    expected_revision: int | None = None
     kind: Literal[
         "parking",
         "food",
@@ -617,6 +642,7 @@ class GuideItemIn(BaseModel):
 
 
 class PartnerIn(BaseModel):
+    expected_revision: int | None = None
     kind: Literal["sponsor", "merchandise", "tickets", "fundraiser", "activity"]
     name: str = Field(min_length=2, max_length=200)
     body: str = Field("", max_length=2000)
@@ -628,7 +654,7 @@ class PartnerIn(BaseModel):
     active: bool = True
 
     def clean(self) -> dict:
-        data = self.model_dump()
+        data = self.model_dump(exclude={"expected_revision"})
         if self.link_url and self.link_url.scheme != "https":
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, "Partner links must use https"
@@ -638,9 +664,20 @@ class PartnerIn(BaseModel):
 
 
 def _guide_data(body: GuideItemIn) -> dict:
-    data = body.model_dump()
+    data = body.model_dump(exclude={"expected_revision"})
     data["link_url"] = str(body.link_url) if body.link_url else None
     return data
+
+
+@router.get("/events/{event_id}/guide-items")
+def admin_guide(event_id: str, db: DB, principal: CurrentPrincipal):
+    event = staff_event(db, principal, event_id)
+    rows = db.scalars(
+        select(GuideItem)
+        .where(GuideItem.event_id == event.id)
+        .order_by(GuideItem.sort, GuideItem.title)
+    )
+    return {"data": {"items": [P.guide_item_public(row) for row in rows]}}
 
 
 @router.post("/events/{event_id}/guide-items", status_code=201)
@@ -669,6 +706,7 @@ def update_guide_item(
     principal: CurrentPrincipal,
 ) -> dict:
     item = get_owned(db, principal, GuideItem, item_id)
+    check_revision(item.revision, body.expected_revision)
     old = item.revision
     for key, value in _guide_data(body).items():
         setattr(item, key, value)
@@ -727,6 +765,7 @@ def update_partner(
     principal: CurrentPrincipal,
 ) -> dict:
     card = get_owned(db, principal, PartnerCard, partner_id)
+    check_revision(card.revision, body.expected_revision)
     old = card.revision
     for key, value in body.clean().items():
         setattr(card, key, value)
@@ -965,7 +1004,8 @@ async def registration_columns(
         # Event staff have scoped grants; any current staff grant suffices to inspect their file.
         if not any(g.role == "staff" for g in principal.grants):
             raise HTTPException(403, "Staff access required")
-    import csv, io
+    import csv
+    import io
 
     content = await file.read(5 * 1024 * 1024 + 1)
     if len(content) > 5 * 1024 * 1024:
@@ -984,6 +1024,7 @@ def assignments_admin(event_id: str, db: DB, principal: CurrentPrincipal):
     from app.models import Assignment, User
 
     event = staff_event(db, principal, event_id)
+    require_event_role(principal, event.id, {"staff"})
     rows = db.scalars(
         select(Assignment)
         .where(Assignment.event_id == event.id)
@@ -1013,7 +1054,7 @@ class AssignmentIn(BaseModel):
 
 
 def write_assignment(body, event, db, assignment=None):
-    from app.models import Assignment, User, RoleGrant
+    from app.models import Assignment, RoleGrant, User
 
     user = db.scalar(
         select(User).where(
@@ -1067,6 +1108,7 @@ def create_assignment(
     principal: CurrentPrincipal,
 ):
     event = staff_event(db, principal, event_id)
+    require_event_role(principal, event.id, {"staff"})
     a = write_assignment(body, event, db)
     audit(db, request, principal, "assignment.create", event.id, a, new=1)
     db.commit()
@@ -1100,8 +1142,9 @@ def delete_assignment(
     a = get_owned(db, principal, Assignment, assignment_id)
     audit(db, request, principal, "assignment.delete", a.event_id, a)
     # Remove the import identity too, allowing a subsequent approved reimport.
-    from app.models import ExternalMapping
     from sqlalchemy import delete
+
+    from app.models import ExternalMapping
 
     db.execute(
         delete(ExternalMapping).where(
@@ -1236,8 +1279,8 @@ def staff_matches(
     limit: int = 100,
 ):
     event = staff_event(db, principal, event_id)
-    from app.modules.matches import match_query
     from app.api.public import project_matches
+    from app.modules.matches import match_query
 
     if cursor < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid page size or cursor")
@@ -1250,6 +1293,7 @@ def staff_matches(
 
 class MatchEditIn(BaseModel):
     expected_revision: int = Field(ge=1)
+    sets: list[tuple[int, int]] | None = Field(None, max_length=5)
     scheduled_start: datetime | None = None
     court_id: uuid.UUID | None = None
     round_label: str | None = Field(None, max_length=200)
@@ -1320,6 +1364,10 @@ def edit_imported_match(
             setattr(state, field, updates[field])
     if "scheduled_start" in updates:
         state.estimated_start = None
+    if body.sets is not None:
+        if any(h < 0 or a < 0 or h > 199 or a > 199 for h, a in body.sets):
+            raise HTTPException(422, "Set scores must be between 0 and 199")
+        state.sets = body.sets
     old = match.revision
     apply_match_state(db, match, state, simulated=event.is_demo)
     event.revision += 1
@@ -1328,3 +1376,188 @@ def edit_imported_match(
     )
     db.commit()
     return {"data": {"revision": match.revision}}
+
+
+# Organization administrators grant event access; account onboarding never does.
+from app.models import RoleGrant, User
+
+
+def organization_admin(principal, event):
+    if not any(
+        g.role == "admin" and g.organization_id == event.organization_id
+        for g in principal.grants
+    ):
+        raise HTTPException(403, "Only an OVA administrator can manage event access")
+
+
+@router.get("/events/{event_id}/access")
+def event_access(event_id: str, db: DB, principal: CurrentPrincipal):
+    event = load_event(db, event_id, include_unpublished=True)
+    organization_admin(principal, event)
+    grants = list(db.scalars(select(RoleGrant).where(RoleGrant.event_id == event.id)))
+    users = list(
+        db.scalars(
+            select(User)
+            .where(User.disabled_at.is_(None))
+            .order_by(User.display_name, User.id)
+            .limit(500)
+        )
+    )
+    return {
+        "data": [
+            {
+                "id": str(g.id),
+                "user_id": str(g.user_id),
+                "role": g.role,
+                "entry_id": str(g.entry_id) if g.entry_id else None,
+            }
+            for g in grants
+        ],
+        "users": [
+            {"id": str(u.id), "display_name": u.display_name or u.clerk_subject}
+            for u in users
+        ],
+    }
+
+
+class AccessIn(BaseModel):
+    user_id: str
+    role: Literal["staff", "coach", "official"]
+    entry_id: str | None = None
+
+
+@router.post("/events/{event_id}/access", status_code=201)
+def grant_event_access(
+    event_id: str, body: AccessIn, request: Request, db: DB, principal: CurrentPrincipal
+):
+    event = load_event(db, event_id, include_unpublished=True)
+    organization_admin(principal, event)
+    user = db.get(User, parse_uuid(body.user_id))
+    if not user or user.disabled_at:
+        raise HTTPException(422, "Choose an active account")
+    entry = db.get(EventEntry, parse_uuid(body.entry_id)) if body.entry_id else None
+    if body.entry_id and (not entry or entry.event_id != event.id):
+        raise HTTPException(422, "Team is not in this tournament")
+    if body.role == "coach" and not entry:
+        raise HTTPException(422, "Choose the coach's team")
+    existing = db.scalar(
+        select(RoleGrant).where(
+            RoleGrant.event_id == event.id,
+            RoleGrant.user_id == user.id,
+            RoleGrant.role == body.role,
+            RoleGrant.entry_id == (entry.id if entry else None),
+        )
+    )
+    if existing:
+        return {"data": {"id": str(existing.id)}}
+    grant = RoleGrant(
+        user_id=user.id,
+        organization_id=event.organization_id,
+        event_id=event.id,
+        role=body.role,
+        entry_id=entry.id if entry else None,
+        granted_by=principal.user.id,
+    )
+    db.add(grant)
+    db.flush()
+    audit(
+        db,
+        request,
+        principal,
+        "access.grant",
+        event.id,
+        grant,
+        role=body.role,
+        user_id=str(user.id),
+    )
+    db.commit()
+    return {"data": {"id": str(grant.id)}}
+
+
+@router.delete("/events/{event_id}/access/{grant_id}", status_code=204)
+def revoke_event_access(
+    event_id: str, grant_id: str, request: Request, db: DB, principal: CurrentPrincipal
+):
+    event = load_event(db, event_id, include_unpublished=True)
+    organization_admin(principal, event)
+    grant = db.get(RoleGrant, parse_uuid(grant_id))
+    if not grant or grant.event_id != event.id or grant.role == "admin":
+        raise HTTPException(404, "Grant not found")
+    audit(
+        db,
+        request,
+        principal,
+        "access.revoke",
+        event.id,
+        grant,
+        role=grant.role,
+        user_id=str(grant.user_id),
+    )
+    db.delete(grant)
+    db.commit()
+
+
+class CourtIn(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    area_label: str | None = Field(None, max_length=100)
+
+
+@router.post("/venues/{venue_id}/courts", status_code=201)
+def add_court(
+    venue_id: str, body: CourtIn, request: Request, db: DB, principal: CurrentPrincipal
+):
+    venue = get_owned(db, principal, Venue, venue_id)
+    if not body.label.strip():
+        raise HTTPException(422, "Enter a court label")
+    if db.scalar(
+        select(Court.id).where(
+            Court.venue_id == venue.id, Court.label == body.label.strip()
+        )
+    ):
+        raise HTTPException(409, "That court label is already in use at this venue")
+    court = Court(
+        venue_id=venue.id, label=body.label.strip(), area_label=body.area_label
+    )
+    db.add(court)
+    db.flush()
+    audit(
+        db, request, principal, "court.create", venue.event_id, court, label=court.label
+    )
+    db.commit()
+    return {"data": P.court_public(court)}
+
+
+@router.patch("/courts/{court_id}")
+def update_court(
+    court_id: str, body: CourtIn, request: Request, db: DB, principal: CurrentPrincipal
+):
+    court = db.get(Court, parse_uuid(court_id))
+    if not court:
+        raise HTTPException(404, "Court not found")
+    venue = db.get(Venue, court.venue_id)
+    staff_event(db, principal, str(venue.event_id))
+    if not body.label.strip():
+        raise HTTPException(422, "Enter a court label")
+    if db.scalar(
+        select(Court.id).where(
+            Court.venue_id == venue.id,
+            Court.label == body.label.strip(),
+            Court.id != court.id,
+        )
+    ):
+        raise HTTPException(409, "That court label is already in use at this venue")
+    old_label = court.label
+    court.label = body.label.strip()
+    court.area_label = body.area_label
+    audit(
+        db,
+        request,
+        principal,
+        "court.update",
+        venue.event_id,
+        court,
+        old_label=old_label,
+        label=court.label,
+    )
+    db.commit()
+    return {"data": P.court_public(court)}

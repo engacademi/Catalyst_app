@@ -203,7 +203,7 @@ async function fixtures(page: Page) {
       });
     else if (path === `/v1/events/${eventId}/announcements`)
       body = { data: [announcement] };
-    else if (path.endsWith("/guide"))
+    else if (path.endsWith("/guide") || path.endsWith("/guide-items"))
       body = {
         data: {
           venues: [venue],

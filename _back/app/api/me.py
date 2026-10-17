@@ -53,7 +53,7 @@ def my_assignments(
 def my_roster_reviews(
     db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal
 ):
-    from app.models import RosterPublication, EventEntry
+    from app.models import EventEntry, RosterPublication
 
     allowed = [g.entry_id for g in principal.grants if g.role == "coach" and g.entry_id]
     rows = db.scalars(
@@ -79,8 +79,9 @@ def my_roster_reviews(
     }
 
 
-from pydantic import BaseModel, Field
 from fastapi import HTTPException
+from pydantic import BaseModel, Field
+
 from app.core.http import parse_uuid
 
 
@@ -96,7 +97,7 @@ def review_roster(
     db: Annotated[Session, Depends(get_db)],
     principal: CurrentPrincipal,
 ):
-    from app.models import RosterPublication, utcnow, AuditEntry, EventEntry
+    from app.models import AuditEntry, EventEntry, RosterPublication, utcnow
 
     r = db.scalar(
         select(RosterPublication)
@@ -129,3 +130,179 @@ def review_roster(
     )
     db.commit()
     return {"data": r.review}
+
+
+# Account type is a preference. Only OVA-issued grants authorize event writes.
+from typing import Literal
+
+from sqlalchemy import delete
+
+from app.models import AccountFollow, AccountProfile, Event, EventEntry, User
+
+
+def profile_data(db, principal):
+    p = db.get(AccountProfile, principal.user.id)
+    entry = db.get(EventEntry, p.team_entry_id) if p and p.team_entry_id else None
+    followers = (
+        list(
+            db.scalars(
+                select(User)
+                .join(AccountFollow, AccountFollow.follower_id == User.id)
+                .where(
+                    AccountFollow.player_id == principal.user.id,
+                    User.disabled_at.is_(None),
+                )
+                .order_by(User.display_name, User.id)
+            )
+        )
+        if p and p.account_type == "player"
+        else []
+    )
+    return {
+        "user_id": str(principal.user.id),
+        "display_name": principal.user.display_name or "Volleyball fan",
+        "account_type": p.account_type if p else None,
+        "officer_type": p.officer_type if p else None,
+        "discoverable": p.discoverable if p else False,
+        "team_entry_id": str(entry.id) if entry else None,
+        "team_name": entry.team_name if entry else None,
+        "followers": [
+            {"id": str(u.id), "display_name": u.display_name or "Volleyball fan"}
+            for u in followers
+        ],
+    }
+
+
+@router.get("/profile")
+def my_profile(db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal):
+    return {"data": profile_data(db, principal)}
+
+
+class AccountIn(BaseModel):
+    display_name: str = Field(min_length=1, max_length=100)
+    account_type: Literal["spectator", "player", "officer"]
+    officer_type: Literal["coach", "referee"] | None = None
+    team_entry_id: str | None = None
+    discoverable: bool = False
+
+
+@router.put("/profile")
+def update_profile(
+    body: AccountIn,
+    db: Annotated[Session, Depends(get_db)],
+    principal: CurrentPrincipal,
+):
+    if not body.display_name.strip():
+        raise HTTPException(422, "Enter a display name")
+    if body.account_type == "officer" and not body.officer_type:
+        raise HTTPException(422, "Choose coach or referee")
+    entry = (
+        db.get(EventEntry, parse_uuid(body.team_entry_id))
+        if body.team_entry_id
+        else None
+    )
+    if body.team_entry_id and (
+        not entry
+        or not db.scalar(
+            select(Event.id).where(
+                Event.id == entry.event_id, Event.status == "published"
+            )
+        )
+    ):
+        raise HTTPException(422, "Choose a team in a published tournament")
+    p = db.get(AccountProfile, principal.user.id)
+    if not p:
+        p = AccountProfile(user_id=principal.user.id)
+        db.add(p)
+    principal.user.display_name = body.display_name.strip()
+    p.account_type = body.account_type
+    p.officer_type = body.officer_type if body.account_type == "officer" else None
+    p.team_entry_id = entry.id if entry and body.account_type == "player" else None
+    p.discoverable = body.discoverable and body.account_type == "player"
+    if not p.discoverable:
+        db.execute(
+            delete(AccountFollow).where(AccountFollow.player_id == principal.user.id)
+        )
+    db.commit()
+    return {"data": profile_data(db, principal)}
+
+
+@router.get("/players")
+def find_players(
+    db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal, q: str = ""
+):
+    if len(q) > 100:
+        raise HTTPException(422, "Search is too long")
+    following = set(
+        db.scalars(
+            select(AccountFollow.player_id).where(
+                AccountFollow.follower_id == principal.user.id
+            )
+        )
+    )
+    rows = db.execute(
+        select(User, AccountProfile)
+        .join(AccountProfile, AccountProfile.user_id == User.id)
+        .where(
+            User.disabled_at.is_(None),
+            User.id != principal.user.id,
+            AccountProfile.account_type == "player",
+            AccountProfile.discoverable.is_(True),
+            User.display_name.icontains(q.strip(), autoescape=True),
+        )
+        .order_by(User.display_name, User.id)
+        .limit(50)
+    )
+    return {
+        "data": [
+            {
+                "id": str(u.id),
+                "display_name": u.display_name,
+                "team_name": db.get(EventEntry, p.team_entry_id).team_name
+                if p.team_entry_id
+                else None,
+                "following": u.id in following,
+            }
+            for u, p in rows
+        ]
+    }
+
+
+@router.put("/players/{player_id}/follow")
+def follow_player(
+    player_id: str, db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal
+):
+    target = parse_uuid(player_id)
+    profile = db.get(AccountProfile, target)
+    user = db.get(User, target)
+    if (
+        target == principal.user.id
+        or not profile
+        or profile.account_type != "player"
+        or not profile.discoverable
+        or not user
+        or user.disabled_at
+    ):
+        raise HTTPException(404, "Player unavailable")
+    from sqlalchemy.dialects.postgresql import insert
+
+    db.execute(
+        insert(AccountFollow)
+        .values(follower_id=principal.user.id, player_id=target)
+        .on_conflict_do_nothing()
+    )
+    db.commit()
+    return {"following": True}
+
+
+@router.delete("/players/{player_id}/follow", status_code=204)
+def unfollow_player(
+    player_id: str, db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal
+):
+    db.execute(
+        delete(AccountFollow).where(
+            AccountFollow.follower_id == principal.user.id,
+            AccountFollow.player_id == parse_uuid(player_id),
+        )
+    )
+    db.commit()

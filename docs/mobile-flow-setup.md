@@ -1,3 +1,5 @@
+Latest account, portal, search, fixture and deployment changes: [ADR 0009](adr/0009-account-roles-and-event-access.md).
+
 # Mobile user flow: implementation and setup
 
 ## Implemented

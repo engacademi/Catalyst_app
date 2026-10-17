@@ -102,6 +102,22 @@ export function TimeGrid({
       )
     : 18;
   const height = (endHour - startHour) * HOUR_HEIGHT;
+  const dayLayouts = dates.map((day) =>
+    layout(
+      rows.filter(
+        (row) =>
+          localDay(
+            (row.match.estimated_start ?? row.match.scheduled_start)!,
+          ) === day,
+      ),
+    ),
+  );
+  const columns = dayLayouts
+    .map(
+      (items) =>
+        `minmax(${Math.max(dates.length === 7 ? 112 : 60, Math.max(1, ...items.map((item) => item.lanes)) * 52)}px, 1fr)`,
+    )
+    .join(" ");
   const today = localDay(new Date().toISOString());
   const eventIds = [...new Set(rows.map((row) => row.event.id))];
   return (
@@ -116,6 +132,9 @@ export function TimeGrid({
       </p>
       <div
         className={`calendar-grid time-calendar ${dates.length === 7 ? "full-week" : ""}`}
+        style={{
+          gridTemplateColumns: `var(--calendar-ruler-width, 36px) ${columns}`,
+        }}
       >
         <div className="time-ruler" aria-hidden>
           <div className="time-grid-corner" title="America/Toronto">
@@ -135,14 +154,7 @@ export function TimeGrid({
         </div>
         {dates.map((day) => {
           const date = new Date(`${day}T12:00:00Z`);
-          const matches = layout(
-            rows.filter(
-              (row) =>
-                localDay(
-                  (row.match.estimated_start ?? row.match.scheduled_start)!,
-                ) === day,
-            ),
-          );
+          const matches = dayLayouts[dates.indexOf(day)];
           return (
             <section
               key={day}

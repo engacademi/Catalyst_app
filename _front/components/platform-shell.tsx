@@ -2,7 +2,14 @@
 import { type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, CalendarDays, Compass, Trophy, UserRound } from "lucide-react";
+import {
+  Bell,
+  CalendarDays,
+  Compass,
+  Trophy,
+  UserRound,
+  Volleyball,
+} from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { Wordmark } from "./brand";
 import { useEvents } from "@/lib/queries";
@@ -123,6 +130,11 @@ export function PlatformShell({ children }: { children: ReactNode }) {
   if (path.startsWith("/admin")) return <>{children}</>;
   return (
     <div className="platform-app">
+      <div className="volleyball-background" aria-hidden="true">
+        <Volleyball strokeWidth={1} />
+        <Volleyball strokeWidth={1} />
+        <Volleyball strokeWidth={1} />
+      </div>
       <header className="platform-header">
         <Link
           href="/"
@@ -155,7 +167,53 @@ export function PlatformShell({ children }: { children: ReactNode }) {
           <Wordmark />
           <small className="by-ova">By Ontario Volleyball Association</small>
         </Link>
-        <span>Your place, courtside.</span>
+        <nav className="footer-socials" aria-label="OVA social media">
+          <a
+            href="https://www.instagram.com/ova_updates/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Instagram
+          </a>
+          <a
+            href="https://www.facebook.com/OntarioVolleyball/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Facebook
+          </a>
+          <a href="https://x.com/ova_updates" target="_blank" rel="noreferrer">
+            X
+          </a>
+          <a
+            href="https://www.youtube.com/user/TheOVAUpdates"
+            target="_blank"
+            rel="noreferrer"
+          >
+            YouTube
+          </a>
+          <a
+            href="https://www.tiktok.com/@ova_updates"
+            target="_blank"
+            rel="noreferrer"
+          >
+            TikTok
+          </a>
+          <a
+            href="https://www.threads.net/@ova_updates"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Threads
+          </a>
+          <a
+            href="https://www.snapchat.com/add/ova_updates"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Snapchat
+          </a>
+        </nav>
       </footer>
       <nav className="platform-dock" aria-label="Main navigation">
         {nav}

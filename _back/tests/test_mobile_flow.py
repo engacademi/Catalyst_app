@@ -41,7 +41,10 @@ def test_staff_match_edits_revision_permissions_and_changes(client, db, demo):
         "round_label": "Gold medal",
     }
     assert client.patch(url, json=body).status_code == 401
-    assert client.patch(url, json=body, headers=OFFICIAL).status_code == 403
+    assert (
+        client.patch(url, json=body, headers={"X-Dev-User": "unassigned"}).status_code
+        == 403
+    )
     result = client.patch(url, json=body, headers=ADMIN)
     assert result.status_code == 200
     assert client.patch(url, json=body, headers=ADMIN).status_code == 409
@@ -80,7 +83,12 @@ def test_match_search_and_event_date_validation(client, demo):
     ]
     assert rows
     assert all(
-        "Lakeshore" in ((m["home"]["team_name"] or "") + (m["away"]["team_name"] or ""))
+        "Lakeshore"
+        in " ".join(
+            m[slot].get(field) or ""
+            for slot in ["home", "away"]
+            for field in ["team_name", "club_name"]
+        )
         for m in rows
     )
     assert (

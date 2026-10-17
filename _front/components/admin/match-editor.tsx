@@ -69,6 +69,10 @@ function ImportedMatch({
   match: Match;
   event: AdminEventData;
 }) {
+  const [scores, setScores] = useState(
+    m.sets.filter((s) => s.home != null && s.away != null).map((s) => `${s.home}-${s.away}`).join(" "),
+  );
+  const [scoreError, setScoreError] = useState("");
   const [form, setForm] = useState({
     scheduled_start: m.scheduled_start ?? "",
     court_id: m.court?.id ?? "",
@@ -95,8 +99,26 @@ function ImportedMatch({
             className="mt-4 grid gap-3 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
+              const valid =
+                !scores.trim() ||
+                /^\d{1,3}-\d{1,3}(\s+\d{1,3}-\d{1,3}){0,4}$/.test(
+                  scores.trim(),
+                );
+              if (!valid) {
+                setScoreError(
+                  "Use home-away scores separated by spaces, e.g. 25-21 25-19.",
+                );
+                return;
+              }
+              setScoreError("");
               save.mutate({
                 ...form,
+                sets: scores.trim()
+                  ? scores
+                      .trim()
+                      .split(/\s+/)
+                      .map((set) => set.split("-").map(Number))
+                  : [],
                 expected_revision: m.revision,
                 scheduled_start: form.scheduled_start || null,
                 court_id: form.court_id || null,
@@ -200,6 +222,17 @@ function ImportedMatch({
                 )}
               </div>
             ))}
+            <Field
+              label="Set scores"
+              hint="Home-away, separated by spaces. Example: 25-21 22-25 15-12"
+            >
+              <input
+                className={inputClass}
+                value={scores}
+                onChange={(e) => setScores(e.target.value)}
+              />
+            </Field>
+            {scoreError && <p role="alert">{scoreError}</p>}
             <FormError error={save.error} />
             {save.isSuccess && <p role="status">Match updated.</p>}
             <PrimaryButton pending={save.isPending}>Save match</PrimaryButton>

@@ -11,7 +11,6 @@ import { useHydrated } from "@/lib/hydration";
 import { MatchCard } from "../match-card";
 import { ErrorState, Loading, EmptyState } from "../ui";
 import { TimeGrid } from "../time-grid";
-import { FreshnessNote } from "../freshness";
 
 export function dateKey(iso: string, timeZone = "America/Toronto") {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone });
@@ -123,9 +122,6 @@ export function ScheduleView() {
   const waiting = rows.filter((r) => !r.match.scheduled_start);
   const renderMatch = ({ event, match }: (typeof rows)[number]) => (
     <div key={`${event.id}-${match.id}`} className="schedule-match">
-      <Link className="schedule-event-label" href={`/events/${event.slug}`}>
-        {event.title}
-      </Link>
       {mode === "calendar" ? (
         <Link
           href={`/events/${event.slug}/matches/${match.id}`}
@@ -150,7 +146,12 @@ export function ScheduleView() {
           </span>
         </Link>
       ) : (
-        <MatchCard match={match} eventId={event.slug} showDay />
+        <MatchCard
+          match={match}
+          eventId={event.slug}
+          showDay
+          showSource={false}
+        />
       )}
     </div>
   );
@@ -280,11 +281,6 @@ export function ScheduleView() {
               </summary>
               {waiting.map(renderMatch)}
             </details>
-          )}
-          {queries.map((q, i) =>
-            !hidden.includes(selected[i].slug) && q.data ? (
-              <FreshnessNote key={selected[i].id} sources={q.data.sources} />
-            ) : null,
           )}
         </>
       )}

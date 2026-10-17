@@ -34,7 +34,12 @@ export type Venue = {
   accessible_entrance: string | null;
   directions: string | null;
   map_url: string | null;
-  courts: { id: string; label: string; area_label?: string | null }[];
+  courts: {
+    id: string;
+    label: string;
+    base_label?: string;
+    area_label?: string | null;
+  }[];
 };
 
 export type EventSummary = {

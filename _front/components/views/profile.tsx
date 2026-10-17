@@ -7,14 +7,19 @@ import {
   useUser,
   useClerk,
 } from "@clerk/nextjs";
+import { AccountDashboard } from "../account-dashboard";
+import { useQueries } from "@tanstack/react-query";
+import { useEventSelections } from "@/lib/preferences";
 import { usePreference } from "@/lib/preferences";
-import { useEvents } from "@/lib/queries";
+import { allEventTeams, useEvents } from "@/lib/queries";
 import { useNotificationCounts } from "../platform-shell";
 import { Card } from "../ui";
-import { EventTile } from "../event-tile";
+
 function Account() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { openUserProfile, signOut } = useClerk();
+  const [intent, setIntent] = usePreference("signup-intent", "spectator");
+  const [officer, setOfficer] = usePreference("signup-officer", "coach");
   if (!isLoaded) return <p>Loading account…</p>;
   if (!isSignedIn)
     return (
@@ -23,11 +28,38 @@ function Account() {
         <p className="section-description">
           Browse everything as a guest, or sign in to manage your account.
         </p>
+        <fieldset className="my-4">
+          <legend className="mb-2">Join as</legend>
+          <div className="segmented">
+            {["spectator", "player", "officer"].map((type) => (
+              <button
+                type="button"
+                key={type}
+                aria-pressed={intent === type}
+                onClick={() => setIntent(type)}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
+          </div>
+          {intent === "officer" && (
+            <label className="grid gap-1 mt-3">
+              Officer role
+              <select
+                value={officer}
+                onChange={(e) => setOfficer(e.target.value)}
+              >
+                <option value="coach">Coach</option>
+                <option value="referee">Referee</option>
+              </select>
+            </label>
+          )}
+        </fieldset>
         <div className="flex flex-wrap gap-3">
           <SignInButton mode="modal">
             <button className="primary-link">Log in</button>
           </SignInButton>
-          <SignUpButton mode="modal">
+          <SignUpButton mode="modal" forceRedirectUrl="/profile">
             <button className="secondary-link">Register</button>
           </SignUpButton>
         </div>
@@ -59,6 +91,16 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
   const [attended] = usePreference<string[]>("attended", []);
   const events = useEvents();
   const notifications = useNotificationCounts();
+  const selected = useEventSelections(events.data?.data ?? []);
+  const teamEvents = (events.data?.data ?? []).filter((e) =>
+    (selected.get(e.slug) ?? []).some((id) => !id.startsWith("division:")),
+  );
+  const teamQueries = useQueries({
+    queries: teamEvents.map((event) => ({
+      queryKey: ["profile-saved-teams", event.slug],
+      queryFn: () => allEventTeams(event.slug),
+    })),
+  });
   return (
     <main id="main" className="platform-main profile-page">
       <div className="discovery-heading">
@@ -77,6 +119,11 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
           </>
         )}
       </Card>
+      {clerkEnabled && (
+        <Card className="mt-5">
+          <AccountDashboard />
+        </Card>
+      )}
       <section>
         <h2>Your interests</h2>
         <p className="section-description">
@@ -124,12 +171,17 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
       </section>
       <section>
         <h2>Saved tournaments</h2>
-        <ul className="event-carousel">
+        <ul className="profile-list">
           {events.data?.data
             .filter((e) => saved.includes(e.slug))
             .map((e) => (
               <li key={e.id}>
-                <EventTile event={e} />
+                <Link href={`/events/${e.slug}`}>
+                  <strong>{e.title}</strong>
+                  <small>
+                    {e.start_date} → {e.end_date}
+                  </small>
+                </Link>
               </li>
             ))}
         </ul>
@@ -137,6 +189,28 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
           <Link className="secondary-link" href="/tournaments">
             Find a tournament to save
           </Link>
+        )}
+      </section>
+      <section>
+        <h2>Saved teams</h2>
+        <ul className="profile-list">
+          {teamEvents.flatMap((event, i) =>
+            (teamQueries[i].data?.data ?? [])
+              .filter((t) => selected.get(event.slug)?.includes(t.id))
+              .map((team) => (
+                <li key={team.id}>
+                  <Link href={`/events/${event.slug}/teams/${team.id}`}>
+                    <strong>{team.team_name}</strong>
+                    <small>{event.title}</small>
+                  </Link>
+                </li>
+              )),
+          )}
+        </ul>
+        {!teamEvents.length && (
+          <p className="empty-inline">
+            Follow a team from a tournament to save it here.
+          </p>
         )}
       </section>
       <section>
