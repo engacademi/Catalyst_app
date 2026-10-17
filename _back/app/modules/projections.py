@@ -7,6 +7,7 @@ from app.models import (
     Announcement,
     ChangeEvent,
     Court,
+    DelayNotice,
     Division,
     Event,
     EventEntry,
@@ -18,6 +19,7 @@ from app.models import (
     Venue,
 )
 from app.modules.clock import demo_time_on, event_now
+from app.modules.delays import estimated_start
 
 SNAPSHOT_MODES = {"manual_import", "demo_fixture"}
 
@@ -134,7 +136,23 @@ def sets_won(match: Match) -> dict[str, int] | None:
     return {"home": home, "away": away}
 
 
-def match_public(match: Match, event: Event, latest_change: ChangeEvent | None = None) -> dict[str, Any]:
+def delay_notice_public(notice: DelayNotice) -> dict[str, Any]:
+    return {
+        "id": str(notice.id),
+        "court_id": str(notice.court_id),
+        "minutes": notice.minutes,
+        "posted_by": "OVA staff",
+        "posted_at": iso(notice.posted_at),
+        "expires_at": iso(notice.expires_at),
+        "cleared_at": iso(notice.cleared_at),
+    }
+
+
+def match_public(
+    match: Match, event: Event, latest_change: ChangeEvent | None = None, notice: DelayNotice | None = None
+) -> dict[str, Any]:
+    """notice is the court's active delay notice when the match hasn't started (delays.notice_for)."""
+    estimate, estimate_by = estimated_start(match, notice)
     return {
         "id": str(match.id),
         "revision": match.revision,
@@ -143,7 +161,10 @@ def match_public(match: Match, event: Event, latest_change: ChangeEvent | None =
         "round_label": match.round_label,
         "division": division_public(match.division),
         "scheduled_start": iso(match.scheduled_start),
-        "estimated_start": iso(match.estimated_start),
+        # The source's own estimate when it publishes one, otherwise official start plus the delay.
+        "estimated_start": iso(estimate),
+        "estimated_start_by": estimate_by,
+        "delay_notice": delay_notice_public(notice) if notice else None,
         "timezone": event.timezone,
         "court": court_public(match.court),
         "home": participant_public(match, "home"),

@@ -373,3 +373,160 @@ def test_my_day_picks_next_match_by_demo_time(client, db, demo, demo_mode):
     assert next_match() == april["APR-1"]
     client.put(clock, json={"demo_time": DEMO_TIME}, headers=ADMIN)
     assert next_match() == april["APR-2"]
+
+
+DELAY_MATCHES = b"""external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,round,status,estimated_start
+DLY-1,15U Boys D1,2026-04-19T09:00:00-04:00,Hall A,Court 7,15UB-D1-1,15UB-D1-2,Pool C,in_progress,
+DLY-2,15U Boys D1,2026-04-19T10:00:00-04:00,Hall A,Court 7,15UB-D1-1,15UB-D1-3,Pool C,scheduled,
+DLY-3,15U Boys D1,2026-04-19T11:00:00-04:00,Hall A,Court 7,15UB-D1-2,15UB-D1-3,Pool C,scheduled,
+DLY-4,15U Boys D1,2026-04-19T10:00:00-04:00,Hall A,Court 8,15UB-D1-4,15UB-D1-3,Pool C,scheduled,
+"""
+
+
+@pytest.fixture
+def delay_court(client, db, demo, demo_mode, real_clock):
+    """Court 7 with one match in progress and two to come, at demo time 9:40 on April 19."""
+    source = client.get(f"/v1/admin/events/{demo.id}", headers=ADMIN).json()["data"]["sources"][0]["id"]
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": source, "kind": "matches"},
+        files={"file": ("matches.csv", DELAY_MATCHES, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+    client.put(f"/v1/admin/events/{demo.id}/demo-clock", json={"demo_time": DEMO_TIME}, headers=ADMIN)
+    matches = {m.external_id: m for m in db.scalars(select(Match).where(Match.external_id.like("DLY-%")))}
+    return {"court": str(matches["DLY-2"].court_id), "source": source, **{k: str(m.id) for k, m in matches.items()}}
+
+
+def public_match(client, match_id: str) -> dict:
+    return client.get(f"/v1/matches/{match_id}").json()["data"]
+
+
+def at(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
+
+
+def test_delay_notice_gives_unstarted_matches_on_the_court_an_estimated_start(client, demo, delay_court):
+    posted = client.post(
+        f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 20}, headers=ADMIN
+    )
+    assert posted.status_code == 201
+    notice = posted.json()["data"]
+    assert notice["minutes"] == 20
+    assert at(notice["posted_at"]) == datetime.fromisoformat(DEMO_TIME)
+    assert at(notice["expires_at"]) == datetime.fromisoformat("2026-04-19T10:40:00-04:00")
+
+    upcoming = public_match(client, delay_court["DLY-2"])
+    assert at(upcoming["scheduled_start"]) == datetime.fromisoformat("2026-04-19T10:00:00-04:00")
+    assert at(upcoming["estimated_start"]) == datetime.fromisoformat("2026-04-19T10:20:00-04:00")
+    assert upcoming["estimated_start_by"] == "ova_staff"
+    assert upcoming["delay_notice"]["minutes"] == 20
+    assert upcoming["delay_notice"]["posted_by"] == "OVA staff"
+
+    listed = client.get("/v1/events/demo-championships/matches", params={"court_id": delay_court["court"]}).json()["data"]
+    later = next(m for m in listed if m["id"] == delay_court["DLY-3"])
+    assert at(later["estimated_start"]) == datetime.fromisoformat("2026-04-19T11:20:00-04:00")
+
+    started = public_match(client, delay_court["DLY-1"])
+    assert started["estimated_start"] is None and started["delay_notice"] is None
+    other_court = public_match(client, delay_court["DLY-4"])
+    assert other_court["estimated_start"] is None and other_court["delay_notice"] is None
+
+    audit = client.get(f"/v1/admin/events/{demo.id}/audit", headers=ADMIN).json()["data"]
+    assert any(a["action"] == "delay_notice.post" and a["summary"]["minutes"] == 20 for a in audit)
+
+
+def test_delay_notice_expires_by_the_event_clock(client, demo, delay_court, real_clock):
+    client.post(
+        f"/v1/admin/courts/{delay_court['court']}/delay-notices",
+        json={"minutes": 20, "duration_minutes": 30},
+        headers=ADMIN,
+    )
+    real_clock.now += timedelta(minutes=29)
+    assert public_match(client, delay_court["DLY-3"])["delay_notice"]["minutes"] == 20
+
+    # Demo time 10:10 is past the notice's expiry even though only a minute of real time passed.
+    real_clock.now += timedelta(minutes=1)
+    client.post(f"/v1/admin/events/{demo.id}/demo-clock/jump", json={"minutes": 1}, headers=ADMIN)
+    expired = public_match(client, delay_court["DLY-3"])
+    assert expired["delay_notice"] is None and expired["estimated_start"] is None
+    assert at(expired["scheduled_start"]) == datetime.fromisoformat("2026-04-19T11:00:00-04:00")
+
+
+def test_staff_clear_a_delay_notice_early(client, demo, delay_court):
+    notice = client.post(
+        f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 15}, headers=ADMIN
+    ).json()["data"]
+    assert client.post(f"/v1/admin/delay-notices/{notice['id']}/clear", headers=OFFICIAL).status_code == 403
+
+    cleared = client.post(f"/v1/admin/delay-notices/{notice['id']}/clear", headers=ADMIN)
+    assert cleared.status_code == 200
+    assert at(cleared.json()["data"]["cleared_at"]) == datetime.fromisoformat(DEMO_TIME)
+    match = public_match(client, delay_court["DLY-2"])
+    assert match["delay_notice"] is None and match["estimated_start"] is None
+
+    actions = [a["action"] for a in client.get(f"/v1/admin/events/{demo.id}/audit", headers=ADMIN).json()["data"]]
+    assert actions[:2] == ["delay_notice.clear", "delay_notice.post"]
+
+
+def test_source_estimate_replaces_the_staff_estimate_but_the_notice_stays(client, demo, delay_court):
+    csv = (
+        b"external_match_id,division,scheduled_start,venue,court,home_entry_id,away_entry_id,round,status,estimated_start\n"
+        b"DLY-3,15U Boys D1,2026-04-19T11:00:00-04:00,Hall A,Court 7,15UB-D1-2,15UB-D1-3,Pool C,scheduled,2026-04-19T11:35:00-04:00\n"
+    )
+    staged = client.post(
+        "/v1/admin/imports",
+        data={"event_id": str(demo.id), "source_id": delay_court["source"], "kind": "matches"},
+        files={"file": ("matches.csv", csv, "text/csv")},
+        headers=ADMIN,
+    ).json()["data"]
+    client.post(f"/v1/admin/imports/{staged['id']}/commit", headers=ADMIN)
+    client.post(f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 20}, headers=ADMIN)
+
+    sourced = public_match(client, delay_court["DLY-3"])
+    assert at(sourced["scheduled_start"]) == datetime.fromisoformat("2026-04-19T11:00:00-04:00")
+    assert at(sourced["estimated_start"]) == datetime.fromisoformat("2026-04-19T11:35:00-04:00")
+    assert sourced["estimated_start_by"] == "source"
+    assert sourced["delay_notice"]["minutes"] == 20
+
+    staff = public_match(client, delay_court["DLY-2"])
+    assert (at(staff["estimated_start"]), staff["estimated_start_by"]) == (
+        datetime.fromisoformat("2026-04-19T10:20:00-04:00"),
+        "ova_staff",
+    )
+
+
+def test_posting_and_clearing_a_delay_reach_followers_of_teams_still_to_play_on_the_court(client, demo, delay_court):
+    after = client.get("/v1/events/demo-championships/changes").json()["latest_id"]
+    notice = client.post(
+        f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 20}, headers=ADMIN
+    ).json()["data"]
+    client.post(f"/v1/admin/delay-notices/{notice['id']}/clear", headers=ADMIN)
+
+    feed = client.get("/v1/events/demo-championships/changes", params={"after": after}).json()["data"]
+    assert [c["event_type"] for c in feed] == ["delay_cleared", "delay_posted"]
+    posted = feed[1]
+    assert posted["entity_type"] == "delay_notice" and posted["entity_id"] == notice["id"]
+    assert posted["diff"]["court"] == "Court 7" and posted["diff"]["minutes"] == 20
+    assert at(posted["diff"]["expires_at"]) == datetime.fromisoformat("2026-04-19T10:40:00-04:00")
+
+    still_to_play = {
+        side["entry_id"]
+        for key in ("DLY-2", "DLY-3")
+        for side in (public_match(client, delay_court[key])["home"], public_match(client, delay_court[key])["away"])
+    }
+    elsewhere = {public_match(client, delay_court["DLY-4"])["home"]["entry_id"]}
+    assert set(posted["entry_ids"]) == still_to_play and not elsewhere & set(posted["entry_ids"])
+    assert set(feed[0]["entry_ids"]) == still_to_play
+
+
+def test_staff_see_active_delay_notices_with_their_court(client, demo, delay_court):
+    client.post(f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 20}, headers=ADMIN)
+    replacement = client.post(
+        f"/v1/admin/courts/{delay_court['court']}/delay-notices", json={"minutes": 35}, headers=ADMIN
+    ).json()["data"]
+    [active] = client.get(f"/v1/admin/events/{demo.id}/delay-notices", headers=ADMIN).json()["data"]
+    assert active["id"] == replacement["id"] and active["minutes"] == 35
+    assert active["court"]["label"] == "Court 7" and active["court"]["venue_name"] == "Hall A"
+    assert client.get(f"/v1/admin/events/{demo.id}/delay-notices", headers=OFFICIAL).status_code == 403
