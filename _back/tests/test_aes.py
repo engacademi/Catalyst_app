@@ -266,6 +266,26 @@ def test_aes_work_team_becomes_the_matches_work_entry(db, aes_teams):
     assert all(m.work_entry_id is None for m in others), "no work duty when AES assigns none"
 
 
+def test_a_filled_placeholder_tells_the_placed_team_its_next_match_is_set(db, aes_teams):
+    event, source = aes_teams
+    # An edited copy of the recording: before match 3 was decided, AES showed "W7" for its second team.
+    undecided = recorded({
+        "poolsheet/-52821": edit_match(
+            -52826, SecondTeamId=None, SecondTeamName="W7", FirstTeamWon=False, SecondTeamWon=False, Sets=[]
+        )
+    })
+    commit_import(db, refresh_matches(db, event, source, undecided).id, None, "test")
+    away = next(p for p in match(db, source, -52826).participants if p.slot == "away")
+    assert away.entry_id is None and away.placeholder_label == "W7"
+
+    commit_import(db, refresh_matches(db, event, source).id, None, "test")
+    [news] = db.scalars(select(ChangeEvent).where(ChangeEvent.event_type == "next_match_set")).all()
+    yrv_ice = db.scalar(select(EventEntry).where(EventEntry.event_id == event.id, EventEntry.team_name == "YRV Ice"))
+    assert news.entry_ids == [str(yrv_ice.id)]
+    assert news.diff["filled"][0]["placeholder"] == "W7"
+    assert news.diff["round"] == "Pool A · Match 3" and news.diff["court"].startswith("Court 29")
+
+
 def test_matches_need_teams_committed_first(db, aes):
     event, source = aes
     batch = refresh_matches(db, event, source)
