@@ -629,13 +629,14 @@ test("bracket traces teams and connects only published feeder slots", async ({
   await expect(page.locator(".bracket-connections path")).toHaveCount(1);
   await page.getByLabel("Trace a team").selectOption("t1");
   await expect(page.locator(".bracket-match.is-traced")).toHaveCount(1);
-  await page.getByRole("button", { name: "Focus round", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Focus round", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Bracket zoom")).toHaveCount(0);
   await page.getByRole("button", { name: "Next round", exact: true }).click();
-  await expect(page.locator(".bracket-round h2")).toHaveText("Final");
+  await expect(page.getByLabel("Bracket round")).toHaveValue("1");
   await page
     .getByRole("button", { name: "Previous round", exact: true })
     .click();
-  await expect(page.locator(".bracket-round h2")).toHaveText("Semifinals");
+  await expect(page.getByLabel("Bracket round")).toHaveValue("0");
 });
 
 test("staff dashboard filters events and opens editing shortcuts with URL persistence", async ({

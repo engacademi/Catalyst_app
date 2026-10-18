@@ -12,6 +12,7 @@ from app.models import (
     Event,
     EventEntry,
     GuideItem,
+    Match,
     Organization,
     PartnerCard,
     RosterPublication,
@@ -36,6 +37,7 @@ def seed_staff_showcase(db: Session) -> Event:
         else None
     )
     if source and (source.config or {}).get("showcase_ready"):
+        seed_showcase_live_matches(db, event, source)
         return event
     org = db.scalar(select(Organization).limit(1))
     if not org:
@@ -364,5 +366,41 @@ def seed_staff_showcase(db: Session) -> Event:
     ensure_dev_users(db, org, event)
     source.config = {**(source.config or {}), "showcase_ready": True}
     event.status = "published"
+    seed_showcase_live_matches(db, event, source)
     db.commit()
     return event
+
+
+def seed_showcase_live_matches(db: Session, event: Event, source: Source) -> None:
+    """Add live pool examples once, preserving all previously edited matches."""
+    from app.modules.projections import event_now
+
+    now = event_now(event).astimezone(ZoneInfo(TZ)).replace(second=0, microsecond=0)
+    rows = []
+    for division, label, hall in [(1, "16U Open", "A"), (2, "18U Open", "B")]:
+        external_id = f"D{division}-LIVE"
+        if db.scalar(
+            select(Match.id).where(
+                Match.source_id == source.id, Match.external_id == external_id
+            )
+        ):
+            continue
+        rows.append(
+            {
+                "external_match_id": external_id,
+                "division": label,
+                "scheduled_start": (now - timedelta(minutes=15)).isoformat(),
+                "venue": f"Showcase Hall {hall}",
+                "court": "Court 2",
+                "home_entry_id": f"D{division}-T5",
+                "away_entry_id": f"D{division}-T6",
+                "home_placeholder": "",
+                "away_placeholder": "",
+                "round": "Live exhibition",
+                "status": "in_progress",
+                "set_scores": "25-22",
+            }
+        )
+    if rows:
+        _import(db, event, source, "matches", rows)
+        db.commit()

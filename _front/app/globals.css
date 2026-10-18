@@ -3449,11 +3449,14 @@ select[class] {
 }
 .tournament-catalogue .event-tile {
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
-  min-height: 185px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 62px 1fr;
+  min-height: 225px;
 }
 .tournament-catalogue .event-tile-art {
-  min-height: 100%;
+  min-height: 62px;
+  height: 62px;
+  justify-content: flex-end;
   padding: 12px;
 }
 .tournament-catalogue .event-tile-art .eyebrow {
@@ -3680,4 +3683,26 @@ select[class] {
   .sponsor-toast {
     animation: none;
   }
+}
+
+/* Keep the large desktop background quieter; phones and tablets retain all five. */
+@media (min-width: 1280px) {
+  .volleyball-background img:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+.bracket-controls {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: end;
+  width: 100%;
+  gap: 10px;
+}
+.bracket-controls > label {
+  min-width: 0;
+  width: 100%;
+}
+.bracket-controls select {
+  width: 100%;
 }

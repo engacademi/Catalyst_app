@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import type { Match, Participant } from "@/lib/api";
@@ -31,10 +31,16 @@ export function BracketBoard({
 }) {
   const [selected, select] = useState("");
   const [roundIndex, setRound] = useState(0);
-  const [allRounds, showAll] = useState(true);
-  const [zoom, setZoom] = useState(1);
+  const scroll = useRef<HTMLDivElement>(null);
+  function navigateRound(value: number) {
+    setRound(value);
+    scroll.current?.scrollTo({
+      left: value * COLUMN,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+    });
+  }
   const index = Math.min(roundIndex, Math.max(0, rounds.length - 1));
-  const visible = allRounds ? rounds : rounds.slice(index, index + 1);
+  const visible = rounds;
   const positions = new Map<string, { x: number; y: number }>();
   const boardHeight =
     Math.max(1, ...visible.map((round) => round.matches.length)) * (CARD + GAP);
@@ -66,7 +72,7 @@ export function BracketBoard({
         : championship.away
       : null;
   const totalWidth =
-    visible.length * COLUMN + (allRounds && champion ? COLUMN : 0);
+    visible.length * COLUMN + (champion ? COLUMN : 0);
   const links = visible.flatMap((round, column) =>
     round.matches.flatMap((match) =>
       [match.home, match.away].flatMap((side) => {
@@ -123,7 +129,7 @@ export function BracketBoard({
           className="icon-link"
           disabled={index === 0}
           aria-label="Previous round"
-          onClick={() => setRound(index - 1)}
+          onClick={() => navigateRound(index - 1)}
         >
           <ChevronLeft aria-hidden size={20} />
         </button>
@@ -132,7 +138,7 @@ export function BracketBoard({
           <select
             aria-label="Bracket round"
             value={index}
-            onChange={(e) => setRound(Number(e.target.value))}
+            onChange={(e) => navigateRound(Number(e.target.value))}
           >
             {rounds.map((round, i) => (
               <option key={`${round.label}-${i}`} value={i}>
@@ -146,32 +152,11 @@ export function BracketBoard({
           className="icon-link"
           disabled={index >= rounds.length - 1}
           aria-label="Next round"
-          onClick={() => setRound(index + 1)}
+          onClick={() => navigateRound(index + 1)}
         >
           <ChevronRight aria-hidden size={20} />
         </button>
-        <button
-          type="button"
-          className="secondary-link"
-          aria-pressed={allRounds}
-          onClick={() => showAll(!allRounds)}
-        >
-          {allRounds ? "Focus round" : "All rounds"}
-        </button>
       </div>
-      <label className="bracket-zoom">
-        Zoom
-        <select
-          aria-label="Bracket zoom"
-          value={zoom}
-          onChange={(e) => setZoom(Number(e.target.value))}
-        >
-          <option value={0.6}>60%</option>
-          <option value={0.8}>80%</option>
-          <option value={1}>100%</option>
-          <option value={1.2}>120%</option>
-        </select>
-      </label>
       <label className="bracket-team-filter">
         Trace a team
         <select value={selected} onChange={(e) => select(e.target.value)}>
@@ -205,6 +190,7 @@ export function BracketBoard({
         </p>
       )}
       <div
+        ref={scroll}
         className="bracket-scroll"
         tabIndex={0}
         aria-label="Competition bracket. Scroll horizontally to explore rounds."
@@ -212,20 +198,18 @@ export function BracketBoard({
         <div
           className="bracket-viewport"
           style={{
-            width: totalWidth * zoom,
-            height: (HEADER + boardHeight) * zoom,
+            width: totalWidth,
+            height: HEADER + boardHeight,
           }}
         >
           <div
-            className={`bracket-board ${allRounds ? "all-rounds" : ""}`}
+            className="bracket-board all-rounds"
             style={{
               width: totalWidth,
               height: HEADER + boardHeight,
-              transform: `scale(${zoom})`,
-              transformOrigin: "top left",
             }}
           >
-            {allRounds && (
+            {(
               <svg
                 className="bracket-connections"
                 width={totalWidth}
@@ -284,7 +268,7 @@ export function BracketBoard({
                 </ol>
               </section>
             ))}
-            {allRounds && champion && (
+            {champion && (
               <section
                 className="bracket-champion"
                 style={{

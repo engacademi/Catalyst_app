@@ -457,7 +457,11 @@ export function DiscoverView({
               {!catalogue && <Link href="/tournaments">See all →</Link>}
             </div>
             {filtered.length ? (
-              <ul className="event-grid">
+              <ul
+                className={catalogue ? "event-grid" : "event-carousel"}
+                aria-label="Explore tournaments"
+                tabIndex={catalogue ? undefined : 0}
+              >
                 {explore.map((e) => (
                   <li key={e.id}>
                     <EventTile event={e} />
