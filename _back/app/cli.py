@@ -237,7 +237,9 @@ def timu_load(tid=None, get=fetch_text, today=None) -> list[Event]:
         with get_sessionmaker()() as db:
             # The TIMU tournament id is the identity; titles can change or share a slug.
             sources = list(db.scalars(select(Source).where(Source.mode == "timu")))
-            matching = [s for s in sources if s.config.get("tournament_id") == tournament_id]
+            matching = [
+                s for s in sources if s.config.get("tournament_id") == tournament_id
+            ]
             if len(matching) > 1:
                 raise ValueError(
                     "Multiple TIMU sources use this tournament; resolve them before loading"
@@ -306,7 +308,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser(
         "seed-testing",
-        help="Add two varied synthetic tournaments without resetting data",
+        help="Add varied testing tournaments and a complete staff showcase without resetting data",
     )
     seed_cmd = sub.add_parser("seed", help="Load the synthetic demo event")
     seed_cmd.add_argument(

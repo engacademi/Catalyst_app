@@ -627,5 +627,8 @@ def seed_testing(db: Session) -> list[Event]:
             )
         )
         added.append(event)
+    from app.showcase import seed_staff_showcase
+
+    seed_staff_showcase(db)
     db.commit()
     return added

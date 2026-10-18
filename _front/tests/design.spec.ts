@@ -562,7 +562,7 @@ test("event icons fit 320px, court diagrams and media are reachable", async ({
   const tabs = page.getByRole("navigation", { name: "Tournament sections" });
   await expect(tabs.getByRole("link")).toHaveCount(6);
   await expect(tabs.getByRole("link").nth(1)).toHaveAccessibleName(
-    "Venue Guide",
+    "Venue",
   );
   for (const box of await tabs.getByRole("link").evaluateAll((links) =>
     links.map((link) => {
@@ -626,11 +626,10 @@ test("bracket traces teams and connects only published feeder slots", async ({
     }),
   );
   await page.goto(`${base}/pathway`);
-  await page.getByRole("button", { name: "Full bracket", exact: true }).click();
   await expect(page.locator(".bracket-connections path")).toHaveCount(1);
   await page.getByLabel("Trace a team").selectOption("t1");
   await expect(page.locator(".bracket-match.is-traced")).toHaveCount(1);
-  await page.getByRole("button", { name: "One round", exact: true }).click();
+  await page.getByRole("button", { name: "Focus round", exact: true }).click();
   await page.getByRole("button", { name: "Next round", exact: true }).click();
   await expect(page.locator(".bracket-round h2")).toHaveText("Final");
   await page

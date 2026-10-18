@@ -50,7 +50,7 @@ export function GuideView({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <PageTitle>Venue Guide</PageTitle>
+      <PageTitle>Venue</PageTitle>
 
       <SectionTitle>Venues</SectionTitle>
       <div className="grid gap-4">
