@@ -65,7 +65,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   }, [latest, lastSeen, markSeen]);
 
   if (!hydrated || query.isPending) return <Loading label="Loading updates" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
 
   // Filtering happens here on the device, so the server never learns who follows what.
   const relevant = query.data!.data.filter(
@@ -154,7 +154,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
 function DelayAlert({ matchId }: { matchId: string }) {
   const query = useMatch(matchId);
   if (query.isPending) return <Loading label="Loading alert" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const match = query.data.data;
   const delay = match.delay_notice;
   return (

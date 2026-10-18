@@ -22,7 +22,7 @@ export function TeamView({
   const query = useEntry(entryId);
   const { ids } = useFollows(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading team" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const team = query.data.data;
 
   return (

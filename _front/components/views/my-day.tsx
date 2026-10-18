@@ -58,7 +58,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
       {!!directTeamIds.length &&
         (query.isPending ? (
           <Loading label="Building your day" />
-        ) : query.error ? (
+        ) : query.error && !query.data ? (
           <ErrorState error={query.error} />
         ) : (
           day && (
@@ -272,7 +272,7 @@ function DivisionContents({ eventId, id }: { eventId: string; id: string }) {
     <div className="px-4 pb-4">
       {query.isPending ? (
         <Loading />
-      ) : query.error ? (
+      ) : query.error && !query.data ? (
         <ErrorState error={query.error} />
       ) : day ? (
         <>

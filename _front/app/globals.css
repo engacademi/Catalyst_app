@@ -3838,3 +3838,47 @@ select[class] {
 .dispute-dialog p { font-size: 14px; margin: 12px 0; }
 .dispute-dialog textarea { display: block; width: 100%; margin: 8px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; }
 .dispute-close { position: absolute; right: 12px; top: 12px; }
+
+/* Saved-data notice: shown whenever the screen is not a live answer from the API.
+   It floats above the mobile dock so it stays visible while scrolling. */
+.connection-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  z-index: 45;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  border: 1px solid #24567733;
+  border-radius: 18px;
+  box-shadow: 0 8px 28px #183c2926;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  background: var(--info-soft);
+  color: var(--info);
+}
+.connection-banner svg {
+  flex-shrink: 0;
+}
+.connection-banner--offline,
+.connection-banner--weak {
+  border-color: #80501533;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+@media (min-width: 1000px) {
+  .connection-banner {
+    bottom: 24px;
+  }
+}
+/* The sponsor toast shares the bottom edge on phones; stack the notice above it. */
+@media (max-width: 999px) {
+  body:has(.sponsor-toast) .connection-banner {
+    bottom: calc(262px + env(safe-area-inset-bottom));
+  }
+}

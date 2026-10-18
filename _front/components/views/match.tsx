@@ -61,7 +61,7 @@ export function MatchView({
   const hydrated = useHydrated();
   const query = useMatch(matchId);
   if (!hydrated || query.isPending) return <Loading label="Loading match" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const m = query.data.data;
 
   return (

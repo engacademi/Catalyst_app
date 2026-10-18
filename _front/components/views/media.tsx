@@ -7,7 +7,7 @@ import { Card, EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 export function MediaView({ eventId }: { eventId: string }) {
   const query = useGuide(eventId);
   if (query.isPending) return <Loading label="Loading event media" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const media = query.data.data.items.filter(
     (item) =>
       item.kind.startsWith("media_") && item.link_url?.startsWith("https://"),
