@@ -13,6 +13,7 @@ import {
   useEventSelections,
 } from "@/lib/preferences";
 import { EventTile, type DiscoveryEvent } from "../event-tile";
+import { useTeamLabel } from "@/lib/follows";
 import { EmptyState, ErrorState, Loading } from "../ui";
 import { SponsorRibbon } from "../sponsor-ribbon";
 import { DiscoveryGreeting } from "../discovery-greeting";
@@ -34,31 +35,49 @@ function nearest(e: DiscoveryEvent, location: typeof TORONTO) {
     );
   return distances.length ? Math.min(...distances) : null;
 }
+function TeamName({
+  eventSlug,
+  entryId,
+  name,
+}: {
+  eventSlug: string;
+  entryId: string;
+  name: string;
+}) {
+  const { label } = useTeamLabel(eventSlug, entryId);
+  return <>{label || name}</>;
+}
+// A saved event alone shows just the event. Following a team adds that team's next
+// match; following only a division adds the division's next match.
 function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
   const follows = useLocalFollows(event.slug);
+  const teamIds = follows.filter((id) => !id.startsWith("division:"));
+  const divisionIds = follows
+    .filter((id) => id.startsWith("division:"))
+    .map((id) => id.slice(9));
   const params = new URLSearchParams({ status: "upcoming", limit: "5" });
-  if (follows.length) {
-    params.set(
-      "entry_ids",
-      follows.filter((id) => !id.startsWith("division:")).join(","),
-    );
-    params.set(
-      "division_ids",
-      follows
-        .filter((id) => id.startsWith("division:"))
-        .map((id) => id.slice(9))
-        .join(","),
-    );
-  }
+  if (teamIds.length) params.set("entry_ids", teamIds.join(","));
+  else params.set("division_ids", divisionIds.join(","));
   const query = useQuery({
     queryKey: ["discovery-next", event.slug, params.toString()],
     queryFn: () =>
       apiGet<{ data: Match[] }>(`/v1/events/${event.slug}/matches?${params}`),
+    enabled: follows.length > 0,
   });
   const match = query.data?.data.find((m) => {
     const start = m.estimated_start ?? m.scheduled_start;
     return !!start && Date.parse(start) > new Date().getTime();
   });
+  const start = match ? (match.estimated_start ?? match.scheduled_start) : null;
+  const when = match
+    ? `${formatDay(start, match.timezone)} at ${formatTime(start, match.timezone)}`
+    : "";
+  const ours = match
+    ? [match.home, match.away].find(
+        (side) => side.entry_id && teamIds.includes(side.entry_id),
+      )
+    : undefined;
+  const other = ours === match?.home ? match?.away : match?.home;
   return (
     <div className="compact-pick">
       <EventTile event={event} />
@@ -67,22 +86,27 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
           className="saved-next"
           href={`/events/${event.slug}/matches/${match.id}`}
         >
-          <strong>
-            Next published match ·{" "}
-            {formatDay(
-              match.estimated_start ?? match.scheduled_start,
-              match.timezone,
-            )}
-            ,{" "}
-            {formatTime(
-              match.estimated_start ?? match.scheduled_start,
-              match.timezone,
-            )}
-          </strong>
-          <span>
-            {match.home.team_name ?? match.home.placeholder ?? "TBD"} vs{" "}
-            {match.away.team_name ?? match.away.placeholder ?? "TBD"}
-          </span>
+          {ours?.entry_id ? (
+            <>
+              <strong>
+                <TeamName
+                  eventSlug={event.slug}
+                  entryId={ours.entry_id}
+                  name={ours.team_name ?? "Your team"}
+                />
+                : playing here {when}
+              </strong>
+              <span>vs {other?.team_name ?? other?.placeholder ?? "TBD"}</span>
+            </>
+          ) : (
+            <>
+              <strong>Next in a division you follow · {when}</strong>
+              <span>
+                {match.home.team_name ?? match.home.placeholder ?? "TBD"} vs{" "}
+                {match.away.team_name ?? match.away.placeholder ?? "TBD"}
+              </span>
+            </>
+          )}
           <span>{match.court?.label ?? "Court pending"} →</span>
         </Link>
       )}

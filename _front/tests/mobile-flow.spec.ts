@@ -474,11 +474,15 @@ test("discovery searches teams with navigable suggestions", async ({
     results.getByRole("link", { name: /Northern Lights/ }),
   ).toHaveAttribute("href", `/events/${event.slug}/teams/t1`);
   await expect(
-    page.getByRole("list", { name: "Explore tournaments" }).getByText(event.title),
+    page
+      .getByRole("list", { name: "Explore tournaments" })
+      .getByText(event.title),
   ).toBeVisible();
-  await expect(page.getByRole("list", { name: "Explore tournaments" }).getByText("Beach Tour")).toHaveCount(
-    0,
-  );
+  await expect(
+    page
+      .getByRole("list", { name: "Explore tournaments" })
+      .getByText("Beach Tour"),
+  ).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "Search teams, tournaments or venues" })
     .press("Escape");
@@ -975,7 +979,9 @@ test("guide shows OVA match-day rules for the event's kind", async ({
   const rules = page.getByRole("region", { name: "Match-day rules" });
   await expect(rules.getByText(/uses 8-4-4/)).toBeVisible();
   await expect(
-    rules.getByRole("link", { name: /Youth Competitions Manual 2026-27 §6\.5/ }),
+    rules.getByRole("link", {
+      name: /Youth Competitions Manual 2026-27 §6\.5/,
+    }),
   ).toHaveAttribute("href", /YCM_2026-2027/);
   await expect(rules.getByText("Check-in")).toHaveCount(0);
   await expect(
@@ -1000,7 +1006,9 @@ test("guide shows OVA match-day rules for the event's kind", async ({
     }),
   );
   await page.reload();
-  await expect(rules.getByText(/both partners check in together/)).toBeVisible();
+  await expect(
+    rules.getByText(/both partners check in together/),
+  ).toBeVisible();
   await expect(rules.getByText(/uses 8-4-4/)).toHaveCount(0);
   await expect(
     page
@@ -1008,4 +1016,68 @@ test("guide shows OVA match-day rules for the event's kind", async ({
       .getByRole("link", { name: /Beach Tour Handbook 2026/ }),
   ).toBeVisible();
   await expect(page.locator('a[href="tel:647-467-5514"]')).toHaveCount(0);
+});
+
+test.describe("courtside picks", () => {
+  const future = new Date(Date.now() + 3 * 3600_000).toISOString();
+  async function pick(page: Page, storage: Record<string, string>) {
+    await setup(page);
+    let matchRequests = 0;
+    await page.route("**/v1/events/ontario-demo/matches**", (route) => {
+      matchRequests++;
+      return route.fulfill({
+        json: {
+          data: [{ ...match, scheduled_start: future }],
+          sources: [source],
+          next_cursor: null,
+        },
+      });
+    });
+    await page.addInitScript((items) => {
+      for (const [key, value] of Object.entries(items))
+        localStorage.setItem(key, value);
+    }, storage);
+    await page.goto("/");
+    const picks = page
+      .locator("section")
+      .filter({
+        has: page.getByRole("heading", { name: "Your courtside picks" }),
+      });
+    await expect(
+      picks.getByRole("link", { name: "Ontario Championships" }),
+    ).toBeVisible();
+    return { picks, matchRequests: () => matchRequests };
+  }
+
+  test("a saved event with no followed team shows only the event", async ({
+    page,
+  }) => {
+    const { picks, matchRequests } = await pick(page, {
+      "courtside:saved-events": JSON.stringify(["ontario-demo"]),
+    });
+    await expect(picks.locator(".saved-next")).toHaveCount(0);
+    expect(matchRequests()).toBe(0);
+  });
+
+  test("a followed team shows that team's next match by name", async ({
+    page,
+  }) => {
+    const { picks } = await pick(page, {
+      "courtside:follows:ontario-demo": JSON.stringify(["t1"]),
+    });
+    const next = picks.locator(".saved-next");
+    await expect(next).toContainText("Northern Lights: playing here");
+    await expect(next).toContainText("vs Lakeshore");
+    await expect(next).toContainText("Court 1");
+  });
+
+  test("a team label replaces the team name", async ({ page }) => {
+    const { picks } = await pick(page, {
+      "courtside:follows:ontario-demo": JSON.stringify(["t2"]),
+      "courtside:label:ontario-demo:t2": "Maya's team",
+    });
+    const next = picks.locator(".saved-next");
+    await expect(next).toContainText("Maya's team: playing here");
+    await expect(next).toContainText("vs Northern Lights");
+  });
 });
