@@ -962,3 +962,49 @@ for (const width of [320, 390]) {
     await fits(".match-card");
   });
 }
+
+test("guide shows OVA match-day rules for the event's kind", async ({
+  page,
+}) => {
+  await setup(page);
+  const guide = { venues: [], items: [], partners: [] };
+  await page.route("**/v1/events/ontario-demo/guide", (route) =>
+    route.fulfill({ json: { data: guide } }),
+  );
+  await page.goto("/events/ontario-demo/guide");
+  const rules = page.getByRole("region", { name: "Match-day rules" });
+  await expect(rules.getByText(/uses 8-4-4/)).toBeVisible();
+  await expect(
+    rules.getByRole("link", { name: /Youth Competitions Manual 2026-27 §6\.5/ }),
+  ).toHaveAttribute("href", /YCM_2026-2027/);
+  await expect(rules.getByText("Check-in")).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "Official OVA documents" })
+      .getByRole("link", { name: /Roster Verification Process/ }),
+  ).toBeVisible();
+  await expect(page.locator('a[href="tel:647-467-5514"]')).toHaveCount(1);
+
+  await page.route("**/v1/events/ontario-demo", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          ...event,
+          kind: "beach",
+          venues: [],
+          divisions: [],
+          counts: { entries: 20, matches: 3 },
+        },
+        sources: [source],
+      },
+    }),
+  );
+  await page.reload();
+  await expect(rules.getByText(/both partners check in together/)).toBeVisible();
+  await expect(rules.getByText(/uses 8-4-4/)).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "Official OVA documents" })
+      .getByRole("link", { name: /Beach Tour Handbook 2026/ }),
+  ).toBeVisible();
+});
