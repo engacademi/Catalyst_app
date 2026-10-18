@@ -207,3 +207,40 @@ def test_aes_discover_loads_found_championships_and_is_idempotent(
     assert db.scalar(select(func.count()).select_from(Event)) == 1
     assert db.scalar(select(func.count()).select_from(Source)) == 1
     assert db.scalar(select(func.count()).select_from(ChangeEvent)) == changes
+
+
+def test_myteam_load_creates_upcoming_beach_events_and_is_idempotent(
+    client, db, monkeypatch
+):
+    from datetime import date
+
+    from app.adapters.myteam import read_myteam
+    from app.cli import myteam_load
+    from app.models import Event
+    from app.modules import sync
+    from tests_unit.test_myteam import recorded
+
+    monkeypatch.setattr(
+        sync, "fetch_snapshot", lambda mode, config: read_myteam(config, get=recorded)
+    )
+    # The 2027-04-04 event is already past; the 2027-04-18 one is dated today.
+    events = myteam_load(date(2027, 4, 18), get=recorded)
+    assert [e.title for e in events] == ["WBT - Downsview- 18U"]
+    listed = client.get("/v1/events").json()["data"]
+    assert len(listed) == 1
+    event = listed[0]
+    assert (event["start_date"], event["end_date"]) == ("2027-04-18", "2027-04-18")
+    assert (event["kind"], event["venues"], event["demo_now"]) == (
+        "beach",
+        ["Downsview"],
+        None,
+    )
+    assert client.get(f"/v1/events/{event['slug']}/teams").json()["total"] == 2
+    assert client.get(f"/v1/events/{event['slug']}/matches").json()["data"] == []
+
+    assert [e.id for e in myteam_load(date(2027, 4, 18), get=recorded)] == [
+        events[0].id
+    ]
+    assert db.scalar(select(func.count()).select_from(Event)) == 1
+    assert db.scalar(select(func.count()).select_from(Source)) == 1
+    assert client.get(f"/v1/events/{event['slug']}/teams").json()["total"] == 2
