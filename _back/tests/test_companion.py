@@ -324,9 +324,12 @@ def test_registration_team_mappings_are_remembered_per_source(client, db, demo):
     saved = client.get(
         f"/v1/admin/sources/{source.id}/registration-mappings", headers=ADMIN
     ).json()["data"]
-    assert saved == [
-        {"external_id": "REG-77", "entry_id": str(first.id), "team_name": first.team_name}
-    ]
+    # The demo seed's own registration import is remembered alongside this one.
+    assert {
+        "external_id": "REG-77",
+        "entry_id": str(first.id),
+        "team_name": first.team_name,
+    } in saved
 
     # The next export of the same system needs no team mapping at all.
     again = _registration_upload(
@@ -349,7 +352,9 @@ def test_registration_team_mappings_are_remembered_per_source(client, db, demo):
     saved = client.get(
         f"/v1/admin/sources/{source.id}/registration-mappings", headers=ADMIN
     ).json()["data"]
-    assert [m["entry_id"] for m in saved] == [str(second.id)]
+    assert [m["entry_id"] for m in saved if m["external_id"] == "REG-77"] == [
+        str(second.id)
+    ]
 
     # Forgetting it brings back the unknown-ID error.
     forget = client.delete(

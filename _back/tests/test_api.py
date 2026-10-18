@@ -70,12 +70,17 @@ def test_work_duty_names_the_followed_work_team(client, db, demo):
     day = client.get(
         "/v1/events/demo-championships/my-day", params={"entry_ids": worker}
     ).json()["data"]
-    assert [m["work_team"]["team_name"] for m in day["work_duties"]] == [
+    # The demo seed gives Lakeshore Thunder a work duty of its own as well.
+    assert str(duty.id) in {m["id"] for m in day["work_duties"]}
+    assert {m["work_team"]["team_name"] for m in day["work_duties"]} == {
         "Lakeshore Thunder"
-    ]
-    # Ordinary matches carry no work team.
+    }
+    # Matches without a work team assignment carry no work team.
+    unassigned = {
+        str(m.id) for m in db.scalars(select(Match).where(Match.work_entry_id.is_(None)))
+    }
     assert all(
-        m["work_team"] is None for m in team["matches"] if m["id"] != str(duty.id)
+        m["work_team"] is None for m in team["matches"] if m["id"] in unassigned
     )
 
 

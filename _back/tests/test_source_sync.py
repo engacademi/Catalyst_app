@@ -65,7 +65,12 @@ def test_pausing_live_source_warns_attendees_at_once(client, db, demo):
     assert response.status_code == 200
     assert freshness()["freshness"] == "paused"
     # Retained schedule stays visible, and cards carry the source's last check.
-    match = client.get("/v1/events/demo-championships/matches").json()["data"][0]
+    # The demo has two feeds; check a match from the paused one.
+    match = next(
+        m
+        for m in client.get("/v1/events/demo-championships/matches").json()["data"]
+        if m["source"]["id"] == str(source.id)
+    )
     assert match["source"]["freshness"] == "paused"
     assert match["source"]["last_checked_at"] == freshness()["last_checked_at"]
 
