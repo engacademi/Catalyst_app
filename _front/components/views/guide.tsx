@@ -163,7 +163,7 @@ export function GuideView({ eventId }: { eventId: string }) {
                 ) : (
                   <p>Ask the venue welcome desk for details.</p>
                 )}
-                {kinds[0] === "help" && (
+                {kinds[0] === "help" && kind === "indoor" && (
                   <div>
                     <strong>Team can&apos;t make it?</strong>
                     <p>{CANT_ATTEND.body}</p>

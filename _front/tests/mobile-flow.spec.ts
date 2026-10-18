@@ -1007,4 +1007,5 @@ test("guide shows OVA match-day rules for the event's kind", async ({
       .getByRole("region", { name: "Official OVA documents" })
       .getByRole("link", { name: /Beach Tour Handbook 2026/ }),
   ).toBeVisible();
+  await expect(page.locator('a[href="tel:647-467-5514"]')).toHaveCount(0);
 });
