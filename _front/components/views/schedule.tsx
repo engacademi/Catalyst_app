@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
-import { formatTime } from "@/lib/format";
+import { formatDateRange, formatDay, formatTime } from "@/lib/format";
 import { useEvents } from "@/lib/queries";
 import { useEventSelections, usePreference } from "@/lib/preferences";
 import { useHydrated } from "@/lib/hydration";
@@ -279,7 +279,17 @@ export function ScheduleView() {
               <summary className="min-h-11">
                 Awaiting a start time ({waiting.length})
               </summary>
-              {waiting.map(renderMatch)}
+              {waiting.map((r) => (
+                <div key={`${r.event.id}-${r.match.id}`}>
+                  <p className="mt-3 text-xs text-muted">
+                    {r.event.title} ·{" "}
+                    {r.match.estimated_start
+                      ? formatDay(r.match.estimated_start, r.match.timezone)
+                      : formatDateRange(r.event.start_date, r.event.end_date)}
+                  </p>
+                  {renderMatch(r)}
+                </div>
+              ))}
             </details>
           )}
         </>
