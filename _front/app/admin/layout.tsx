@@ -19,13 +19,13 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
         publishableKey={clerkKey}
         appearance={{
           variables: {
-            colorPrimary: "#164c3b",
-            colorForeground: "#1d332b",
-            colorMutedForeground: "#5d6c63",
-            colorBorder: "#dce4da",
+            colorPrimary: "#24272a",
+            colorForeground: "#24272a",
+            colorMutedForeground: "#5c6166",
+            colorBorder: "#dfdfdf",
             colorBackground: "#ffffff",
             borderRadius: "1rem",
-            fontFamily: "var(--font-body), sans-serif",
+            fontFamily: "var(--font-body)",
           },
         }}
       >

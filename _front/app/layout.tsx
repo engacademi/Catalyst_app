@@ -1,20 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Manrope } from "next/font/google";
 import "./globals.css";
 import { PlatformShell } from "@/components/platform-shell";
 import { Providers } from "./providers";
-
-const bodyFont = DM_Sans({
-  variable: "--font-body",
-  subsets: ["latin"],
-  display: "swap",
-});
-const headingFont = Manrope({
-  variable: "--font-heading",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: { default: "Olley Catalyst", template: "%s · Olley Catalyst" },
@@ -25,14 +13,14 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#164c3b",
+  themeColor: "#24272a",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en-CA"
-      className={`${bodyFont.variable} ${headingFont.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
         <a
