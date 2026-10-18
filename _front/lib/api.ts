@@ -37,6 +37,8 @@ export type Venue = {
   accessible_entrance: string | null;
   directions: string | null;
   map_url: string | null;
+  photo_url?: string | null;
+  photo_credit?: string | null;
   courts: {
     id: string;
     label: string;

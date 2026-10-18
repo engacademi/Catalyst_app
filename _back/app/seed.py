@@ -40,6 +40,7 @@ from app.models import (
 from app.modules.announcements import deliver_due
 from app.modules.imports import commit_import, stage_import
 from app.modules.sponsors import sponsor_cards, sync_ova_sponsors
+from app.modules.venue_photos import add_venue_photos
 
 DEMO_SLUG = "demo-championships"
 TZ = "America/Toronto"
@@ -812,6 +813,7 @@ def seed_testing(db: Session) -> list[Event]:
     seed_staff_showcase(db)
     # After the showcase so its placeholder sponsors are replaced by OVA's real ones.
     sync_ova_sponsors(db)
+    add_venue_photos(db)
     db.commit()
     return added
 

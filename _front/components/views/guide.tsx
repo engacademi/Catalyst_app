@@ -57,6 +57,19 @@ export function GuideView({ eventId }: { eventId: string }) {
       <div className="grid grid-cols-1 gap-4">
         {venues.map((v) => (
           <Card key={v.id}>
+            {v.photo_url && (
+              <figure className="venue-photo">
+                <Image
+                  src={v.photo_url}
+                  alt={`Outside ${v.name}`}
+                  width={1200}
+                  height={800}
+                  sizes="(max-width: 640px) 100vw, 640px"
+                  unoptimized
+                />
+                {v.photo_credit && <figcaption>{v.photo_credit}</figcaption>}
+              </figure>
+            )}
             <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">
               {v.name}
             </h3>
