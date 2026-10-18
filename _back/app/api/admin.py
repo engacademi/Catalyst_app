@@ -30,6 +30,7 @@ from app.models import (
     Division,
     Event,
     EventEntry,
+    ExternalMapping,
     GuideItem,
     ImportBatch,
     Match,
@@ -1001,6 +1002,64 @@ def refresh_source(source_id: str, db: DB, principal: CurrentPrincipal):
     from app.modules.sync import sync_source
 
     return {"data": sync_source(source_id, actor_id)}
+
+
+@router.get("/sources/{source_id}/registration-mappings")
+def registration_mappings(source_id: str, db: DB, principal: CurrentPrincipal):
+    from app.modules.imports import REGISTRATION_TEAM
+
+    source = get_owned(db, principal, Source, source_id)
+    rows = db.execute(
+        select(ExternalMapping, EventEntry.team_name)
+        .join(EventEntry, EventEntry.id == ExternalMapping.canonical_id)
+        .where(
+            ExternalMapping.source_id == source.id,
+            ExternalMapping.entity_type == REGISTRATION_TEAM,
+            EventEntry.event_id == source.event_id,
+        )
+        .order_by(ExternalMapping.external_id)
+    )
+    return {
+        "data": [
+            {
+                "external_id": m.external_id,
+                "entry_id": str(m.canonical_id),
+                "team_name": team_name,
+            }
+            for m, team_name in rows
+        ]
+    }
+
+
+@router.delete("/sources/{source_id}/registration-mappings/{external_id}")
+def forget_registration_mapping(
+    source_id: str, external_id: str, db: DB, principal: CurrentPrincipal
+):
+    from app.modules.imports import REGISTRATION_TEAM
+
+    source = get_owned(db, principal, Source, source_id)
+    mapping = db.scalar(
+        select(ExternalMapping).where(
+            ExternalMapping.source_id == source.id,
+            ExternalMapping.entity_type == REGISTRATION_TEAM,
+            ExternalMapping.external_id == external_id,
+        )
+    )
+    if mapping is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mapping not found")
+    db.delete(mapping)
+    db.add(
+        AuditEntry(
+            actor_user_id=principal.user.id,
+            action="registration_mapping.forget",
+            event_id=source.event_id,
+            target_type="source",
+            target_id=str(source.id),
+            summary={"external_id": external_id},
+        )
+    )
+    db.commit()
+    return {"data": {"external_id": external_id}}
 
 
 @router.post("/registration/columns")
