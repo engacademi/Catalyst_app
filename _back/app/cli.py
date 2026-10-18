@@ -6,6 +6,7 @@
     python -m app.cli aes-load <event_key>
     python -m app.cli aes-discover [--year 2026]
     python -m app.cli myteam-load
+    python -m app.cli timu-load [--tid 4190]
 
 Staff privileges are only ever granted here, never through a public endpoint.
 """
@@ -23,6 +24,7 @@ from sqlalchemy import select
 from app.adapters.aes import aes_event_url, search_aes_championships
 from app.adapters.live import fetch_text
 from app.adapters.myteam import local_date, upcoming_events
+from app.adapters.timu import INDEX_URL, read_schedule, upcoming_tids
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
 from app.seed import TZ, seed
@@ -209,6 +211,84 @@ def myteam_load(today: date, get=fetch_text) -> list[Event]:
     return loaded
 
 
+def timu_load(tid=None, get=fetch_text, today=None) -> list[Event]:
+    """Create or refresh one event per upcoming OVA tournament on TIMU, or one tid."""
+    from app.modules.sync import sync_source
+
+    if tid is None:
+        today = today or datetime.now(ZoneInfo(TZ)).date()
+        tids = upcoming_tids(get(INDEX_URL), today)
+    else:
+        tids = [str(tid)]
+    events = []
+    for tournament_id in tids:
+        info, _ = read_schedule(
+            get(f"https://www.timu.ca/scoreboards/schedule.php?tid={tournament_id}")
+        )
+        title = f"{info['division']} {info['gender']} {info['tournament']}"
+        # TIMU names often already end with the tier ("... Fall Exhibition").
+        if info["tier"] and not title.lower().endswith(info["tier"].lower()):
+            title = f"{title} - {info['tier']}"
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:100]
+        with get_sessionmaker()() as db:
+            # The TIMU tournament id is the identity; titles can change or share a slug.
+            sources = list(db.scalars(select(Source).where(Source.mode == "timu")))
+            matching = [s for s in sources if s.config.get("tournament_id") == tournament_id]
+            if len(matching) > 1:
+                raise ValueError(
+                    "Multiple TIMU sources use this tournament; resolve them before loading"
+                )
+            source = matching[0] if matching else None
+            event = db.get(Event, source.event_id) if source else None
+            if event is None and db.scalar(select(Event.id).where(Event.slug == slug)):
+                raise ValueError(
+                    "Event slug already belongs to another source; connect TIMU in the staff workspace"
+                )
+            if event is None:
+                org = db.scalar(select(Organization).limit(1))
+                if org is None:
+                    org = Organization(name="Ontario Volleyball Association")
+                    db.add(org)
+                    db.flush()
+                event = Event(
+                    organization_id=org.id,
+                    slug=slug,
+                    title=title,
+                    kind="indoor",
+                    timezone=TZ,
+                    start_date=date.fromisoformat(info["tdate"]),
+                    end_date=date.fromisoformat(info["tdate"]),
+                    status="published",
+                )
+                db.add(event)
+                db.flush()
+                if info.get("venue_name"):
+                    db.add(
+                        Venue(
+                            event_id=event.id,
+                            name=info["venue_name"],
+                            address=info.get("address") or None,
+                        )
+                    )
+                source = Source(
+                    event_id=event.id,
+                    name="TIMU",
+                    mode="timu",
+                    official_url=f"https://www.timu.ca/scoreboards/results.php?tid={tournament_id}",
+                    config={"authorized": True, "tournament_id": tournament_id},
+                )
+                db.add(source)
+            # Polling picks up times and results as TIMU publishes them.
+            source.config = {**source.config, "auto_sync": True}
+            db.commit()
+            result = sync_source(source.id)
+            if not result["ok"]:
+                sys.exit(result["message"])
+            db.refresh(event)
+            events.append(event)
+    return events
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -241,6 +321,10 @@ def main() -> None:
         "myteam-load",
         help="Create or refresh upcoming OVA beach events from MyTeam.click",
     )
+    timu_cmd = sub.add_parser(
+        "timu-load", help="Create or refresh upcoming OVA tournaments from TIMU"
+    )
+    timu_cmd.add_argument("--tid", help="One TIMU tournament id instead of the list")
     args = parser.parse_args()
 
     if args.command == "seed-testing":
@@ -272,6 +356,9 @@ def main() -> None:
     elif args.command == "myteam-load":
         for event in myteam_load(datetime.now(ZoneInfo(TZ)).date()):
             print(f"MyTeam.click event ready: /events/{event.slug}")
+    elif args.command == "timu-load":
+        for event in timu_load(args.tid):
+            print(f"TIMU event ready: /events/{event.slug} ({event.start_date})")
 
 
 if __name__ == "__main__":
