@@ -40,6 +40,7 @@ from app.models import (
 from app.modules.announcements import deliver_due
 from app.modules.imports import commit_import, stage_import
 from app.modules.sponsors import sponsor_cards, sync_ova_sponsors
+from app.modules.venue_photos import add_venue_photos
 
 DEMO_SLUG = "demo-championships"
 TZ = "America/Toronto"
@@ -553,14 +554,33 @@ def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Ev
                 sort=4,
                 body="Visit the info booth in the main lobby. For an emergency, tell any volunteer or call 911.",
             ),
+            # Officials resources quote OVA's published documents; no invented procedures.
             GuideItem(
                 event_id=event.id,
                 kind="officials",
-                title="Referee and scorekeeper briefing",
+                title="Line judge and scorer duties (15U to 18U)",
                 sort=5,
-                body="Officials report to the officials' room 30 minutes before their first assignment. "
-                "Scoresheets and the scoring guide are at each court's scorer table. "
-                "Submit completed scoresheets to the head referee after each match.",
+                body="Each team provides one athlete line judge, calling the lines on its own side, "
+                "and one volunteer scorer or assistant scorer. Youth Competitions Manual 2026-27 §6.21.",
+                link_url="https://cdn1.sportngin.com/attachments/document/6beb-3517468/YCM_2026-2027_FINAL.pdf",
+            ),
+            GuideItem(
+                event_id=event.id,
+                kind="officials",
+                title="Who a Level 1 referee can officiate",
+                sort=6,
+                body="Level 1 (Local) referees can generally be first referee for 12U to 16U OVA "
+                "competitions and second referee for 17U and 18U. New Referees FAQ, question 9.",
+                link_url="https://cdn3.sportngin.com/attachments/document/ad2a-2770538/New_Refs_FAQ_20260923.pdf",
+            ),
+            GuideItem(
+                event_id=event.id,
+                kind="officials",
+                title="Referee contacts",
+                sort=7,
+                body="OVA lists its provincial and regional referee chairs. Tournament and league "
+                "organizers request referees through the form on the same page.",
+                link_url="https://www.ontariovolleyball.org/contact-referees",
             ),
         ]
     )
@@ -812,6 +832,7 @@ def seed_testing(db: Session) -> list[Event]:
     seed_staff_showcase(db)
     # After the showcase so its placeholder sponsors are replaced by OVA's real ones.
     sync_ova_sponsors(db)
+    add_venue_photos(db)
     db.commit()
     return added
 

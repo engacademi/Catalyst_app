@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { CalendarDays, Heart, MapPin, Volleyball } from "lucide-react";
 import type { EventSummary } from "@/lib/api";
@@ -15,6 +16,8 @@ export type DiscoveryEvent = EventSummary & {
     name?: string;
     latitude: number | null;
     longitude: number | null;
+    photo_url?: string | null;
+    photo_credit?: string | null;
   }[];
   team_count?: number;
   match_count?: number;
@@ -43,17 +46,32 @@ export function EventTile({
   event: DiscoveryEvent;
   distance?: number | null;
 }) {
+  const photo = e.venue_locations?.find((v) => v.photo_url);
   const branded = eventSeries(e) != null;
   return (
     <article className={`event-tile ${e.kind}`}>
-      <div className={`event-tile-art ${branded ? "has-logo" : ""}`}>
+      <div
+        className={`event-tile-art ${photo ? "has-photo" : ""} ${branded ? "has-logo" : ""}`}
+      >
+        {photo?.photo_url && (
+          // The venue name is in the tile text, so the photo itself is decorative.
+          <Image
+            className="event-tile-photo"
+            src={photo.photo_url}
+            alt=""
+            title={photo.photo_credit ?? undefined}
+            fill
+            sizes="(max-width: 640px) 45vw, 320px"
+            unoptimized
+          />
+        )}
         <span className="eyebrow">
           {e.kind === "beach" ? "SAND. SUN. SERVE." : "MEET YOU COURTSIDE."}
         </span>
         {branded ? (
           <EventLogo event={e} className="event-tile-logo" size={96} />
         ) : (
-          <Volleyball size={66} strokeWidth={1} aria-hidden />
+          !photo && <Volleyball size={66} strokeWidth={1} aria-hidden />
         )}
       </div>
       <SaveEventButton slug={e.slug} />
