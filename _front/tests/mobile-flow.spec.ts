@@ -470,9 +470,9 @@ test("discovery searches teams with navigable suggestions", async ({
     results.getByRole("link", { name: /Northern Lights/ }),
   ).toHaveAttribute("href", `/events/${event.slug}/teams/t1`);
   await expect(
-    page.locator(".event-grid").getByText(event.title),
+    page.getByRole("list", { name: "Explore tournaments" }).getByText(event.title),
   ).toBeVisible();
-  await expect(page.locator(".event-grid").getByText("Beach Tour")).toHaveCount(
+  await expect(page.getByRole("list", { name: "Explore tournaments" }).getByText("Beach Tour")).toHaveCount(
     0,
   );
   await page

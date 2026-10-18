@@ -293,11 +293,6 @@ export function ScheduleView() {
                       />
                       <span className="visibility-option-text">
                         <strong>{e.title}</strong>
-                        <small>
-                          {hidden.includes(e.slug)
-                            ? "Hidden from calendar"
-                            : "Visible on calendar"}
-                        </small>
                       </span>
                       <span className="visibility-switch" aria-hidden>
                         <span />

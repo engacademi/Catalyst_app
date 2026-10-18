@@ -154,7 +154,7 @@ function AccountForm({
                 {type === "player"
                   ? "Athlete"
                   : type === "officer"
-                    ? "Team Lead"
+                    ? "Lead"
                     : "Spectator"}
               </button>
             ))}
@@ -307,7 +307,7 @@ export function AccountRole() {
       {type === "player"
         ? "Athlete"
         : type === "officer"
-          ? "Team Lead"
+          ? "Lead"
           : "Spectator"}
     </span>
   ) : null;

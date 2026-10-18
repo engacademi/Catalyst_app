@@ -636,7 +636,7 @@ export function AssignmentPanel({ event }: { event: AdminEventData }) {
       </Card>
       <LoadMore query={matches} label="matches for assignment" />
       {matches.error && <ErrorState error={matches.error} />}
-      <SectionTitle>Assigned Team Leads</SectionTitle>
+      <SectionTitle>Assigned Leads</SectionTitle>
       {list.isPending ? (
         <Loading />
       ) : list.error ? (

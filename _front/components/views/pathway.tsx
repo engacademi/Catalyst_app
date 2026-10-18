@@ -34,20 +34,10 @@ export function PathwayView({ eventId }: { eventId: string }) {
   return (
     <div>
       <PageTitle>Brackets</PageTitle>
-      <Link
-        href={`/events/${eventId}/matches`}
-        className="text-sm font-semibold text-brand underline"
-      >
-        ← Match list
-      </Link>
-      <div className="mt-4 flex flex-wrap gap-3">
-        <label className="flex-1 text-sm font-medium">
+      <div className="pathway-toolbar">
+        <label>
           Division
-          <select
-            value={division}
-            onChange={(e) => choose(e.target.value)}
-            className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface px-3"
-          >
+          <select value={division} onChange={(e) => choose(e.target.value)}>
             {event.data?.data.divisions.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -55,14 +45,17 @@ export function PathwayView({ eventId }: { eventId: string }) {
             ))}
           </select>
         </label>
-        <label className="flex min-h-11 items-center gap-2 self-end text-sm">
-          <input
-            type="checkbox"
-            checked={mine}
-            onChange={(e) => setMine(e.target.checked)}
-          />
-          My teams and unresolved slots
-        </label>
+        <button
+          type="button"
+          className="secondary-link pathway-mine"
+          aria-pressed={mine}
+          onClick={() => setMine(!mine)}
+        >
+          My teams
+        </button>
+        <Link href={`/events/${eventId}/matches`} className="secondary-link">
+          Match list
+        </Link>
       </div>
       {event.error || query.error ? (
         <ErrorState error={event.error || query.error} />
@@ -73,9 +66,6 @@ export function PathwayView({ eventId }: { eventId: string }) {
       ) : (
         query.data && (
           <>
-            <p className="my-4 rounded-xl border border-border bg-surface p-3 text-xs text-muted">
-              {query.data.note}
-            </p>
             <BracketBoard
               key={division}
               eventId={eventId}

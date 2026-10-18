@@ -54,6 +54,8 @@ export function useNotificationCounts() {
   const queries = useQueries({
     queries: selected.map((e) => ({
       queryKey: ["notification-count", e.slug, local.get(e.slug)?.seen ?? 0],
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true,
       queryFn: async () => {
         const data: Change[] = [];
         const divisions: Record<string, string> = {};

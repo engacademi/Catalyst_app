@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { CalendarDays, Heart, MapPin, Volleyball, Waves } from "lucide-react";
+import { CalendarDays, Heart, MapPin, Volleyball } from "lucide-react";
 import type { EventSummary } from "@/lib/api";
 import { usePreference } from "@/lib/preferences";
 import { formatDateRange } from "@/lib/format";
@@ -47,11 +47,7 @@ export function EventTile({
         <span className="eyebrow">
           {e.kind === "beach" ? "SAND. SUN. SERVE." : "MEET YOU COURTSIDE."}
         </span>
-        {e.kind === "beach" ? (
-          <Waves size={66} strokeWidth={1} aria-hidden />
-        ) : (
-          <Volleyball size={66} strokeWidth={1} aria-hidden />
-        )}
+        <Volleyball size={66} strokeWidth={1} aria-hidden />
       </div>
       <SaveEventButton slug={e.slug} />
       <div className="event-tile-body">

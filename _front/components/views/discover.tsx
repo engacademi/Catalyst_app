@@ -246,7 +246,10 @@ export function DiscoverView({
     </span>
   ) : null;
   return (
-    <main id="main" className="platform-main discovery-page">
+    <main
+      id="main"
+      className={`platform-main discovery-page ${catalogue ? "tournament-catalogue" : ""}`}
+    >
       <div className="discovery-heading">
         {catalogue ? (
           <h1>Tournaments</h1>
@@ -454,7 +457,11 @@ export function DiscoverView({
               {!catalogue && <Link href="/tournaments">See all →</Link>}
             </div>
             {filtered.length ? (
-              <ul className="event-grid">
+              <ul
+                className={catalogue ? "event-grid" : "event-carousel"}
+                aria-label="Explore tournaments"
+                tabIndex={catalogue ? undefined : 0}
+              >
                 {explore.map((e) => (
                   <li key={e.id}>
                     <EventTile event={e} />

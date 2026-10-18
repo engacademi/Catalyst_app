@@ -320,24 +320,15 @@ test("following survives navigation and reload; search and match filters retain 
 }) => {
   await fixtures(page);
   await page.goto(`${base}/teams`);
-  const follow = page.getByRole("button", {
-    name: `Follow ${entries[0].team_name}`,
-    exact: true,
+  await page.locator(".team-picker > summary").click();
+  const follow = page.getByRole("checkbox", {
+    name: new RegExp(entries[0].team_name),
   });
-  await follow.click();
-  await expect(
-    page.getByRole("button", {
-      name: `Unfollow ${entries[0].team_name}`,
-      exact: true,
-    }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await follow.check();
+  await expect(follow).toBeChecked();
   await page.reload();
-  await expect(
-    page.getByRole("button", {
-      name: `Unfollow ${entries[0].team_name}`,
-      exact: true,
-    }),
-  ).toBeVisible();
+  await page.locator(".team-picker > summary").click();
+  await expect(follow).toBeChecked();
   await page.getByRole("searchbox").fill("Northern");
   await expect(page).toHaveURL(/q=Northern/);
   await page.goto(`${base}/my-day`);
@@ -499,17 +490,15 @@ test("merged division follows, private labels, pathway and staff estimates remai
 }) => {
   await fixtures(page);
   await page.goto(`${base}/teams`);
-  const followDivision = page.getByRole("button", {
-    name: /16U Girls Division 1/,
+  await page.locator(".team-picker > summary").click();
+  const followDivision = page.getByRole("checkbox", {
+    name: /Entire 16U Girls Division 1 division/,
   });
-  await followDivision.click();
-  await expect(followDivision).toHaveAttribute("aria-pressed", "true");
+  await followDivision.check();
+  await expect(followDivision).toBeChecked();
   await page
-    .getByRole("button", {
-      name: `Follow ${entries[0].team_name}`,
-      exact: true,
-    })
-    .click();
+    .getByRole("checkbox", { name: new RegExp(entries[0].team_name) })
+    .check();
   await page.goto(`${base}/my-teams`);
   await page
     .getByRole("textbox", { name: "Private label" })
@@ -561,9 +550,7 @@ test("event icons fit 320px, court diagrams and media are reachable", async ({
   await page.goto(base);
   const tabs = page.getByRole("navigation", { name: "Tournament sections" });
   await expect(tabs.getByRole("link")).toHaveCount(6);
-  await expect(tabs.getByRole("link").nth(1)).toHaveAccessibleName(
-    "Venue Guide",
-  );
+  await expect(tabs.getByRole("link").nth(1)).toHaveAccessibleName("Venue");
   for (const box of await tabs.getByRole("link").evaluateAll((links) =>
     links.map((link) => {
       const r = link.getBoundingClientRect();
@@ -626,17 +613,19 @@ test("bracket traces teams and connects only published feeder slots", async ({
     }),
   );
   await page.goto(`${base}/pathway`);
-  await page.getByRole("button", { name: "Full bracket", exact: true }).click();
   await expect(page.locator(".bracket-connections path")).toHaveCount(1);
   await page.getByLabel("Trace a team").selectOption("t1");
   await expect(page.locator(".bracket-match.is-traced")).toHaveCount(1);
-  await page.getByRole("button", { name: "One round", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Focus round", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Bracket zoom")).toHaveCount(0);
   await page.getByRole("button", { name: "Next round", exact: true }).click();
-  await expect(page.locator(".bracket-round h2")).toHaveText("Final");
+  await expect(page.getByLabel("Bracket round")).toHaveValue("1");
   await page
     .getByRole("button", { name: "Previous round", exact: true })
     .click();
-  await expect(page.locator(".bracket-round h2")).toHaveText("Semifinals");
+  await expect(page.getByLabel("Bracket round")).toHaveValue("0");
 });
 
 test("staff dashboard filters events and opens editing shortcuts with URL persistence", async ({
@@ -656,4 +645,26 @@ test("staff dashboard filters events and opens editing shortcuts with URL persis
   await expect(
     page.getByRole("tab", { name: "Content", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+});
+
+test("sponsor alternates visits, venue cards expand and rankings sum completed scores", async ({ page }) => {
+  await fixtures(page);
+  await page.route("**/v1/events/demo-championships/guide", async (route) => {
+    await route.fulfill({ json: { data: { venues: [venue], items: [{ id: "parking", kind: "parking", title: "Parking", body: "Use the underground car park." }], partners: [{ id: "demo-sponsor", kind: "sponsor", name: "Red Bull · Demo", body: "Demo placement", active: true }] }, sources: [source] } });
+  });
+  await page.goto(base);
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("olley:sponsor-visits:demo-championships"))).toBe("1");
+  await expect(page.getByLabel("A message from an event sponsor")).toHaveCount(0);
+  await page.goto(`${base}/matches/m1`);
+  await expect(page.getByLabel("A message from an event sponsor")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss sponsor message" }).click();
+  await page.goto(`${base}/guide`);
+  await expect(page.locator(".venue-quick-card")).toHaveCount(4);
+  await page.getByRole("link", { name: "View details" }).first().click();
+  await expect(page.getByText("Use the underground car park.")).toBeVisible();
+  await expect(page.locator(".partner-carousel")).toHaveCSS("overflow-x", "auto");
+  await page.goto(`${base}/teams`);
+  await page.getByRole("button", { name: "Team Rankings", exact: true }).click();
+  await expect(page.locator(".rankings-panel table")).toHaveCount(1);
+  await expect(page.locator(".rankings-panel tbody tr")).toHaveCount(2);
 });

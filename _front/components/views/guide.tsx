@@ -50,7 +50,7 @@ export function GuideView({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <PageTitle>Venue Guide</PageTitle>
+      <PageTitle>Venue</PageTitle>
 
       <SectionTitle>Venues</SectionTitle>
       <div className="grid gap-4">
@@ -97,26 +97,69 @@ export function GuideView({ eventId }: { eventId: string }) {
       </div>
 
       <SectionTitle>Getting around</SectionTitle>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {general.map((i) => {
-          const Icon = ICONS[i.kind] ?? LifeBuoy;
+      <div className="venue-quick-grid">
+        {[
+          {
+            title: "Parking & directions",
+            icon: Car,
+            kinds: ["parking", "directions"],
+          },
+          { title: "Food & drink", icon: Utensils, kinds: ["food"] },
+          {
+            title: "Accessibility",
+            icon: Accessibility,
+            kinds: ["accessibility"],
+          },
+          {
+            title: "Help & services",
+            icon: LifeBuoy,
+            kinds: ["help", "services"],
+          },
+        ].map(({ title, icon: Icon, kinds }) => {
+          const resources = general.filter(
+            (item) =>
+              kinds.includes(item.kind) ||
+              (!Object.keys(ICONS).includes(item.kind) &&
+                title === "Help & services"),
+          );
           return (
-            <Card key={i.id}>
-              <h3 className="flex items-center gap-2 font-semibold">
-                <Icon aria-hidden className="h-4 w-4 text-brand" /> {i.title}
-              </h3>
-              <p className="mt-1 whitespace-pre-line text-sm">{i.body}</p>
-              {i.link_url && (
-                <a
-                  href={i.link_url}
-                  className="mt-2 inline-block text-sm font-semibold text-brand underline"
-                  rel="noopener"
-                  target="_blank"
-                >
-                  More information
-                  <span className="sr-only"> (opens in a new tab)</span>
-                </a>
-              )}
+            <Card key={title} className="venue-quick-card">
+              <Icon size={20} aria-hidden />
+              <h3>{title}</h3>
+              <a
+                href={`#venue-details-${kinds[0]}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  const panel = document.getElementById(
+                    `venue-details-${kinds[0]}`,
+                  ) as HTMLDetailsElement | null;
+                  if (panel) panel.open = !panel.open;
+                }}
+              >
+                View details
+              </a>
+              <details id={`venue-details-${kinds[0]}`}>
+                <summary>Information</summary>
+                {resources.length ? (
+                  resources.map((item) => (
+                    <div key={item.id}>
+                      <strong>{item.title}</strong>
+                      <p>{item.body}</p>
+                      {item.link_url && (
+                        <a
+                          href={item.link_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          More information
+                        </a>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p>Ask the venue welcome desk for details.</p>
+                )}
+              </details>
             </Card>
           );
         })}
@@ -169,7 +212,7 @@ export function GuideView({ eventId }: { eventId: string }) {
         <>
           <SectionTitle>
             <span className="flex items-center gap-2">
-              <Whistle aria-hidden className="h-4 w-4 text-brand" /> Team Lead
+              <Whistle aria-hidden className="h-4 w-4 text-brand" /> Lead
               resources
             </span>
           </SectionTitle>
@@ -191,12 +234,12 @@ export function GuideView({ eventId }: { eventId: string }) {
             </Card>
           ))}
           <p className="text-sm">
-            Team Leads can sign in to see their own court assignments in the{" "}
+            Leads can sign in to see their own court assignments in the{" "}
             <a
               href="/admin/assignments"
               className="font-semibold text-brand underline"
             >
-              Team Lead workspace
+              Lead workspace
             </a>
             .
           </p>
@@ -206,10 +249,17 @@ export function GuideView({ eventId }: { eventId: string }) {
       {sponsors.length > 0 && (
         <>
           <SectionTitle>Event partners</SectionTitle>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div
+            className="partner-carousel"
+            role="region"
+            aria-label="Event partners"
+            tabIndex={0}
+          >
             {sponsors.map((p) => (
               <Card key={p.id}>
-                <Badge>Sponsored</Badge>
+                <Badge>
+                  {p.name.includes("Demo") ? "Demo partner" : "Sponsored"}
+                </Badge>
                 <p className="mt-2 font-semibold">{p.name}</p>
                 <p className="text-sm">{p.body}</p>
                 {p.booth_location && (

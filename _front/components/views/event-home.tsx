@@ -106,7 +106,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
               <ul className="event-carousel live-carousel">
                 {live.data.data.map((m) => (
                   <li key={m.id}>
-                    <MatchCard match={m} eventId={eventId} />
+                    <MatchCard match={m} eventId={eventId} showSource={false} />
                   </li>
                 ))}
               </ul>
@@ -136,7 +136,12 @@ export function EventHomeView({ eventId }: { eventId: string }) {
         <ul className="event-carousel live-carousel">
           {comingUp.slice(0, 8).map((m) => (
             <li key={m.id}>
-              <MatchCard match={m} eventId={eventId} showDay />
+              <MatchCard
+                match={m}
+                eventId={eventId}
+                showDay
+                showSource={false}
+              />
             </li>
           ))}
         </ul>

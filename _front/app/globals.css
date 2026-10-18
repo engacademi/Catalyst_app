@@ -3430,3 +3430,394 @@ select[class] {
 .event-carousel:not(:has(.saved-next)) .compact-pick {
   grid-template-rows: 1fr;
 }
+
+/* Compact event browsing and layered competition trees. */
+.discover-illustration {
+  left: calc(100% + 26px);
+}
+.tournament-context {
+  padding: 7px 20px 0;
+}
+.tournament-context > a {
+  min-height: 28px;
+}
+.tournament-tabs {
+  padding-top: 3px;
+}
+.visibility-panel .visibility-option {
+  min-height: 54px;
+}
+.tournament-catalogue .event-tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 62px 1fr;
+  min-height: 225px;
+}
+.tournament-catalogue .event-tile-art {
+  min-height: 62px;
+  height: 62px;
+  justify-content: flex-end;
+  padding: 12px;
+}
+.tournament-catalogue .event-tile-art .eyebrow {
+  display: none;
+}
+.tournament-catalogue .event-tile-art > svg {
+  width: 46px;
+}
+.tournament-catalogue .event-tile-body {
+  padding: 13px 14px;
+}
+.tournament-catalogue .event-tile-body > .flex {
+  padding-right: 37px;
+  min-height: 31px;
+}
+.tournament-catalogue .event-tile h3 {
+  font-size: 15px;
+  line-height: 1.35;
+  margin: 5px 0 8px;
+}
+.tournament-catalogue .event-tile p {
+  font-size: 11px;
+  margin-top: 5px;
+  line-height: 1.5;
+}
+.tournament-catalogue .event-tile .save-event {
+  top: 9px;
+  right: 9px;
+}
+.pathway-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin: 14px 0;
+  flex-wrap: wrap;
+}
+.pathway-toolbar > label {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  min-width: 145px;
+  font-size: 11px;
+}
+.pathway-toolbar select {
+  width: 100%;
+}
+.pathway-toolbar .secondary-link {
+  font-size: 11px;
+  padding: 9px 12px;
+  min-height: 44px;
+}
+.pathway-mine[aria-pressed="true"] {
+  background: var(--brand);
+  color: white;
+}
+.bracket-experience {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+.bracket-controls {
+  flex: 1;
+  margin: 4px 0;
+  gap: 6px;
+  min-width: 235px;
+}
+.bracket-controls .secondary-link {
+  font-size: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+}
+.bracket-controls .icon-link {
+  width: 36px;
+  min-height: 40px;
+}
+.bracket-team-filter {
+  flex: 1;
+  min-width: 180px;
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+}
+.bracket-zoom {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+}
+.bracket-zoom select {
+  min-width: 78px;
+}
+.bracket-scroll {
+  flex-basis: 100%;
+  max-height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px 12px;
+  background: linear-gradient(135deg, #f1f6edbf, #ffffff8c);
+}
+.bracket-viewport {
+  position: relative;
+}
+.bracket-board,
+.bracket-board.all-rounds {
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.bracket-round {
+  flex: 0 0 232px;
+  width: 232px;
+  padding-right: 24px;
+}
+.bracket-round h2 {
+  height: 42px;
+  font-size: 12px;
+}
+.bracket-match {
+  height: 118px;
+  padding: 7px;
+  border-radius: 10px;
+}
+.bracket-match-heading {
+  font-size: 9px;
+  margin-bottom: 2px;
+}
+.bracket-team {
+  min-height: 29px;
+  font-size: 11px;
+  padding: 3px 5px;
+}
+.bracket-match > a {
+  min-height: 23px;
+  font-size: 9px;
+}
+.bracket-champion {
+  width: 208px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand);
+}
+.bracket-champion small {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.bracket-champion strong {
+  display: block;
+  background: var(--brand);
+  color: white;
+  padding: 14px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 13px;
+}
+.sponsor-toast {
+  position: fixed;
+  z-index: 45;
+  right: 16px;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  width: min(330px, calc(100vw - 32px));
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dbe8d4;
+  border-radius: 20px;
+  background: #f6faeff5;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 36px #164c3b25;
+  animation: gentle-reveal 400ms ease both;
+}
+.sponsor-toast-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #dcebcf;
+  color: var(--brand);
+}
+.sponsor-toast-icon img {
+  object-fit: contain;
+}
+.sponsor-toast-copy {
+  flex: 1;
+  min-width: 0;
+}
+.sponsor-toast-copy small {
+  font-size: 9px;
+  color: var(--muted);
+  display: block;
+}
+.sponsor-toast-copy p {
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 5px;
+  font-weight: 600;
+}
+.sponsor-toast-copy a {
+  font-size: 10px;
+  color: var(--brand);
+  text-decoration: underline;
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+}
+.sponsor-toast > button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #e8f0e3;
+  color: var(--brand);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sponsor-toast {
+    animation: none;
+  }
+}
+
+/* Keep the large desktop background quieter; phones and tablets retain all five. */
+@media (min-width: 1280px) {
+  .volleyball-background img:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+.bracket-controls {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: end;
+  width: 100%;
+  gap: 10px;
+}
+.bracket-controls > label {
+  min-width: 0;
+  width: 100%;
+}
+.bracket-controls select {
+  width: 100%;
+}
+
+/* Compact venue resources, partners and tournament artwork. */
+.platform-header .wordmark > .wordmark-ova {
+  margin-right: 3px;
+}
+.beach .event-tile-art {
+  background:
+    radial-gradient(circle at 84% 130%, #efd39c88 0 32%, transparent 33%),
+    linear-gradient(120deg, #356f63, #91b5a0);
+  color: #fff0c9;
+}
+.tournament-catalogue .event-tile-art {
+  padding-right: 66px;
+}
+.tournament-catalogue .event-tile-art > svg {
+  width: 34px;
+  height: 34px;
+}
+.venue-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.venue-quick-card {
+  padding: 16px;
+  min-width: 0;
+}
+.venue-quick-card > svg {
+  color: var(--brand);
+  margin-bottom: 8px;
+}
+.venue-quick-card h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+.venue-quick-card a {
+  display: inline-block;
+  color: var(--brand);
+  text-decoration: underline;
+  font-size: 12px;
+  padding: 7px 0;
+}
+.venue-quick-card details {
+  font-size: 12px;
+}
+.venue-quick-card details:not([open]) {
+  display: none;
+}
+.venue-quick-card details > div {
+  margin-top: 10px;
+}
+.partner-carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 12px;
+  padding: 4px 3px 20px;
+}
+.partner-carousel > * {
+  flex: 0 0 min(78vw, 300px);
+  scroll-snap-align: start;
+}
+.team-picker {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 14px;
+}
+.team-picker > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 5px;
+}
+.team-picker-options {
+  max-height: 360px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+.team-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.team-picker-option input {
+  accent-color: var(--brand);
+  width: 18px;
+  height: 18px;
+}
+.team-picker-option a {
+  color: var(--brand);
+  text-decoration: underline;
+  font-size: 13px;
+}
+.rankings-panel {
+  margin-top: 18px;
+  overflow-x: auto;
+}
+.rankings-panel table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+.rankings-panel th,
+.rankings-panel td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.bracket-controls { margin: 6px 0 8px; }
+.bracket-team-filter { margin: 0 0 10px; }
+.pathway-toolbar { margin-bottom: 8px; }
