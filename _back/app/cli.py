@@ -5,6 +5,7 @@
     python -m app.cli demo-reset
     python -m app.cli demo-playoffs
     python -m app.cli demo-outage [--restore]
+    python -m app.cli grant-demo-staff --email demo@example.org
     python -m app.cli grant --subject user_2abc --role admin
     python -m app.cli grant --subject user_2abc --role staff --event demo-championships
     python -m app.cli aes-load <event_key>
@@ -343,6 +344,11 @@ def main() -> None:
     seed_cmd.add_argument(
         "--reset", action="store_true", help="Delete and recreate the demo event"
     )
+    demo_staff = sub.add_parser(
+        "grant-demo-staff",
+        help="Grant staff access to demo events for one verified Clerk email",
+    )
+    demo_staff.add_argument("--email", required=True)
     grant_cmd = sub.add_parser("grant", help="Grant a role to a Clerk user id")
     grant_cmd.add_argument(
         "--subject", required=True, help="Clerk user id (the token's sub claim)"
@@ -403,6 +409,17 @@ def main() -> None:
         with get_sessionmaker()() as db:
             event = seed(db, reset=args.reset)
             print(f"Demo event ready: /events/{event.slug}")
+    elif args.command == "grant-demo-staff":
+        import os
+
+        from app.demo_access import grant_demo_staff, verified_subject
+
+        subject = verified_subject(args.email, os.environ.get("CLERK_SECRET_KEY", ""))
+        with get_sessionmaker()() as db:
+            events = grant_demo_staff(db, subject)
+            db.commit()
+            print(f"Staff access granted for {len(events)} demo events:")
+            print("\n".join(event.slug for event in events))
     elif args.command == "grant":
         if args.role != "admin" and not args.event:
             sys.exit("--event is required for staff and official grants")

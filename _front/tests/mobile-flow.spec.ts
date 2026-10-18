@@ -1347,11 +1347,9 @@ test.describe("courtside picks", () => {
         localStorage.setItem(key, value);
     }, storage);
     await page.goto("/");
-    const picks = page
-      .locator("section")
-      .filter({
-        has: page.getByRole("heading", { name: "Your courtside picks" }),
-      });
+    const picks = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Your courtside picks" }),
+    });
     await expect(
       picks.getByRole("link", { name: "Ontario Championships" }),
     ).toBeVisible();
@@ -1389,4 +1387,49 @@ test.describe("courtside picks", () => {
     await expect(next).toContainText("Maya's team is playing here");
     await expect(next).toContainText("vs Northern Lights");
   });
+});
+
+test("event cards omit demo badges and delayed matches keep the alert link without a duplicate badge", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.goto("/tournaments");
+  await expect(page.locator(".event-tile").first()).toBeVisible();
+  await expect(
+    page.locator(".event-tile").getByText("Demo data", { exact: true }),
+  ).toHaveCount(0);
+  await page.route("**/v1/events/ontario-demo/matches**", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            ...match,
+            delay_notice: {
+              minutes: 20,
+              expires_at: new Date(Date.now() + 3600000).toISOString(),
+            },
+            latest_change: {
+              id: 5,
+              entity_type: "match",
+              entity_id: "m1",
+              entry_ids: ["t1"],
+              event_type: "delay_notice",
+              diff: { minutes: 20 },
+              simulated: true,
+              occurred_at: new Date().toISOString(),
+            },
+          },
+        ],
+        sources: [source],
+        next_cursor: null,
+      },
+    }),
+  );
+  await page.goto("/events/ontario-demo/matches");
+  await expect(page.getByText(/Court running ~20 minutes late/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "See alerts" })).toHaveAttribute(
+    "href",
+    "/events/ontario-demo/updates?match=m1#match-m1",
+  );
+  await expect(page.getByText(/Court delay notice/)).toHaveCount(0);
 });

@@ -44,7 +44,7 @@ export function StatusBadge({
 
 export function ChangeBadge({ change }: { change: Change | null }) {
   const now = useNow();
-  if (!change) return null;
+  if (!change || change.event_type === "delay_notice") return null;
   // Badges fade after six hours so old changes don't look urgent.
   const recent =
     now - new Date(change.occurred_at).getTime() < 6 * 60 * 60 * 1000;

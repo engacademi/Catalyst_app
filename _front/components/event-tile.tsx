@@ -69,7 +69,6 @@ export function EventTile({
       <div className="event-tile-body">
         <div className="flex flex-wrap gap-2">
           <Badge tone="brand">{e.kind === "beach" ? "Beach" : "Indoor"}</Badge>
-          {e.is_demo && <Badge tone="warn">Demo data</Badge>}
         </div>
         <h3>
           <Link href={`/events/${e.slug}`}>{e.title}</Link>
