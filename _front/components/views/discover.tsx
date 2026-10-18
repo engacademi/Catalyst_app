@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
-import { formatTime } from "@/lib/format";
+import { formatDay, formatTime } from "@/lib/format";
 import Link from "next/link";
 import { MapPin, Search } from "lucide-react";
 import { useEvents } from "@/lib/queries";
@@ -32,7 +32,7 @@ function nearest(e: DiscoveryEvent, location: typeof TORONTO) {
 function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
   const follows = useLocalFollows(event.slug);
   const [saved] = usePreference<string[]>("saved-events", []);
-  const params = new URLSearchParams({ status: "upcoming", limit: "1" });
+  const params = new URLSearchParams({ status: "upcoming", limit: "5" });
   if (!saved.includes(event.slug)) {
     params.set(
       "entry_ids",
@@ -51,7 +51,10 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
     queryFn: () =>
       apiGet<{ data: Match[] }>(`/v1/events/${event.slug}/matches?${params}`),
   });
-  const match = query.data?.data[0];
+  const match = query.data?.data.find((m) => {
+    const start = m.estimated_start ?? m.scheduled_start;
+    return !!start && Date.parse(start) > new Date().getTime();
+  });
   return (
     <div className="compact-pick">
       <EventTile event={event} />
@@ -62,6 +65,11 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
         >
           <strong>
             Next published match ·{" "}
+            {formatDay(
+              match.estimated_start ?? match.scheduled_start,
+              match.timezone,
+            )}
+            ,{" "}
             {formatTime(
               match.estimated_start ?? match.scheduled_start,
               match.timezone,
