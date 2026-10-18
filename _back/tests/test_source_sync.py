@@ -169,3 +169,41 @@ def test_aes_loader_refuses_title_collision_with_unrelated_event(db, demo):
     with pytest.raises(ValueError, match="Event slug already belongs"):
         aes_load(AES_KEY, get=lambda _: json.dumps(metadata))
     assert db.scalar(select(func.count()).select_from(Event)) == 1
+
+
+def test_aes_discover_loads_found_championships_and_is_idempotent(
+    client, db, monkeypatch
+):
+    from app.adapters.aes import read_aes
+    from app.cli import aes_discover
+    from app.models import ChangeEvent, Event
+    from app.modules import sync
+    from tests_unit.test_sources import AES_KEY, SEARCH, recorded
+
+    monkeypatch.setattr(
+        sync, "fetch_snapshot", lambda mode, config: read_aes(config, get=recorded())
+    )
+
+    def get(url):
+        if "/api/landing/events?" in url:
+            return SEARCH.read_text()
+        if AES_KEY in url:
+            return recorded()(url)
+        raise ValueError("not recorded")  # only Event 2 has recorded results
+
+    results = aes_discover(year=2026, get=get)
+    assert [name for name, _ in results] == [
+        "2026 Ontario Championships - Event 3 (6v6B, 16U, 18U)",
+        "2026 Ontario Championships - Event 2 (6v6G, TLSG, 15UB)",
+        "2026 Ontario Championships - Event 1 (TLSB, 15UG, 17UB/G)",
+        "2026 Ontario Championships - 4v4 Boys and Girls",
+    ]
+    loaded = [r for _, r in results if isinstance(r, Event)]
+    assert len(loaded) == 1 and loaded[0].start_date.isoformat() == "2026-04-19"
+    assert client.get(f"/v1/events/{loaded[0].slug}/teams").json()["total"] == 46
+    changes = db.scalar(select(func.count()).select_from(ChangeEvent))
+
+    aes_discover(year=2026, get=get)
+    assert db.scalar(select(func.count()).select_from(Event)) == 1
+    assert db.scalar(select(func.count()).select_from(Source)) == 1
+    assert db.scalar(select(func.count()).select_from(ChangeEvent)) == changes

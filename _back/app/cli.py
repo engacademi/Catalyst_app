@@ -4,6 +4,7 @@
     python -m app.cli grant --subject user_2abc --role admin
     python -m app.cli grant --subject user_2abc --role staff --event demo-championships
     python -m app.cli aes-load <event_key>
+    python -m app.cli aes-discover [--year 2026]
 
 Staff privileges are only ever granted here, never through a public endpoint.
 """
@@ -17,7 +18,7 @@ from urllib.parse import quote
 
 from sqlalchemy import select
 
-from app.adapters.aes import aes_event_url
+from app.adapters.aes import aes_event_url, search_aes_championships
 from app.adapters.live import fetch_text
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
@@ -134,6 +135,19 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
         return event
 
 
+def aes_discover(year: int | None = None, get=fetch_text) -> list:
+    """Find Ontario Championships events on AES and load each; one failure skips only that event."""
+    results = []
+    for found in search_aes_championships(get):
+        if year and not found["startDate"].startswith(str(year)):
+            continue
+        try:
+            results.append((found["name"], aes_load(found["eventSchedulerKey"], get)))
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 - report, keep going
+            results.append((found["name"], exc))
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +172,10 @@ def main() -> None:
     )
     aes_cmd = sub.add_parser("aes-load", help="Create or refresh an event from AES")
     aes_cmd.add_argument("event_key", help="The key in the AES event URL")
+    discover_cmd = sub.add_parser(
+        "aes-discover", help="Find Ontario Championships on AES and load each"
+    )
+    discover_cmd.add_argument("--year", type=int, help="Only events starting this year")
     args = parser.parse_args()
 
     if args.command == "seed-testing":
@@ -177,6 +195,15 @@ def main() -> None:
     elif args.command == "aes-load":
         event = aes_load(args.event_key)
         print(f"AES event ready: /events/{event.slug}")
+    elif args.command == "aes-discover":
+        results = aes_discover(args.year)
+        for name, result in results:
+            if isinstance(result, Event):
+                print(f"AES event ready: /events/{result.slug}")
+            else:
+                print(f"AES event failed: {name}: {result}")
+        if any(not isinstance(r, Event) for _, r in results):
+            sys.exit(1)
 
 
 if __name__ == "__main__":
