@@ -1073,7 +1073,7 @@ test("discovery cards share the compact tournament card artwork", async ({
   await expect
     .poll(() =>
       art
-        .locator("img")
+        .locator("img.event-tile-photo")
         .evaluate((img) => (img as HTMLImageElement).naturalWidth),
     )
     .toBeGreaterThan(0);

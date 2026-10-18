@@ -6,6 +6,8 @@ import type { EventSummary } from "@/lib/api";
 import { usePreference } from "@/lib/preferences";
 import { formatDateRange } from "@/lib/format";
 import { Badge } from "./ui";
+import { EventLogo } from "./ova-venue";
+import { eventSeries } from "@/lib/ova-venues";
 export type DiscoveryEvent = EventSummary & {
   venues: string[];
   venue_locations?: {
@@ -45,9 +47,12 @@ export function EventTile({
   distance?: number | null;
 }) {
   const photo = e.venue_locations?.find((v) => v.photo_url);
+  const branded = eventSeries(e) != null;
   return (
     <article className={`event-tile ${e.kind}`}>
-      <div className={`event-tile-art ${photo ? "has-photo" : ""}`}>
+      <div
+        className={`event-tile-art ${photo ? "has-photo" : ""} ${branded ? "has-logo" : ""}`}
+      >
         {photo?.photo_url && (
           // The venue name is in the tile text, so the photo itself is decorative.
           <Image
@@ -63,7 +68,11 @@ export function EventTile({
         <span className="eyebrow">
           {e.kind === "beach" ? "SAND. SUN. SERVE." : "MEET YOU COURTSIDE."}
         </span>
-        {!photo && <Volleyball size={66} strokeWidth={1} aria-hidden />}
+        {branded ? (
+          <EventLogo event={e} className="event-tile-logo" size={96} />
+        ) : (
+          !photo && <Volleyball size={66} strokeWidth={1} aria-hidden />
+        )}
       </div>
       <SaveEventButton slug={e.slug} />
       <div className="event-tile-body">

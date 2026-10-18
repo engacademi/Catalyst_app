@@ -17,6 +17,7 @@ import { useTeamLabel } from "@/lib/follows";
 import { EmptyState, ErrorState, Loading } from "../ui";
 import { SponsorRibbon } from "../sponsor-ribbon";
 import { DiscoveryGreeting } from "../discovery-greeting";
+import { OvaMajorEvents } from "../ova-venue";
 const TORONTO = { latitude: 43.6532, longitude: -79.3832 };
 export function distanceKm(a: typeof TORONTO, b: typeof TORONTO) {
   const r = Math.PI / 180;
@@ -409,6 +410,7 @@ export function DiscoverView({
                 </section>
               )}
               <SponsorRibbon />
+              <OvaMajorEvents events={all} />
               <section className="reveal-section">
                 <div className="section-row">
                   <h2>Picked for you</h2>
@@ -442,6 +444,7 @@ export function DiscoverView({
               </section>
             </>
           )}
+          {catalogue && <OvaMajorEvents events={all} />}
           <section>
             <div className="section-row">
               <h2>

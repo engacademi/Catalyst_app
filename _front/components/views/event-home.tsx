@@ -13,6 +13,7 @@ import { MatchCard } from "../match-card";
 import { usePreference } from "@/lib/preferences";
 import { isRelevantAnnouncement } from "@/lib/relevance";
 import { CourtOverview } from "../court-overview";
+import { EventLogo } from "../ova-venue";
 import { MyDayPanel } from "../my-day-links";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
@@ -52,7 +53,11 @@ export function EventHomeView({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <div className="page-heading">
+      <div className="page-heading event-heading">
+        <EventLogo
+          event={{ title: e.title, venues: e.venues.map((v) => v.name) }}
+          size={88}
+        />
         <h1>{e.title}</h1>
       </div>
       <p className="mt-1 text-sm text-muted">
