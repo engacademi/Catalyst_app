@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
 import { changeTitle } from "@/lib/change-text";
-import { formatDay, formatTime, formatRelative } from "@/lib/format";
+import { formatDay, formatTime } from "@/lib/format";
 import { useNow } from "@/lib/now";
 import { TeamAvatar } from "./brand";
 import { Badge } from "./ui";

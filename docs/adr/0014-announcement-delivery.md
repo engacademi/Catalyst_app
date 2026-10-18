@@ -1,4 +1,4 @@
-# 0012: Announcements enter the change feed when they become visible
+# 0014: Announcements enter the change feed when they become visible
 
 Date: 2026-10-18. Status: accepted.
 
