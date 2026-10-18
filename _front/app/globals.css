@@ -4095,8 +4095,8 @@ select[class] {
 
 /* One shared filter row on Discover and Tournaments. */
 .discovery-page .discovery-filters {
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, .8fr) minmax(0, 1.1fr);
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) 88px 50px;
+  gap: 8px;
   align-items: stretch;
   justify-content: start;
 }
@@ -4104,27 +4104,54 @@ select[class] {
 .discovery-page .discovery-filters .segmented button {
   min-width: 0;
   min-height: 44px;
-  padding: 6px 5px;
-  font-size: 11px;
+  padding: 6px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .discovery-page .discovery-filters select {
   width: 100%;
   height: 100%;
-  padding: 8px 20px 8px 6px;
-  font-size: 11px;
+  min-height: 50px;
+  font-size: 12px;
 }
+.discovery-page .discovery-dates {
+  appearance: none;
+  background-image: none;
+  padding: 8px;
+  text-align: center;
+  text-align-last: center;
+}
+.discovery-page .discovery-filters select::picker-icon { display: none; }
 .discovery-location { position: relative; min-width: 0; }
 .discovery-location > svg {
   position: absolute;
-  left: 7px;
+  left: 50%;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(-50%, -50%);
   pointer-events: none;
   color: var(--brand);
+  z-index: 1;
 }
-.discovery-page .discovery-location select { padding-left: 24px; }
+.discovery-page .discovery-location select {
+  padding: 0;
+  color: transparent;
+  font-size: 0;
+  background-image: none;
+  cursor: pointer;
+}
+.discovery-page .discovery-location select option {
+  color: var(--color-foreground);
+  font-size: 12px;
+}
+@supports (appearance: base-select) {
+  .discovery-page .discovery-location select::picker(select) {
+    min-width: 180px;
+    color: var(--color-foreground);
+    font-size: 12px;
+  }
+}
 @media (min-width: 650px) {
-  .discovery-page .discovery-filters { grid-template-columns: minmax(0, 420px) 150px 170px; gap: 12px; }
-  .discovery-page .discovery-filters select,
-  .discovery-page .discovery-filters .segmented button { font-size: 12px; }
+  .discovery-page .discovery-filters { grid-template-columns: minmax(0, 420px) 120px 50px; gap: 12px; }
 }

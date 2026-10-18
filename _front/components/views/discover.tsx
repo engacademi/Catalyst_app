@@ -307,16 +307,20 @@ export function DiscoverView({
           ))}
         </div>
         <select
+          className="discovery-dates"
           aria-label="Tournament dates"
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
         >
           <option value="all">Dates</option>
-          <option value="upcoming">Upcoming & ongoing</option>
-          <option value="past">Past events</option>
+          <option value="upcoming">Upcoming</option>
+          <option value="past">Past</option>
         </select>
-        <label className="discovery-location">
-          <MapPin size={14} aria-hidden />
+        <label
+          className="discovery-location"
+          title={`Location: ${locationChoice === "all" ? "All areas" : locationLabel}`}
+        >
+          <MapPin size={20} aria-hidden />
           <select
             aria-label="Event location"
             value={locationChoice}

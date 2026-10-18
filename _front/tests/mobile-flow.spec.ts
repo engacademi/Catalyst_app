@@ -328,20 +328,33 @@ for (const width of [320, 390, 768]) {
       const c = el
         .querySelector(".discovery-location")!
         .getBoundingClientRect();
-      return { a: a.top, b: b.top, c: c.top, right: c.right };
+      return {
+        a: a.top,
+        b: b.top,
+        c: c.top,
+        right: c.right,
+        locationWidth: c.width,
+      };
     });
     expect(Math.abs(rects.a - rects.b)).toBeLessThan(5);
     expect(Math.abs(rects.a - rects.c)).toBeLessThan(5);
     expect(rects.right).toBeLessThanOrEqual(width);
+    expect(rects.locationWidth).toBe(50);
     await expect(page.locator(".platform-header .by-ova")).toHaveText(
       "By Ontario Volleyball Association",
     );
-    if (width === 390)
+    if (width === 390) {
+      await page.getByRole("combobox", { name: "Event location" }).click();
+      await expect(
+        page.getByRole("option", { name: "Toronto", exact: true }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
       await page.screenshot({
         path: "test-results/discover-polished-mobile.png",
         fullPage: true,
         animations: "disabled",
       });
+    }
     await page.goto("/tournaments");
     await page.getByRole("button", { name: "Save tournament" }).first().click();
     await page.goto("/");
