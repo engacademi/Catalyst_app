@@ -119,6 +119,8 @@ def list_events(request: Request, db: DB) -> Response:
                     "longitude": v.longitude,
                     "address": v.address,
                     "name": v.name,
+                    "photo_url": v.photo_url,
+                    "photo_credit": v.photo_credit,
                 }
                 for v in e.venues
             ],

@@ -141,6 +141,8 @@ def venue_public(venue: Venue) -> dict[str, Any]:
         "accessible_entrance": venue.accessible_entrance,
         "directions": venue.directions,
         "map_url": venue.map_url,
+        "photo_url": venue.photo_url,
+        "photo_credit": venue.photo_credit,
         "courts": [court_public(c) for c in venue.courts],
     }
 
