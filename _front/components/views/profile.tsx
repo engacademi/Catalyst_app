@@ -14,6 +14,7 @@ import { usePreference } from "@/lib/preferences";
 import { allEventTeams, useEvents } from "@/lib/queries";
 import { useNotificationCounts } from "../platform-shell";
 import { Card } from "../ui";
+import { formatDateRange } from "@/lib/format";
 
 function Account() {
   const { isLoaded, isSignedIn, user } = useUser();
@@ -178,9 +179,7 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
               <li key={e.id}>
                 <Link href={`/events/${e.slug}`}>
                   <strong>{e.title}</strong>
-                  <small>
-                    {e.start_date} → {e.end_date}
-                  </small>
+                  <small>{formatDateRange(e.start_date, e.end_date)}</small>
                 </Link>
               </li>
             ))}
