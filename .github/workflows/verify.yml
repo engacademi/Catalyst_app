@@ -47,7 +47,7 @@ jobs:
         working-directory: _back
       - run: npm ci
         working-directory: _front
-      - run: npm run lint && npm run typecheck && npm run build
+      - run: npm run lint && npm run typecheck && npm run test:unit && npm run build
         working-directory: _front
       - run: npx playwright install --with-deps chromium
         working-directory: _front
