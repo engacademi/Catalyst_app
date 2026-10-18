@@ -119,11 +119,15 @@ def _read(config, read):
     with ThreadPoolExecutor(max_workers=4) as executor:
         for (_, division, pool_name), data in executor.map(sheet, jobs):
             for m in collection(data["Matches"]):
+                # A side AES has not published stays pending ("?"); unplayed sets are dropped.
                 sets = [
-                    f"{s['FirstTeamScore']}-{s['SecondTeamScore']}"
+                    "-".join(
+                        "?" if v is None else str(v)
+                        for v in (s.get("FirstTeamScore"), s.get("SecondTeamScore"))
+                    )
                     for s in m.get("Sets") or []
                     if s.get("FirstTeamScore") is not None
-                    and s.get("SecondTeamScore") is not None
+                    or s.get("SecondTeamScore") is not None
                 ]
                 if m.get("FirstTeamWon") or m.get("SecondTeamWon"):
                     status = "completed"

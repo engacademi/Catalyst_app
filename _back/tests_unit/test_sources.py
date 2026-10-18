@@ -246,3 +246,43 @@ def test_timu_pool_d_slot_stays_a_placeholder():
     assert match["home_entry_id"] == "" and "D1" not in {
         e["team_name"] for e in snap.entries
     }
+
+
+def test_aes_one_sided_set_score_stays_pending_through_the_interchange():
+    def transform(path, payload):
+        if path == "/poolsheet/-50024":
+            match = payload["Matches"][0]
+            match["FirstTeamWon"] = match["SecondTeamWon"] = False
+            match["Sets"] = [
+                {"FirstTeamScore": 25, "SecondTeamScore": 21},
+                {"FirstTeamScore": 14, "SecondTeamScore": None},
+                {"FirstTeamScore": None, "SecondTeamScore": None},
+            ]
+
+    snap = read_aes({"event_key": AES_KEY}, get=changed_recording(transform))
+    match = next(m for m in snap.matches if m["set_scores"] == "25-21 14-?")
+    assert match["status"] == "scheduled"
+    parsed = CsvAdapter().parse(
+        "matches", _csv(snap.matches), timezone="America/Toronto", strict=True
+    )
+    row = next(r for r in parsed.rows if r.external_id == match["external_match_id"])
+    assert not row.errors
+    assert row.data["sets"] == [[25, 21], [14, None]]
+
+
+@pytest.mark.parametrize(
+    "value, sets",
+    [("25-21 ?-12", [[25, 21], [None, 12]]), ("25-?", [[25, None]])],
+)
+def test_interchange_pending_set_sides_parse_as_null(value, sets):
+    from app.adapters.csv_adapter import parse_sets
+
+    assert parse_sets(value) == sets
+
+
+@pytest.mark.parametrize("value", ["?-?", "25-", "x-20"])
+def test_interchange_rejects_sets_without_a_published_side(value):
+    from app.adapters.csv_adapter import parse_sets
+
+    with pytest.raises(ValueError):
+        parse_sets(value)

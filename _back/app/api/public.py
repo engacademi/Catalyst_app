@@ -31,6 +31,7 @@ from app.modules.matches import (
     latest_changes,
     match_load_options,
     match_query,
+    within_dates,
 )
 from app.modules.my_day import build_my_day
 
@@ -299,10 +300,17 @@ def list_matches(
     venue_id: str | None = None,
     division_id: str | None = None,
     day: date | None = Query(None, alias="date"),
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
+    include_unscheduled: bool = False,
     cursor: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ) -> Response:
     event = load_event(db, event_ref)
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "from must not be after to"
+        )
     stmt = match_query(
         event.id,
         entry_ids=selection(db, event, entry_ids, division_ids)[0]
@@ -340,6 +348,20 @@ def list_matches(
                 ),
             )
         )
+    windowed = date_from is not None or date_to is not None
+    # A date window can be empty while the draw is published; say how many exist overall.
+    all_dates = (
+        db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
+        if windowed and cursor == 0
+        else None
+    )
+    stmt = within_dates(
+        stmt,
+        date_from,
+        date_to,
+        event.timezone,
+        include_unscheduled=include_unscheduled,
+    )
     matches = list(db.scalars(stmt.offset(cursor).limit(limit + 1)))
     next_cursor = cursor + limit if len(matches) > limit else None
     payload = {
@@ -349,6 +371,8 @@ def list_matches(
         "status_groups": list(STATUS_GROUPS),
         "sources": sources_envelope(event),
     }
+    if all_dates is not None:
+        payload["total_all_dates"] = all_dates
     return json_response(request, payload)
 
 

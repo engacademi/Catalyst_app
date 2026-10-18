@@ -92,7 +92,9 @@ def sync_source(source_id, actor_id=None):
                             )
                         ):
                             db.add(Venue(event_id=event.id, name=name))
-                    db.commit()
+                    # One transaction from here: metadata, entries, matches and source state
+                    # land together, or a failure rolls back to the previous snapshot.
+                    db.flush()
                     for kind, rows in [
                         ("entries", snapshot.entries),
                         ("matches", snapshot.matches),
@@ -108,8 +110,11 @@ def sync_source(source_id, actor_id=None):
                             content=_csv(rows),
                             options={"strict": True},
                             actor_id=actor_id,
+                            commit=False,
                         )
-                        commit_import(db, batch.id, actor_id, "source-sync")
+                        commit_import(
+                            db, batch.id, actor_id, "source-sync", commit=False
+                        )
                     for resource in snapshot.resources:
                         if not db.scalar(
                             select(GuideItem.id).where(

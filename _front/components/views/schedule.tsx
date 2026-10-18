@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
+import { keepPreviousData, useQueries } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
 import { formatDateRange, formatDay, formatTime } from "@/lib/format";
 import { useEvents } from "@/lib/queries";
@@ -40,6 +40,22 @@ export function ScheduleView() {
   const selected = all.filter(
     (e) => saved.includes(e.slug) || (follows.get(e.slug)?.length ?? 0) > 0,
   );
+  const today = dateKey(new Date().toISOString());
+  // Open on the first shown event that is running or ahead, else the earliest one, so
+  // the date window is known before any match is fetched.
+  const shownStarts = selected
+    .filter((e) => !hidden.includes(e.slug))
+    .map((e) => [e.start_date, e.end_date] as const)
+    .sort();
+  const nextStart = shownStarts.find(([, end]) => end >= today)?.[0];
+  const first =
+    start ||
+    (nextStart
+      ? nextStart > today
+        ? nextStart
+        : today
+      : (shownStarts[0]?.[0] ?? today));
+  const last = shiftDay(first, days - 1);
   const queries = useQueries({
     queries: selected.map((event) => {
       const ids = follows.get(event.slug) ?? [];
@@ -49,10 +65,20 @@ export function ScheduleView() {
           event.slug,
           saved.includes(event.slug),
           ids.join(","),
+          first,
+          last,
         ],
         enabled: !hidden.includes(event.slug),
+        // Keep the current window on screen while the next one loads.
+        placeholderData: keepPreviousData,
         queryFn: async () => {
-          const params = new URLSearchParams({ limit: "200" });
+          // Only the visible days (plus matches still awaiting a time), never the whole draw.
+          const params = new URLSearchParams({
+            limit: "200",
+            from: first,
+            to: last,
+            include_unscheduled: "true",
+          });
           if (!saved.includes(event.slug)) {
             params.set(
               "entry_ids",
@@ -69,19 +95,22 @@ export function ScheduleView() {
           const matches = new Map<string, Match>();
           let cursor: number | null = 0;
           let sources: import("@/lib/api").SourceInfo[] = [];
+          let total = 0;
           do {
             const page: {
               data: Match[];
               next_cursor: number | null;
               sources: typeof sources;
+              total_all_dates?: number;
             } = await apiGet(
               `/v1/events/${event.slug}/matches?${params}&cursor=${cursor}`,
             );
             for (const match of page.data) matches.set(match.id, match);
             sources = page.sources;
+            total = page.total_all_dates ?? total;
             cursor = page.next_cursor;
           } while (cursor !== null);
-          return { matches: [...matches.values()], sources };
+          return { matches: [...matches.values()], sources, total };
         },
       };
     }),
@@ -102,19 +131,6 @@ export function ScheduleView() {
         Infinity;
       return at === bt ? 0 : at - bt;
     });
-  const today = dateKey(new Date().toISOString());
-  const initialDay = rows.find(
-    (r) =>
-      Date.parse(r.match.estimated_start ?? r.match.scheduled_start ?? "") >=
-      new Date().getTime(),
-  )?.match;
-  const first =
-    start ||
-    (initialDay
-      ? dateKey((initialDay.estimated_start ?? initialDay.scheduled_start)!)
-      : rows[0]?.match.scheduled_start
-        ? dateKey(rows[0].match.scheduled_start)
-        : today);
   const dates = Array.from({ length: days }, (_, i) => shiftDay(first, i));
   const inRange = rows.filter((r) => {
     const time = r.match.estimated_start ?? r.match.scheduled_start;
@@ -341,7 +357,7 @@ export function ScheduleView() {
           {queries.map((q, i) =>
             !hidden.includes(selected[i].slug) &&
             q.data &&
-            !q.data.matches.length ? (
+            !q.data.total ? (
               <p key={selected[i].id} className="empty-inline">
                 {selected[i].title}: the draw isn’t published yet.
               </p>
@@ -353,7 +369,9 @@ export function ScheduleView() {
             </EmptyState>
           ) : !rows.length &&
             queries.every(
-              (q, i) => hidden.includes(selected[i].slug) || q.isSuccess,
+              (q, i) =>
+                hidden.includes(selected[i].slug) ||
+                (q.isSuccess && !q.data.total),
             ) ? (
             <EmptyState title="The draw isn’t published yet">
               Matches will appear here once the organizer publishes them.

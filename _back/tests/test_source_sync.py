@@ -321,3 +321,95 @@ def test_timu_load_keeps_title_tier_once_and_turns_on_polling(db, monkeypatch):
     timu_load("4196", get=timu_recorded)
     db.expire_all()
     assert db.get(Source, source.id).config["auto_sync"] is True
+
+
+def _load_recorded_aes(monkeypatch, snapshot=None):
+    from app.adapters.aes import read_aes
+    from app.cli import aes_load
+    from app.modules import sync
+    from tests_unit.test_sources import AES_KEY, recorded
+
+    monkeypatch.setattr(
+        sync,
+        "fetch_snapshot",
+        lambda mode, config: (snapshot or read_aes)(config, get=recorded()),
+    )
+    return aes_load(AES_KEY, get=recorded())
+
+
+def test_failed_refresh_rolls_back_metadata_and_entries_together(
+    client, db, monkeypatch
+):
+    from app.adapters.aes import read_aes
+    from app.models import Division
+    from app.modules import imports, sync
+
+    event = _load_recorded_aes(monkeypatch)
+    teams = client.get(f"/v1/events/{event.slug}/teams").json()["data"]
+    divisions = db.scalar(
+        select(func.count()).select_from(Division).where(Division.event_id == event.id)
+    )
+
+    def changed(config, get):
+        snap = read_aes({**config, "last_sync_success": False}, get=get)
+        snap.divisions.append({"name": "Upstream Ghost", "code": "G", "external_id": "g"})
+        for entry in snap.entries:
+            entry["team_name"] += " (renamed)"
+        return snap
+
+    def broken(*args):
+        raise ValueError("matches failed mid-refresh")
+
+    from tests_unit.test_sources import recorded
+
+    monkeypatch.setattr(
+        sync, "fetch_snapshot", lambda mode, config: changed(config, recorded())
+    )
+    monkeypatch.setattr(imports, "_commit_matches", broken)
+    source = db.scalar(select(Source).where(Source.event_id == event.id))
+    result = sync.sync_source(source.id)
+    assert result == {"ok": False, "message": "matches failed mid-refresh"}
+
+    db.expire_all()
+    assert client.get(f"/v1/events/{event.slug}/teams").json()["data"] == teams
+    assert (
+        db.scalar(
+            select(func.count())
+            .select_from(Division)
+            .where(Division.event_id == event.id)
+        )
+        == divisions
+    )
+    source = db.get(Source, source.id)
+    assert source.status == "unavailable"
+    assert source.last_error == "matches failed mid-refresh"
+
+
+def test_aes_partial_set_score_reaches_the_api_as_pending(client, db, monkeypatch):
+    import json
+
+    from app.adapters.aes import read_aes
+    from tests_unit.test_sources import AES_KEY, recorded
+
+    def partial(url):
+        data = json.loads(recorded()(url))
+        if url.endswith("/poolsheet/-50024"):
+            match = data["Matches"][0]
+            match["FirstTeamWon"] = match["SecondTeamWon"] = False
+            match["Sets"][1]["SecondTeamScore"] = None
+        return json.dumps(data)
+
+    event = _load_recorded_aes(
+        monkeypatch, lambda config, get: read_aes(config, get=partial)
+    )
+    match_id = json.loads(partial(f"x{AES_KEY}/poolsheet/-50024"))["Matches"][0][
+        "MatchId"
+    ]
+    matches = client.get(
+        f"/v1/events/{event.slug}/matches", params={"limit": 200}
+    ).json()["data"]
+    match = next(m for m in matches if m["source_match_id"] == str(match_id))
+    first, second = match["sets"][:2]
+    assert first["home"] is not None and first["away"] is not None
+    assert second["home"] is not None and second["away"] is None
+    assert match["result_state"] != "final"

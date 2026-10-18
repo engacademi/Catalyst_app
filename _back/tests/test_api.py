@@ -245,3 +245,38 @@ def test_demo_reset_deletes_cleanly(client, db, demo):
         client.get("/v1/events/demo-championships").json()["data"]["counts"]["entries"]
         == 12
     )
+
+
+def test_match_list_date_window_bounds_calendar_fetches(client, demo):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    url = "/v1/events/demo-championships/matches"
+    everything = client.get(url, params={"limit": 200}).json()
+    assert "total_all_dates" not in everything
+
+    def local_day(m):
+        start = m["estimated_start"] or m["scheduled_start"]
+        tz = ZoneInfo(m["timezone"])
+        return datetime.fromisoformat(start).astimezone(tz).date().isoformat()
+
+    timed = [m for m in everything["data"] if m["scheduled_start"]]
+    day = local_day(timed[0])
+    expected = {m["id"] for m in timed if local_day(m) == day}
+    window = client.get(url, params={"from": day, "to": day, "limit": 200}).json()
+    assert {m["id"] for m in window["data"]} == expected
+    assert window["total_all_dates"] == len(everything["data"])
+
+    unscheduled = {m["id"] for m in everything["data"] if not m["scheduled_start"]}
+    with_waiting = client.get(
+        url,
+        params={"from": day, "to": day, "include_unscheduled": "true", "limit": 200},
+    ).json()
+    assert {m["id"] for m in with_waiting["data"]} >= expected | unscheduled
+
+    later = client.get(url, params={"from": "2001-01-01", "to": "2001-01-02"}).json()
+    assert later["data"] == [] and later["total_all_dates"] == len(everything["data"])
+    assert (
+        client.get(url, params={"from": "2001-01-02", "to": "2001-01-01"}).status_code
+        == 422
+    )
