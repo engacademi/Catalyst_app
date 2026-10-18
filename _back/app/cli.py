@@ -7,6 +7,7 @@
     python -m app.cli aes-discover [--year 2026]
     python -m app.cli myteam-load
     python -m app.cli timu-load [--tid 4190]
+    python -m app.cli geocode-venues
 
 Staff privileges are only ever granted here, never through a public endpoint.
 """
@@ -27,6 +28,7 @@ from app.adapters.myteam import local_date, upcoming_events
 from app.adapters.timu import INDEX_URL, read_schedule, upcoming_tids
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
+from app.modules.geocode import geocode_venues
 from app.seed import TZ, seed
 
 
@@ -137,6 +139,7 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
         if not result["ok"]:
             sys.exit(result["message"])
         db.refresh(event)
+        geocode_venues(db, event.venues, get)
         return event
 
 
@@ -207,6 +210,7 @@ def myteam_load(today: date, get=fetch_text) -> list[Event]:
             if not result["ok"]:
                 sys.exit(result["message"])
             db.refresh(event)
+            geocode_venues(db, event.venues, get)
             loaded.append(event)
     return loaded
 
@@ -285,8 +289,16 @@ def timu_load(tid=None, get=fetch_text, today=None) -> list[Event]:
             if not result["ok"]:
                 sys.exit(result["message"])
             db.refresh(event)
+            geocode_venues(db, event.venues, get)
             events.append(event)
     return events
+
+
+def geocode_all(get=fetch_text) -> None:
+    """Look up every venue that has no coordinates yet."""
+    with get_sessionmaker()() as db:
+        missing = Venue.latitude.is_(None) | Venue.longitude.is_(None)
+        geocode_venues(db, list(db.scalars(select(Venue).where(missing))), get)
 
 
 def main() -> None:
@@ -325,6 +337,9 @@ def main() -> None:
         "timu-load", help="Create or refresh upcoming OVA tournaments from TIMU"
     )
     timu_cmd.add_argument("--tid", help="One TIMU tournament id instead of the list")
+    sub.add_parser(
+        "geocode-venues", help="Look up coordinates for venues that have none"
+    )
     args = parser.parse_args()
 
     if args.command == "seed-testing":
@@ -359,6 +374,8 @@ def main() -> None:
     elif args.command == "timu-load":
         for event in timu_load(args.tid):
             print(f"TIMU event ready: /events/{event.slug} ({event.start_date})")
+    elif args.command == "geocode-venues":
+        geocode_all()
 
 
 if __name__ == "__main__":
