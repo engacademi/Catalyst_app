@@ -23,6 +23,7 @@ def fetch_text(url: str) -> str:
     if parsed.scheme != "https" or parsed.hostname not in {
         "results.advancedeventsystems.com",
         "www.timu.ca",
+        "myteamclick.herokuapp.com",
     }:
         raise ValueError("Unsupported source host")
     with httpx.Client(
@@ -191,4 +192,8 @@ def fetch_snapshot(mode: str, config: dict) -> Snapshot:
         from app.adapters.aes import read_aes
 
         return read_aes(config)
+    if mode == "myteam":
+        from app.adapters.myteam import read_myteam
+
+        return read_myteam(config)
     raise ValueError("This source has no live connector")

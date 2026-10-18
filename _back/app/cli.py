@@ -4,6 +4,7 @@
     python -m app.cli grant --subject user_2abc --role admin
     python -m app.cli grant --subject user_2abc --role staff --event demo-championships
     python -m app.cli aes-load <event_key>
+    python -m app.cli myteam-load
 
 Staff privileges are only ever granted here, never through a public endpoint.
 """
@@ -12,13 +13,15 @@ import argparse
 import json
 import re
 import sys
-from datetime import date
+from datetime import date, datetime
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 from app.adapters.aes import aes_event_url
 from app.adapters.live import fetch_text
+from app.adapters.myteam import local_date, upcoming_events
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
 from app.seed import TZ, seed
@@ -134,6 +137,64 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
         return event
 
 
+def myteam_load(today: date, get=fetch_text) -> list[Event]:
+    """Create or refresh every upcoming OVA beach event on MyTeam.click."""
+    from app.modules.sync import sync_source
+
+    loaded = []
+    for data in upcoming_events(today, get):
+        day = local_date(data["date"])
+        title = data["name"].strip()
+        slug = re.sub(r"[^a-z0-9]+", "-", f"{title} {day}".lower()).strip("-")[:100]
+        with get_sessionmaker()() as db:
+            # The MyTeam.click event id is the identity; titles repeat across the season.
+            sources = db.scalars(select(Source).where(Source.mode == "myteam"))
+            source = next(
+                (s for s in sources if s.config.get("event_id") == data["_id"]), None
+            )
+            event = db.get(Event, source.event_id) if source else None
+            if event is None and db.scalar(select(Event.id).where(Event.slug == slug)):
+                raise ValueError(f"Event slug {slug} already belongs to another source")
+            if event is None:
+                org = db.scalar(select(Organization).limit(1))
+                if org is None:
+                    org = Organization(name="Ontario Volleyball Association")
+                    db.add(org)
+                    db.flush()
+                event = Event(
+                    organization_id=org.id,
+                    slug=slug,
+                    kind="beach",
+                    timezone=TZ,
+                    status="published",
+                )
+                db.add(event)
+            event.title, event.start_date, event.end_date = title, day, day
+            db.flush()
+            if source is None:
+                for loc in data["locList"]:
+                    db.add(Venue(event_id=event.id, name=loc["name"]))
+                source = Source(
+                    event_id=event.id,
+                    name="MyTeam.click",
+                    mode="myteam",
+                    # Polling picks up the draw once MyTeam.click publishes it.
+                    config={
+                        "authorized": True,
+                        "auto_sync": True,
+                        "event_id": data["_id"],
+                    },
+                )
+                db.add(source)
+            db.commit()
+            result = sync_source(source.id)
+            if not result["ok"]:
+                sys.exit(result["message"])
+            db.refresh(event)
+            loaded.append(event)
+    return loaded
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +219,10 @@ def main() -> None:
     )
     aes_cmd = sub.add_parser("aes-load", help="Create or refresh an event from AES")
     aes_cmd.add_argument("event_key", help="The key in the AES event URL")
+    sub.add_parser(
+        "myteam-load",
+        help="Create or refresh upcoming OVA beach events from MyTeam.click",
+    )
     args = parser.parse_args()
 
     if args.command == "seed-testing":
@@ -177,6 +242,9 @@ def main() -> None:
     elif args.command == "aes-load":
         event = aes_load(args.event_key)
         print(f"AES event ready: /events/{event.slug}")
+    elif args.command == "myteam-load":
+        for event in myteam_load(datetime.now(ZoneInfo(TZ)).date()):
+            print(f"MyTeam.click event ready: /events/{event.slug}")
 
 
 if __name__ == "__main__":
