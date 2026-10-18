@@ -90,45 +90,49 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           <Check size={15} aria-hidden /> Attended
         </button>
       </div>
-      <SectionTitle
-        action={
-          <Link
-            href={`/events/${eventId}/matches`}
-            className="text-sm text-brand underline"
-          >
-            All matches →
-          </Link>
-        }
-      >
-        Live on court
-      </SectionTitle>
-      {live.isPending ? (
-        <Loading label="Loading live matches" />
-      ) : live.error ? (
-        <ErrorState error={live.error} />
-      ) : live.data?.data.length ? (
+      {e.counts.matches > 0 && (
         <>
-          <ul className="event-carousel live-carousel">
-            {live.data.data.map((m) => (
-              <li key={m.id}>
-                <MatchCard match={m} eventId={eventId} />
-              </li>
-            ))}
-          </ul>
-          {live.hasNextPage && (
-            <button
-              className="secondary-link"
-              disabled={live.isFetchingNextPage}
-              onClick={() => live.fetchNextPage()}
-            >
-              More live matches
-            </button>
+          <SectionTitle
+            action={
+              <Link
+                href={`/events/${eventId}/matches`}
+                className="text-sm text-brand underline"
+              >
+                All matches →
+              </Link>
+            }
+          >
+            Live on court
+          </SectionTitle>
+          {live.isPending ? (
+            <Loading label="Loading live matches" />
+          ) : live.error ? (
+            <ErrorState error={live.error} />
+          ) : live.data?.data.length ? (
+            <>
+              <ul className="event-carousel live-carousel">
+                {live.data.data.map((m) => (
+                  <li key={m.id}>
+                    <MatchCard match={m} eventId={eventId} />
+                  </li>
+                ))}
+              </ul>
+              {live.hasNextPage && (
+                <button
+                  className="secondary-link"
+                  disabled={live.isFetchingNextPage}
+                  onClick={() => live.fetchNextPage()}
+                >
+                  More live matches
+                </button>
+              )}
+            </>
+          ) : (
+            <p className="empty-inline">
+              No matches currently marked in progress by the source.
+            </p>
           )}
         </>
-      ) : (
-        <p className="empty-inline">
-          No matches currently marked in progress by the source.
-        </p>
       )}
       <SectionTitle>Coming up</SectionTitle>
       {upcoming.isPending ? (
@@ -211,9 +215,11 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           <Card key={v.id}>
             <p className="font-semibold">{v.name}</p>
             {v.address && <p className="text-sm text-muted">{v.address}</p>}
-            <p className="mt-1 text-sm">
-              {v.courts.map((c) => c.label).join(", ")}
-            </p>
+            {v.courts.length > 0 && (
+              <p className="mt-1 text-sm">
+                {v.courts.map((c) => c.label).join(", ")}
+              </p>
+            )}
           </Card>
         ))}
       </div>
