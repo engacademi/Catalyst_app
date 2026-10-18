@@ -96,11 +96,11 @@ test("large event browsing can reach entries beyond the first page", async ({
   ).toBeTruthy();
   await page.goto(base + "/teams?q=Scale");
   await page.locator(".team-picker > summary").click();
-  await expect(page.getByText("Scale Team 000", { exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Scale Team 000" })).toBeVisible();
   await page
     .getByRole("button", { name: "Load more teams", exact: true })
     .click();
-  await expect(page.getByText("Scale Team 114", { exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Scale Team 114" })).toBeVisible();
 });
 
 test("staff schedule a division notice and manage an expiring court estimate", async ({
