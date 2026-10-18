@@ -46,6 +46,11 @@ export function EventHomeView({ eventId }: { eventId: string }) {
         (!!a.entry_id && ids.includes(a.entry_id)) ||
         (!!a.division_id && divisionIds.includes(a.division_id)),
     ) ?? [];
+  const comingUp =
+    upcoming.data?.data.filter((m) => {
+      const start = m.estimated_start ?? m.scheduled_start;
+      return !start || Date.parse(start) > new Date().getTime();
+    }) ?? [];
 
   return (
     <div>
@@ -130,9 +135,9 @@ export function EventHomeView({ eventId }: { eventId: string }) {
         <Loading label="Loading upcoming matches" />
       ) : upcoming.error ? (
         <ErrorState error={upcoming.error} />
-      ) : upcoming.data?.data.length ? (
+      ) : comingUp.length ? (
         <ul className="event-carousel live-carousel">
-          {upcoming.data.data.slice(0, 8).map((m) => (
+          {comingUp.slice(0, 8).map((m) => (
             <li key={m.id}>
               <MatchCard match={m} eventId={eventId} showDay />
             </li>
