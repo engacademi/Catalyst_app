@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Heart, X } from "lucide-react";
 import type { Partner } from "@/lib/api";
 import { useGuide } from "@/lib/queries";
+import { trackSponsorClick, trackSponsorViews } from "@/lib/sponsor-engagement";
 
 export function SponsorToast({ eventId }: { eventId: string }) {
   const guide = useGuide(eventId);
@@ -37,6 +38,7 @@ export function SponsorToast({ eventId }: { eventId: string }) {
     const chosen = eligible[Math.floor(Math.random() * eligible.length)];
     const showTimer = setTimeout(() => {
       setSponsor(chosen);
+      trackSponsorViews([chosen.id], "message");
       dismissTimer.current = setTimeout(() => setSponsor(null), 12_000);
     }, 1400);
     return () => {
@@ -77,6 +79,7 @@ export function SponsorToast({ eventId }: { eventId: string }) {
             href={sponsor.link_url}
             target="_blank"
             rel="noopener noreferrer sponsored"
+            onClick={() => trackSponsorClick(sponsor.id, "message")}
           >
             Meet {sponsor.name}
           </a>

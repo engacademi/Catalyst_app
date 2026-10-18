@@ -2,10 +2,11 @@
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -35,6 +36,7 @@ from app.modules.matches import (
     within_dates,
 )
 from app.modules.my_day import build_my_day
+from app.modules.sponsors import record_engagement
 
 router = APIRouter(prefix="/v1", tags=["public"])
 DB = Annotated[Session, Depends(get_db)]
@@ -213,7 +215,8 @@ def discovery_sponsors(request: Request, db: DB) -> Response:
             PartnerCard.active.is_(True),
             PartnerCard.kind == "sponsor",
         )
-        .order_by(PartnerCard.sort, PartnerCard.name)
+        # Deterministic so the ribbon credits views and clicks to the same card each time.
+        .order_by(PartnerCard.sort, PartnerCard.name, Event.start_date, PartnerCard.id)
     )
     seen = set()
     data = []
@@ -222,6 +225,49 @@ def discovery_sponsors(request: Request, db: DB) -> Response:
             data.append(P.partner_public(row))
             seen.add(row.name)
     return json_response(request, {"data": data}, max_age=60)
+
+
+class EngagementItem(BaseModel):
+    partner_id: uuid.UUID
+    placement: Literal["ribbon", "guide", "message"]
+    action: Literal["view", "click"]
+
+
+class EngagementIn(BaseModel):
+    items: list[EngagementItem] = Field(min_length=1, max_length=40)
+
+
+@router.post("/sponsor-engagement", status_code=status.HTTP_204_NO_CONTENT)
+def sponsor_engagement(body: EngagementIn, db: DB) -> Response:
+    """Count sponsor views and outbound clicks. Anonymous aggregates only.
+
+    The browser sends a view once per session per placement and a click before it
+    navigates. Unknown, hidden or non-sponsor cards are ignored rather than reported, so
+    the endpoint reveals nothing about which ids exist.
+    """
+    ids = {item.partner_id for item in body.items}
+    cards = {
+        card.id: card
+        for card in db.scalars(
+            select(PartnerCard)
+            .join(Event, Event.id == PartnerCard.event_id)
+            .where(
+                PartnerCard.id.in_(ids),
+                PartnerCard.kind == "sponsor",
+                PartnerCard.active.is_(True),
+                Event.status == "published",
+            )
+        )
+    }
+    record_engagement(
+        db,
+        [
+            (cards[item.partner_id], item.placement, item.action)
+            for item in body.items
+            if item.partner_id in cards
+        ],
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/events/{event_ref}")

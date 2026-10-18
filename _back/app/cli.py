@@ -314,7 +314,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser(
         "seed-testing",
-        help="Rebuild the demo event and two test tournaments around the current time; add the staff showcase",
+        help="Rebuild the demo event and two test tournaments around the current time; add the staff showcase and sync OVA sponsor cards",
     )
     sub.add_parser(
         "demo-reset",

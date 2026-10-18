@@ -1,4 +1,5 @@
-"""Synthetic demo events. Every team, player and partner here is fictional.
+"""Synthetic demo events. Every team and player here is fictional; the sponsors are OVA's
+real 2026 Ontario Championships sponsors (see app/modules/sponsors.py).
 
 The seed loads its schedule through the same CSV staging and commit path staff use, so the
 demo exercises the real import pipeline. Times are relative to the real current time (there
@@ -38,6 +39,7 @@ from app.models import (
 )
 from app.modules.announcements import deliver_due
 from app.modules.imports import commit_import, stage_import
+from app.modules.sponsors import sponsor_cards, sync_ova_sponsors
 
 DEMO_SLUG = "demo-championships"
 TZ = "America/Toronto"
@@ -583,16 +585,9 @@ def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Ev
                 link_url="https://www.ontariovolleyball.org/",
                 seller_note="Example card. Checkout happens on the seller's site.",
             ),
-            PartnerCard(
-                event_id=event.id,
-                kind="sponsor",
-                name="Example Sports Co.",
-                sort=2,
-                body="Example sponsor card. Visit the booth for a ball-handling challenge.",
-                booth_location="Hall A, near Court 1",
-            ),
         ]
     )
+    db.add_all(sponsor_cards(event, start_sort=2))
 
     _restore(db, event, kept)
     ensure_dev_users(db, org, event)
@@ -801,24 +796,7 @@ def seed_testing(db: Session) -> list[Event]:
                 }
             )
         _import(db, event, source, "matches", rows)
-        db.add_all(
-            [
-                PartnerCard(
-                    event_id=event.id,
-                    kind="sponsor",
-                    name=name,
-                    body="Fictional sponsor for interface testing.",
-                    sort=i,
-                )
-                for i, name in enumerate(
-                    [
-                        "Rally Athletics · Example",
-                        "Courtside Hydration · Example",
-                        "Northstar Sport · Example",
-                    ]
-                )
-            ]
-        )
+        db.add_all(sponsor_cards(event, start_sort=0))
         db.add(
             GuideItem(
                 event_id=event.id,
@@ -832,6 +810,8 @@ def seed_testing(db: Session) -> list[Event]:
     from app.showcase import seed_staff_showcase
 
     seed_staff_showcase(db)
+    # After the showcase so its placeholder sponsors are replaced by OVA's real ones.
+    sync_ova_sponsors(db)
     db.commit()
     return added
 

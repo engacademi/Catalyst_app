@@ -24,7 +24,8 @@ def test_search_and_testing_tournaments(client, db, demo):
         results = client.get("/v1/search", params={"q": term}).json()["data"]
         assert any(result["kind"] == kind for result in results)
     assert client.get("/v1/search?q=%25").json()["data"] == []
-    assert len(client.get("/v1/sponsors").json()["data"]) == 5
+    # OVA's nine real sponsors plus the showcase's "Red Bull · Demo" placement.
+    assert len(client.get("/v1/sponsors").json()["data"]) == 10
 
 
 def test_account_type_cannot_escalate_and_following_is_scoped(client, db, demo):

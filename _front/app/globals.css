@@ -2658,25 +2658,59 @@ select:focus-visible {
 .sponsor-track {
   display: flex;
   width: max-content;
-  animation: sponsor-scroll 32s linear infinite;
+  animation: sponsor-scroll calc(var(--sponsor-count, 6) * 4.5s) linear infinite;
 }
 .sponsor-group {
   display: flex;
-  gap: 22px;
+  gap: 14px;
   align-items: center;
-  padding: 12px 11px;
+  margin: 0;
+  padding: 10px 7px;
+  list-style: none;
 }
+/* Logos sit on white tiles in every theme: they are drawn for light backgrounds. */
 .sponsor-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 165px;
-  padding: 17px 22px;
+  width: 156px;
+  height: 68px;
+  padding: 10px 16px;
   font-weight: 750;
-  color: #406352;
-  border: 1px solid rgb(70 105 86 / 12%);
+  color: #22392e;
+  border: 1px solid rgb(70 105 86 / 14%);
   border-radius: 14px;
-  background: rgb(255 255 255 / 60%);
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(20 40 30 / 6%);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+a.sponsor-mark:hover,
+a.sponsor-mark:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgb(20 40 30 / 12%);
+}
+.sponsor-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sponsor-name {
+  white-space: nowrap;
+}
+.guide-sponsor-logo {
+  flex: none;
+  width: 116px;
+  height: 52px;
+  padding: 6px 10px;
+}
+@media (prefers-color-scheme: dark) {
+  .sponsor-mark {
+    border-color: rgb(255 255 255 / 10%);
+    box-shadow: none;
+  }
 }
 .sponsor-window:hover .sponsor-track,
 .sponsor-window:focus-within .sponsor-track {
@@ -2768,6 +2802,9 @@ select:focus-visible {
   .sponsor-track,
   .volleyball-background svg {
     animation: none;
+  }
+  .sponsor-mark {
+    transition: none;
   }
   .event-tile,
   .ui-card,
@@ -2869,16 +2906,6 @@ select:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 3px 10px;
-}
-.sponsor-mark img {
-  max-height: 36px;
-  width: auto;
-  object-fit: contain;
-}
-.sponsor-mark:has(img) {
-  flex-direction: column;
-  gap: 8px;
-  font-size: 11px;
 }
 
 /* Let rounded card shadows finish inside the horizontal scroll area. */
