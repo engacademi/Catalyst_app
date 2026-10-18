@@ -251,12 +251,35 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
     error_count: number;
     errors: string[];
     summary: Record<string, number>;
-    rows: { row: number; action: string; errors: string[] }[];
+    rows: {
+      row: number;
+      action: string;
+      errors: string[];
+      external_id: string;
+      data: {
+        entry_id?: string | null;
+        mapping_source?: "submitted" | "remembered" | "source_id" | null;
+        previous_entry_id?: string | null;
+        team_photo_status?: string;
+      };
+    }[];
   } | null>(null);
   const commit = useAdminMutation<{ id: string }>(
     "POST",
     (b) => `/v1/admin/imports/${b.id}/commit`,
   );
+  // Mappings committed earlier for this source apply automatically; staff only change them.
+  const saved = useAdminQuery<{
+    data: { external_id: string; entry_id: string; team_name: string }[];
+  }>(source ? `/v1/admin/sources/${source}/registration-mappings` : null);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const forget = useAdminMutation<{ external: string }>(
+    "DELETE",
+    (b) =>
+      `/v1/admin/sources/${source}/registration-mappings/${encodeURIComponent(b.external)}`,
+  );
+  const teamName = (id?: string | null) =>
+    event.entries.find((t) => t.id === id)?.team_name ?? "an unknown team";
   async function inspect(chosen: File) {
     setFile(chosen);
     setError(null);
@@ -307,9 +330,18 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
         "team_mapping",
         JSON.stringify(
           Object.fromEntries(
-            mapping
-              .filter((m) => m.external && m.entry)
-              .map((m) => [m.external, m.entry]),
+            [
+              ...(saved.data?.data ?? [])
+                .filter(
+                  (m) =>
+                    overrides[m.external_id] &&
+                    overrides[m.external_id] !== m.entry_id,
+                )
+                .map((m) => [m.external_id, overrides[m.external_id]]),
+              ...mapping
+                .filter((m) => m.external && m.entry)
+                .map((m) => [m.external, m.entry]),
+            ],
           ),
         ),
       );
@@ -355,7 +387,10 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
           <Field label="Registration source">
             <select
               value={source}
-              onChange={(e) => setSource(e.target.value)}
+              onChange={(e) => {
+                setSource(e.target.value);
+                setOverrides({});
+              }}
               className={inputClass}
             >
               {event.sources.map((s) => (
@@ -390,10 +425,63 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
                   </Field>
                 ))}
               </div>
-              <h3 className="font-semibold">Map registration team IDs</h3>
+              {(saved.data?.data.length ?? 0) > 0 && (
+                <div className="rounded-xl border border-border p-3">
+                  <h3 className="font-semibold">Remembered team mappings</h3>
+                  <p className="text-xs text-muted">
+                    Saved from earlier imports of this source and applied
+                    automatically. Change a team only if the registration ID
+                    now belongs to a different entry.
+                  </p>
+                  <ul className="mt-2 divide-y divide-border">
+                    {saved.data!.data.map((m) => (
+                      <li
+                        key={m.external_id}
+                        className="grid items-end gap-2 py-2 sm:grid-cols-[1fr_1fr_auto]"
+                      >
+                        <p className="text-sm">
+                          <span className="font-mono">{m.external_id}</span>
+                          <span className="block text-xs text-muted">
+                            Remembered: {m.team_name}
+                          </span>
+                        </p>
+                        <Field label="Event entry">
+                          <select
+                            value={overrides[m.external_id] ?? m.entry_id}
+                            onChange={(e) =>
+                              setOverrides({
+                                ...overrides,
+                                [m.external_id]: e.target.value,
+                              })
+                            }
+                            className={inputClass}
+                          >
+                            {event.entries.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.team_name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <SmallButton
+                          disabled={forget.isPending}
+                          onClick={() =>
+                            forget.mutate({ external: m.external_id })
+                          }
+                        >
+                          Forget
+                        </SmallButton>
+                      </li>
+                    ))}
+                  </ul>
+                  <FormError error={forget.error} />
+                </div>
+              )}
+              <h3 className="font-semibold">Map new registration team IDs</h3>
               <p className="text-xs text-muted">
-                Use exact IDs from the export. Already mapped source IDs need no
-                additional mapping.
+                Use exact IDs from the export. Remembered IDs and IDs that
+                already match this source need no mapping. New mappings are
+                saved when you commit.
               </p>
               {mapping.map((m, i) => (
                 <div key={i} className="grid gap-2 sm:grid-cols-2">
@@ -465,7 +553,22 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
             {preview.rows.map((row) => (
               <li key={row.row} className="border-b border-border py-2">
                 Row {row.row}: {row.action}
+                {row.external_id ? ` · ${row.external_id}` : ""}
+                {row.data?.entry_id ? ` → ${teamName(row.data.entry_id)}` : ""}
                 {row.errors.length ? ` · ${row.errors.join("; ")}` : ""}
+                {row.data?.mapping_source && (
+                  <span className="block text-xs text-muted">
+                    {row.data.mapping_source === "remembered"
+                      ? "Team mapping remembered from an earlier import"
+                      : row.data.mapping_source === "source_id"
+                        ? "Matches the tournament team ID"
+                        : row.data.previous_entry_id
+                          ? `Mapping changed from ${teamName(row.data.previous_entry_id)}; saved on commit`
+                          : "New mapping; saved on commit"}
+                    {row.data.team_photo_status === "withheld" &&
+                      " · Team photo withheld, approval missing"}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -502,6 +605,41 @@ export function RegistrationPanel({ event }: { event: AdminEventData }) {
     </div>
   );
 }
+function TeamPhotoStatus({
+  status,
+  url,
+}: {
+  status: "approved" | "withheld" | "none";
+  url: string | null;
+}) {
+  if (status === "withheld")
+    return (
+      <p
+        role="status"
+        className="mt-2 rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-sm text-warn"
+      >
+        <span className="font-semibold">
+          Team photo withheld: awaiting approval.
+        </span>{" "}
+        The export included a team photo without approval, so it will not be
+        published. Ask staff to send an approved photo before you approve.
+      </p>
+    );
+  if (status === "approved" && url)
+    return (
+      <div className="mt-2 flex items-center gap-3 text-sm">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt="Approved team photo"
+          className="h-14 w-20 rounded-md object-cover"
+        />
+        <span>Team photo approved and will be published.</span>
+      </div>
+    );
+  return <p className="mt-2 text-sm text-muted">No team photo submitted.</p>;
+}
+
 const FIELDS = [
   ["external_entry_id", "Registration team ID"],
   ["jersey", "Jersey number"],
@@ -701,6 +839,8 @@ export function CoachReviews() {
         photo_url: string | null;
       }[];
       review: { state?: string; photos_withheld?: number; note?: string };
+      team_photo_url: string | null;
+      team_photo_status: "approved" | "withheld" | "none";
     }[];
   }>("/v1/me/roster-reviews");
   const review = useAdminMutation<{
@@ -738,6 +878,10 @@ export function CoachReviews() {
               {r.review.state ?? "Pending"} · {r.review.photos_withheld ?? 0}{" "}
               photos withheld because approval was missing
             </p>
+            <TeamPhotoStatus
+              status={r.team_photo_status}
+              url={r.team_photo_url}
+            />
             <ul className="my-3 divide-y divide-border">
               {r.players.map((p) => (
                 <li

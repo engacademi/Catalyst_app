@@ -202,6 +202,7 @@ class CsvAdapter:
             "team_photo_url": _url(cells.get("team_photo_url", ""), errors, "team_photo_url")
             if team_photo_approved
             else None,
+            "team_photo_withheld": bool(cells.get("team_photo_url")) and not team_photo_approved,
         }
 
 

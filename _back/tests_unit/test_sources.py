@@ -105,6 +105,19 @@ def test_registration_mapping_preserves_only_selected_fields():
     assert not result.errors and result.rows[0].data["jersey"] == 8
 
 
+def test_unapproved_team_photo_is_dropped_and_flagged():
+    body = (
+        b"external_entry_id,jersey,display_name,team_photo_url,team_photo_approved\n"
+        b"REG1,8,Example A.,https://example.org/team.jpg,no\n"
+        b"REG2,9,Example B.,https://example.org/team2.jpg,yes\n"
+    )
+    rows = CsvAdapter().parse("rosters", body, timezone="America/Toronto").rows
+    assert rows[0].data["team_photo_url"] is None
+    assert rows[0].data["team_photo_withheld"] is True
+    assert rows[1].data["team_photo_url"] == "https://example.org/team2.jpg"
+    assert rows[1].data["team_photo_withheld"] is False
+
+
 def changed_recording(transform):
     def get(url):
         payload = json.loads(recorded()(url))
