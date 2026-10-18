@@ -92,15 +92,15 @@ export function ScheduleView() {
         ? []
         : (queries[i].data?.matches ?? []).map((match) => ({ event, match })),
     )
-    .sort((a, b) =>
-      (
-        a.match.estimated_start ??
-        a.match.scheduled_start ??
-        "9999"
-      ).localeCompare(
-        b.match.estimated_start ?? b.match.scheduled_start ?? "9999",
-      ),
-    );
+    .sort((a, b) => {
+      const at =
+        Date.parse(a.match.estimated_start ?? a.match.scheduled_start ?? "") ||
+        Infinity;
+      const bt =
+        Date.parse(b.match.estimated_start ?? b.match.scheduled_start ?? "") ||
+        Infinity;
+      return at === bt ? 0 : at - bt;
+    });
   const today = dateKey(new Date().toISOString());
   const initialDay = rows.find(
     (r) =>
