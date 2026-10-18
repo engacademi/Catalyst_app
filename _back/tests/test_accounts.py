@@ -9,7 +9,7 @@ def test_search_and_testing_tournaments(client, db, demo):
     first = seed_testing(db)
     assert len(first) == 2
     assert seed_testing(db) == []
-    assert len(client.get("/v1/events").json()["data"]) == 3
+    assert len(client.get("/v1/events").json()["data"]) == 4
     assert set(
         db.scalars(
             select(Match.status).where(Match.event_id.in_([e.id for e in first]))
@@ -23,7 +23,7 @@ def test_search_and_testing_tournaments(client, db, demo):
         results = client.get("/v1/search", params={"q": term}).json()["data"]
         assert any(result["kind"] == kind for result in results)
     assert client.get("/v1/search?q=%25").json()["data"] == []
-    assert len(client.get("/v1/sponsors").json()["data"]) == 4
+    assert len(client.get("/v1/sponsors").json()["data"]) == 5
 
 
 def test_account_type_cannot_escalate_and_following_is_scoped(client, db, demo):

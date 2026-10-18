@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
-import { formatDay, formatTime, formatRelative } from "@/lib/format";
+import { formatDay, formatTime } from "@/lib/format";
 import { useNow } from "@/lib/now";
 import { TeamAvatar } from "./brand";
 import { Badge } from "./ui";
@@ -28,7 +28,15 @@ const CHANGE_LABELS: Record<string, string> = {
   participants_resolved: "Teams confirmed",
 };
 
-export function StatusBadge({ status }: { status: Match["status"] }) {
+export function StatusBadge({
+  status,
+  unverified = false,
+}: {
+  status: Match["status"];
+  unverified?: boolean;
+}) {
+  if (unverified && status === "in_progress")
+    return <Badge tone="warn">*Unverified Match Result</Badge>;
   const s = STATUS[status];
   return <Badge tone={s.tone}>{s.label}</Badge>;
 }
@@ -93,7 +101,6 @@ export function MatchCard({
   eventId,
   followed = [],
   showDay = false,
-  showSource = true,
 }: {
   match: Match;
   eventId: string;
@@ -107,8 +114,7 @@ export function MatchCard({
   const homeSets = match.sets.map((s) => s.home);
   const awaySets = match.sets.map((s) => s.away);
   return (
-    <Link
-      href={`/events/${eventId}/matches/${match.id}`}
+    <article
       className={`match-card ${match.status === "cancelled" ? "match-card-cancelled" : ""}`}
     >
       <div className="match-card-header">
@@ -118,8 +124,7 @@ export function MatchCard({
           {formatTime(match.scheduled_start, match.timezone)}
           {match.estimated_start && (
             <span className="font-normal text-muted">
-              · Est. ~{formatTime(start, match.timezone)},{" "}
-              {match.estimate_source}
+              · Est. ~{formatTime(start, match.timezone)}
             </span>
           )}
         </span>
@@ -132,10 +137,13 @@ export function MatchCard({
       </div>
       {match.delay_notice && (
         <p className="mb-2 rounded-lg bg-warn-soft px-2 py-1 text-xs text-warn">
-          Court running ~{match.delay_notice.minutes} min late ·{" "}
-          {match.delay_notice.posted_by} · posted{" "}
-          {formatTime(match.delay_notice.posted_at, match.timezone)}, until{" "}
-          {formatTime(match.delay_notice.expires_at, match.timezone)}
+          Court running ~{match.delay_notice.minutes} minutes late ·{" "}
+          <Link
+            className="match-alert-link underline"
+            href={`/events/${eventId}/updates?match=${match.id}#match-${match.id}`}
+          >
+            See alerts
+          </Link>
         </p>
       )}
       {match.expected_start_soon && (
@@ -158,21 +166,21 @@ export function MatchCard({
         />
       </div>
       <div className="match-card-meta">
-        <StatusBadge status={match.status} />
+        <StatusBadge status={match.status} unverified />
         <ChangeBadge change={match.latest_change} />
         {match.division && (
           <span>{match.division.code ?? match.division.name}</span>
         )}
         {match.round_label && <span>· {match.round_label}</span>}
       </div>
-      {showSource && (
-        <p className="match-card-source">
-          From {match.source.name} ·{" "}
-          {match.source.freshness === "imported_snapshot"
-            ? "Imported snapshot"
-            : `Checked ${formatRelative(match.source.observed_at)}`}
-        </p>
-      )}
-    </Link>
+      <Link
+        className="match-details-link"
+        href={`/events/${eventId}/matches/${match.id}`}
+      >
+        <span className="sr-only">
+          Match details: {name(match.home)} vs {name(match.away)}
+        </span>
+      </Link>
+    </article>
   );
 }

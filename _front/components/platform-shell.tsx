@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Bell, CalendarDays, Compass, Trophy, UserRound } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
+import { PlatformFooter } from "./platform-footer";
 import { Wordmark } from "./brand";
 import { useEvents } from "@/lib/queries";
 import { apiGet, type Change } from "@/lib/api";
@@ -158,46 +159,7 @@ export function PlatformShell({ children }: { children: ReactNode }) {
         )}
       </header>
       {children}
-      <footer className="platform-footer">
-        <Link href="/">
-          <Wordmark />
-          <small className="by-ova">By Ontario Volleyball Association</small>
-        </Link>
-        <nav className="footer-socials" aria-label="OVA social media">
-          <a
-            href="https://www.instagram.com/ova_updates/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Instagram
-          </a>
-          <a
-            href="https://www.facebook.com/OntarioVolleyball/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Facebook
-          </a>
-          <a href="https://x.com/ova_updates" target="_blank" rel="noreferrer">
-            X
-          </a>
-          <a
-            href="https://www.youtube.com/user/TheOVAUpdates"
-            target="_blank"
-            rel="noreferrer"
-          >
-            YouTube
-          </a>
-          <a
-            href="https://www.tiktok.com/@ova_updates"
-            target="_blank"
-            rel="noreferrer"
-          >
-            TikTok
-          </a>
-          <a href="mailto:info@ontariovolleyball.org">Contact</a>
-        </nav>
-      </footer>
+      <PlatformFooter />
       <nav className="platform-dock" aria-label="Main navigation">
         {nav}
       </nav>

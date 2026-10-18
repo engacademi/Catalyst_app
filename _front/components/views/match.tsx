@@ -6,6 +6,7 @@ import { ArrowLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Participant } from "@/lib/api";
 import { formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
+import { ScoreDispute } from "../score-dispute";
 import { FreshnessNote } from "../freshness";
 import { StatusBadge } from "../match-card";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
@@ -81,6 +82,9 @@ export function MatchView({
       </h1>
       <div className="mt-2 flex flex-wrap gap-2">
         <StatusBadge status={m.status} />
+        {["in_progress", "completed"].includes(m.status) && (
+          <ScoreDispute matchId={m.id} />
+        )}
       </div>
 
       <Card className="mt-4 space-y-2">
@@ -91,8 +95,7 @@ export function MatchView({
             : "Official time to be confirmed"}
           {m.estimated_start && (
             <span className="text-sm text-muted">
-              Est. ~{formatTime(m.estimated_start, m.timezone)},{" "}
-              {m.estimate_source}
+              Est. ~{formatTime(m.estimated_start, m.timezone)}
             </span>
           )}
         </p>
@@ -114,10 +117,12 @@ export function MatchView({
       {m.delay_notice && (
         <p className="mt-3 rounded-xl border border-warn/40 bg-warn-soft p-3 text-sm text-warn">
           Court running ~{m.delay_notice.minutes} minutes late ·{" "}
-          {m.delay_notice.posted_by}. Posted{" "}
-          {formatTime(m.delay_notice.posted_at, m.timezone)}; expires{" "}
-          {formatTime(m.delay_notice.expires_at, m.timezone)}. Official time
-          remains unchanged.
+          <Link
+            className="underline"
+            href={`/events/${eventId}/updates?match=${m.id}#match-${m.id}`}
+          >
+            See alerts
+          </Link>
         </p>
       )}
       {m.expected_start_soon && (

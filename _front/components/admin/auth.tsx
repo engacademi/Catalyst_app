@@ -1,4 +1,5 @@
 "use client";
+import { PlatformFooter } from "../platform-footer";
 
 import {
   createContext,
@@ -51,13 +52,7 @@ function Frame({
       <main id="main" className="staff-content">
         {children}
       </main>
-      <footer className="platform-footer">
-        <span>
-          Olley Catalyst{" "}
-          <small className="by-ova">By Ontario Volleyball Association</small>
-        </span>
-        <Link href="/profile">My Profile →</Link>
-      </footer>
+      <PlatformFooter />
     </div>
   );
 }

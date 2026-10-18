@@ -664,7 +664,28 @@ test("sponsor alternates visits, venue cards expand and rankings sum completed s
   await expect(page.getByText("Use the underground car park.")).toBeVisible();
   await expect(page.locator(".partner-carousel")).toHaveCSS("overflow-x", "auto");
   await page.goto(`${base}/teams`);
-  await page.getByRole("button", { name: "Team Rankings", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Team Rankings", exact: true })).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator(".rankings-panel table")).toHaveCount(1);
   await expect(page.locator(".rankings-panel tbody tr")).toHaveCount(2);
+});
+
+
+test("delay cards link to full alerts and completed matches offer dispute reporting", async ({page}) => {
+  await fixtures(page);
+  const delay = {minutes:15,posted_by:"Demo event team",posted_at:now,expires_at:next};
+  const delayed = {...match,delay_notice:delay,estimate_source:"OVA staff",estimated_start:next};
+  await page.route("**/v1/events/demo-championships/matches?**", route => route.fulfill({json:{data:[delayed],next_cursor:null,sources:[source]}}));
+  await page.route("**/v1/matches/m1", route => route.fulfill({json:{data:{...delayed,event,history:[]},sources:[source]}}));
+  await page.goto(`${base}/matches`);
+  const card=page.locator(".match-card").first();
+  await expect(card.getByText(/Court running ~15 minutes late/)).toBeVisible();
+  await expect(card.getByText(/OVA staff|From Demo fixture|Demo event team/)).toHaveCount(0);
+  await card.getByRole("link",{name:"See alerts"}).click();
+  await expect(page.getByRole("region",{name:"Court delay alert"})).toContainText("Demo event team");
+  await page.goto(`${base}/matches/m2`);
+  await page.getByRole("button",{name:"Flag a score dispute"}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("link",{name:"Sign in"})).toHaveAttribute("href","/profile");
+  await page.getByRole("button",{name:"Close dispute dialog"}).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
 });

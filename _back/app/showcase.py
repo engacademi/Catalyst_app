@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Announcement,
+    ChangeEvent,
     Court,
     Event,
     EventEntry,
@@ -55,6 +56,7 @@ def seed_staff_showcase(db: Session) -> Event:
         db.commit()
     if source and (source.config or {}).get("showcase_ready"):
         seed_showcase_live_matches(db, event, source)
+        ensure_showcase_presentation(db, event)
         return event
     org = db.scalar(select(Organization).limit(1))
     if not org:
@@ -400,6 +402,7 @@ def seed_staff_showcase(db: Session) -> Event:
     source.config = {**(source.config or {}), "showcase_ready": True}
     event.status = "published"
     seed_showcase_live_matches(db, event, source)
+    ensure_showcase_presentation(db, event)
     db.commit()
     return event
 
@@ -437,3 +440,49 @@ def seed_showcase_live_matches(db: Session, event: Event, source: Source) -> Non
     if rows:
         _import(db, event, source, "matches", rows)
         db.commit()
+
+
+def ensure_showcase_presentation(db: Session, event: Event) -> None:
+    logos = {
+        "Rally Athletics · Example": "rally",
+        "Courtside Hydration · Example": "courtside",
+        "Northstar Sport · Example": "northstar",
+        "Red Bull · Demo": "red-bull-demo",
+    }
+    for partner in db.scalars(
+        select(PartnerCard).where(PartnerCard.event_id == event.id)
+    ):
+        if not partner.logo_url and partner.name in logos:
+            partner.logo_url = f"https://catalyst-five-gamma.vercel.app/sponsors/{logos[partner.name]}.svg"
+    for match in db.scalars(
+        select(Match).where(
+            Match.event_id == event.id, Match.status.in_(["scheduled", "postponed"])
+        )
+    ):
+        court = db.get(Court, match.court_id) if match.court_id else None
+        if not court or not court.delay:
+            continue
+        if not db.scalar(
+            select(ChangeEvent.id).where(
+                ChangeEvent.entity_id == match.id,
+                ChangeEvent.event_type == "delay_notice",
+            )
+        ):
+            db.add(
+                ChangeEvent(
+                    event_id=event.id,
+                    entity_type="match",
+                    entity_id=match.id,
+                    entity_revision=match.revision,
+                    event_type="delay_notice",
+                    entry_ids=[
+                        str(p.entry_id) for p in match.participants if p.entry_id
+                    ],
+                    diff={
+                        "minutes": court.delay["minutes"],
+                        "expires_at": court.delay["expires_at"],
+                    },
+                    simulated=True,
+                )
+            )
+    db.commit()

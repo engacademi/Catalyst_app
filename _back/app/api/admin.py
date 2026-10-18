@@ -1243,11 +1243,12 @@ def court_notice(
             if body.delay_minutes
             else {}
         )
-        for m in db.scalars(
+        affected = list(db.scalars(
             select(Match)
             .where(Match.court_id == c.id, Match.status.in_(["scheduled", "postponed"]))
             .options(*match_load_options())
-        ):
+        ))
+        for m in affected:
             m.revision += 1
             db.add(
                 ChangeEvent(
@@ -1264,6 +1265,18 @@ def court_notice(
                     simulated=event.is_demo,
                 )
             )
+        if not affected:
+            notice = Announcement(
+                event_id=event.id, category="schedule", state="published",
+                title=f"{c.label}: " + (f"running ~{body.delay_minutes} minutes late" if body.delay_minutes else "delay cleared"),
+                body=(f"{principal.user.display_name or 'Event staff'} updated the court notice. "
+                      f"Official match times remain unchanged. Check the match schedule for estimates. "
+                      f"Notice valid for {body.duration_minutes} minutes."),
+                created_by=principal.user.id,
+            )
+            db.add(notice)
+            db.flush()
+            db.add(ChangeEvent(event_id=event.id, entity_type="announcement", entity_id=notice.id, entity_revision=notice.revision, event_type="announcement_published", entry_ids=[], diff={}, simulated=event.is_demo))
         audit(
             db,
             request,
@@ -1568,3 +1581,26 @@ def update_court(
     )
     db.commit()
     return {"data": P.court_public(court)}
+
+
+@router.get("/events/{event_id}/disputes")
+def score_disputes(event_id: str, db: DB, principal: CurrentPrincipal):
+    from app.models import ScoreDispute
+    event = staff_event(db, principal, event_id)
+    rows = db.execute(select(ScoreDispute, Match).join(Match, Match.id == ScoreDispute.match_id).where(Match.event_id == event.id).order_by(ScoreDispute.created_at.desc()).limit(200))
+    return {"data": [{"id": str(d.id), "match_id": str(m.id), "match_label": m.external_id, "comment": d.comment, "status": d.status, "created_at": P.iso(d.created_at)} for d, m in rows]}
+
+
+@router.patch("/disputes/{dispute_id}/resolve")
+def resolve_score_dispute(dispute_id: str, request: Request, db: DB, principal: CurrentPrincipal):
+    from app.models import ScoreDispute
+    dispute = db.get(ScoreDispute, parse_uuid(dispute_id))
+    if not dispute:
+        raise HTTPException(404, "Dispute not found")
+    match = db.get(Match, dispute.match_id)
+    event = staff_event(db, principal, str(match.event_id))
+    dispute.status = "resolved"
+    dispute.resolved_at = utcnow()
+    audit(db, request, principal, "score_dispute.resolve", event.id, dispute)
+    db.commit()
+    return {"data": {"id": str(dispute.id), "status": dispute.status}}

@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useHydrated } from "@/lib/hydration";
 
 import {
@@ -16,14 +17,7 @@ import {
 } from "lucide-react";
 import { CourtOverview } from "../court-overview";
 import { useGuide } from "@/lib/queries";
-import {
-  Badge,
-  Card,
-  ErrorState,
-  Loading,
-  PageTitle,
-  SectionTitle,
-} from "../ui";
+import { Card, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
 
 const ICONS: Record<string, LucideIcon> = {
   parking: Car,
@@ -248,7 +242,9 @@ export function GuideView({ eventId }: { eventId: string }) {
 
       {sponsors.length > 0 && (
         <>
-          <SectionTitle>Event partners</SectionTitle>
+          <div id="event-partners">
+            <SectionTitle>Event partners</SectionTitle>
+          </div>
           <div
             className="partner-carousel"
             role="region"
@@ -256,29 +252,27 @@ export function GuideView({ eventId }: { eventId: string }) {
             tabIndex={0}
           >
             {sponsors.map((p) => (
-              <Card key={p.id}>
-                <Badge>
-                  {p.name.includes("Demo") ? "Demo partner" : "Sponsored"}
-                </Badge>
-                <p className="mt-2 font-semibold">{p.name}</p>
-                <p className="text-sm">{p.body}</p>
-                {p.booth_location && (
-                  <p className="mt-1 text-sm text-muted">
-                    Booth: {p.booth_location}
-                  </p>
+              <a
+                key={p.id}
+                className="partner-logo-card"
+                href={p.link_url || "#event-partners"}
+                aria-label={p.name}
+                target={p.link_url ? "_blank" : undefined}
+                rel="noopener noreferrer sponsored"
+              >
+                {p.logo_url ? (
+                  <Image
+                    src={p.logo_url}
+                    alt={p.name}
+                    width={160}
+                    height={80}
+                    unoptimized
+                  />
+                ) : (
+                  <strong>{p.name}</strong>
                 )}
-                {p.link_url && (
-                  <a
-                    href={p.link_url}
-                    rel="noopener sponsored"
-                    target="_blank"
-                    className="mt-2 inline-block text-sm font-semibold text-brand underline"
-                  >
-                    Visit {p.name}
-                    <span className="sr-only"> (opens in a new tab)</span>
-                  </a>
-                )}
-              </Card>
+                {p.name.includes("Demo") && <small>Demo partner</small>}
+              </a>
             ))}
           </div>
         </>

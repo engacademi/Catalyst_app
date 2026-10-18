@@ -20,7 +20,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
   const q = params.get("q") ?? "";
   const division = params.get("division") ?? "";
   const [text, setText] = useState(q);
-  const [rankings, showRankings] = useState(false);
+  const [rankings, showRankings] = useState(true);
   const event = useEvent(eventId);
   const teams = useTeams(eventId, q, division);
   const { ids, divisionIds, isFollowing, toggle } = useFollows(eventId);
