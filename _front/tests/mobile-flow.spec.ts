@@ -1326,3 +1326,67 @@ test("event tile eyebrows keep 4.5:1 contrast over art and venue photos", async 
     expect(worst, `tile ${i} eyebrow contrast`).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+test.describe("courtside picks", () => {
+  const future = new Date(Date.now() + 3 * 3600_000).toISOString();
+  async function pick(page: Page, storage: Record<string, string>) {
+    await setup(page);
+    let matchRequests = 0;
+    await page.route("**/v1/events/ontario-demo/matches**", (route) => {
+      matchRequests++;
+      return route.fulfill({
+        json: {
+          data: [{ ...match, scheduled_start: future }],
+          sources: [source],
+          next_cursor: null,
+        },
+      });
+    });
+    await page.addInitScript((items) => {
+      for (const [key, value] of Object.entries(items))
+        localStorage.setItem(key, value);
+    }, storage);
+    await page.goto("/");
+    const picks = page
+      .locator("section")
+      .filter({
+        has: page.getByRole("heading", { name: "Your courtside picks" }),
+      });
+    await expect(
+      picks.getByRole("link", { name: "Ontario Championships" }),
+    ).toBeVisible();
+    return { picks, matchRequests: () => matchRequests };
+  }
+
+  test("a saved event with no followed team shows only the event", async ({
+    page,
+  }) => {
+    const { picks, matchRequests } = await pick(page, {
+      "courtside:saved-events": JSON.stringify(["ontario-demo"]),
+    });
+    await expect(picks.locator(".saved-next")).toHaveCount(0);
+    expect(matchRequests()).toBe(0);
+  });
+
+  test("a followed team shows that team's next match by name", async ({
+    page,
+  }) => {
+    const { picks } = await pick(page, {
+      "courtside:follows:ontario-demo": JSON.stringify(["t1"]),
+    });
+    const next = picks.locator(".saved-next");
+    await expect(next).toContainText("Northern Lights are playing here");
+    await expect(next).toContainText("vs Lakeshore");
+    await expect(next).toContainText("Court 1");
+  });
+
+  test("a team label replaces the team name", async ({ page }) => {
+    const { picks } = await pick(page, {
+      "courtside:follows:ontario-demo": JSON.stringify(["t2"]),
+      "courtside:label:ontario-demo:t2": "Maya's team",
+    });
+    const next = picks.locator(".saved-next");
+    await expect(next).toContainText("Maya's team is playing here");
+    await expect(next).toContainText("vs Northern Lights");
+  });
+});
