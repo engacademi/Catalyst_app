@@ -359,6 +359,9 @@ test("guide resources, approved roster and guest empty state remain accessible",
     page.getByRole("link", { name: "Find your teams", exact: true }),
   ).toBeVisible();
   await page.goto(`${base}/guide`);
+  await page
+    .getByRole("link", { name: "View details for Scoring guide" })
+    .click();
   await expect(
     page.getByRole("link", { name: /Open.*resource/ }),
   ).toHaveAttribute("href", "https://example.com/scoring");
@@ -501,7 +504,7 @@ test("merged division follows, private labels, pathway and staff estimates remai
     .check();
   await page.goto(`${base}/my-teams`);
   await page
-    .getByRole("textbox", { name: "Private label" })
+    .getByRole("textbox", { name: "Kids’ names / private label" })
     .fill("Maya's team");
   await page.goto(`${base}/my-day`);
   await expect(
@@ -538,7 +541,11 @@ test("merged division follows, private labels, pathway and staff estimates remai
   );
   await page.goto(`${base}/matches/m1`);
   await expect(page.getByText(/Court running ~20 minutes late/)).toBeVisible();
-  await expect(page.getByText(/Official time remains unchanged/)).toBeVisible();
+  await expect(page.getByText(/^Official .*Est\. ~/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "See alerts" })).toHaveAttribute(
+    "href",
+    `${base}/updates?match=m1#match-m1`,
+  );
   await expect(page.getByText(/Expected to start soon/)).toBeVisible();
 });
 
@@ -647,46 +654,112 @@ test("staff dashboard filters events and opens editing shortcuts with URL persis
   ).toHaveAttribute("aria-selected", "true");
 });
 
-test("sponsor alternates visits, venue cards expand and rankings sum completed scores", async ({ page }) => {
+test("sponsor alternates visits, venue cards expand and rankings sum completed scores", async ({
+  page,
+}) => {
   await fixtures(page);
   await page.route("**/v1/events/demo-championships/guide", async (route) => {
-    await route.fulfill({ json: { data: { venues: [venue], items: [{ id: "parking", kind: "parking", title: "Parking", body: "Use the underground car park." }], partners: [{ id: "demo-sponsor", kind: "sponsor", name: "Red Bull · Demo", body: "Demo placement", active: true }] }, sources: [source] } });
+    await route.fulfill({
+      json: {
+        data: {
+          venues: [venue],
+          items: [
+            {
+              id: "parking",
+              kind: "parking",
+              title: "Parking",
+              body: "Use the underground car park.",
+            },
+          ],
+          partners: [
+            {
+              id: "demo-sponsor",
+              kind: "sponsor",
+              name: "Red Bull · Demo",
+              body: "Demo placement",
+              active: true,
+            },
+          ],
+        },
+        sources: [source],
+      },
+    });
   });
   await page.goto(base);
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("olley:sponsor-visits:demo-championships"))).toBe("1");
-  await expect(page.getByLabel("A message from an event sponsor")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        sessionStorage.getItem("olley:sponsor-visits:demo-championships"),
+      ),
+    )
+    .toBe("1");
+  await expect(page.getByLabel("A message from an event sponsor")).toHaveCount(
+    0,
+  );
   await page.goto(`${base}/matches/m1`);
-  await expect(page.getByLabel("A message from an event sponsor")).toBeVisible();
+  await expect(
+    page.getByLabel("A message from an event sponsor"),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Dismiss sponsor message" }).click();
   await page.goto(`${base}/guide`);
   await expect(page.locator(".venue-quick-card")).toHaveCount(4);
   await page.getByRole("link", { name: "View details" }).first().click();
   await expect(page.getByText("Use the underground car park.")).toBeVisible();
-  await expect(page.locator(".partner-carousel")).toHaveCSS("overflow-x", "auto");
+  await expect(page.locator(".partner-carousel")).toHaveCSS(
+    "overflow-x",
+    "auto",
+  );
   await page.goto(`${base}/teams`);
-  await expect(page.getByRole("button", { name: "Team Rankings", exact: true })).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByRole("button", { name: "Team Rankings", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator(".rankings-panel table")).toHaveCount(1);
   await expect(page.locator(".rankings-panel tbody tr")).toHaveCount(2);
 });
 
-
-test("delay cards link to full alerts and completed matches offer dispute reporting", async ({page}) => {
+test("delay cards link to full alerts and completed matches offer dispute reporting", async ({
+  page,
+}) => {
   await fixtures(page);
-  const delay = {minutes:15,posted_by:"Demo event team",posted_at:now,expires_at:next};
-  const delayed = {...match,delay_notice:delay,estimate_source:"OVA staff",estimated_start:next};
-  await page.route("**/v1/events/demo-championships/matches?**", route => route.fulfill({json:{data:[delayed],next_cursor:null,sources:[source]}}));
-  await page.route("**/v1/matches/m1", route => route.fulfill({json:{data:{...delayed,event,history:[]},sources:[source]}}));
+  const delay = {
+    minutes: 15,
+    posted_by: "Demo event team",
+    posted_at: now,
+    expires_at: next,
+  };
+  const delayed = {
+    ...match,
+    delay_notice: delay,
+    estimate_source: "OVA staff",
+    estimated_start: next,
+  };
+  await page.route("**/v1/events/demo-championships/matches?**", (route) =>
+    route.fulfill({
+      json: { data: [delayed], next_cursor: null, sources: [source] },
+    }),
+  );
+  await page.route("**/v1/matches/m1", (route) =>
+    route.fulfill({
+      json: { data: { ...delayed, event, history: [] }, sources: [source] },
+    }),
+  );
   await page.goto(`${base}/matches`);
-  const card=page.locator(".match-card").first();
+  const card = page.locator(".match-card").first();
   await expect(card.getByText(/Court running ~15 minutes late/)).toBeVisible();
-  await expect(card.getByText(/OVA staff|From Demo fixture|Demo event team/)).toHaveCount(0);
-  await card.getByRole("link",{name:"See alerts"}).click();
-  await expect(page.getByRole("region",{name:"Court delay alert"})).toContainText("Demo event team");
+  await expect(
+    card.getByText(/OVA staff|From Demo fixture|Demo event team/),
+  ).toHaveCount(0);
+  await card.getByRole("link", { name: "See alerts" }).click();
+  await expect(
+    page.getByRole("region", { name: "Court delay alert" }),
+  ).toContainText("Demo event team");
   await page.goto(`${base}/matches/m2`);
-  await page.getByRole("button",{name:"Flag a score dispute"}).click();
+  await page.getByRole("button", { name: "Flag a score dispute" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("dialog").getByRole("link",{name:"Sign in"})).toHaveAttribute("href","/profile");
-  await page.getByRole("button",{name:"Close dispute dialog"}).click();
+  await expect(
+    page.getByRole("dialog").getByRole("link", { name: "Sign in" }),
+  ).toHaveAttribute("href", "/profile");
+  await page.getByRole("button", { name: "Close dispute dialog" }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
 
@@ -722,13 +795,20 @@ test("paused source warns attendees right away while the schedule stays visible"
   await page.route("**/v1/matches/m1", (route) =>
     route.fulfill({
       json: {
-        data: { ...match, source: { ...match.source, freshness: "paused" }, event, history: [] },
+        data: {
+          ...match,
+          source: { ...match.source, freshness: "paused" },
+          event,
+          history: [],
+        },
         sources: [paused],
       },
     }),
   );
   await page.goto(`${base}/matches/m1`);
-  await expect(page.getByText(/Updates paused · last checked/).first()).toBeVisible();
+  await expect(
+    page.getByText(/Updates paused · last checked/).first(),
+  ).toBeVisible();
 });
 
 test("My Day work duties list what the team must do", async ({ page }) => {
@@ -759,8 +839,12 @@ test("My Day work duties list what the team must do", async ({ page }) => {
   );
   await page.goto(`${base}/my-day`);
   await expect(page.getByText("What your team must do")).toBeVisible();
-  await expect(page.getByText(/one athlete line judge per match/)).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Youth Competitions Manual 2026-27 §6\.21/ }),
+    page.getByText(/one athlete line judge per match/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", {
+      name: /Youth Competitions Manual 2026-27 §6\.21/,
+    }),
   ).toBeVisible();
 });

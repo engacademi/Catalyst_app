@@ -216,14 +216,16 @@ test("location denial keeps Toronto and interests drive recommendations", async 
     });
   });
   await page.goto("/");
+  await page
+    .getByRole("combobox", { name: "Event location" })
+    .selectOption("current");
 
   await expect(
     page.getByText("Location wasn’t shared. Showing Toronto instead."),
   ).toBeVisible();
   await expect(
     page
-      .locator("section")
-      .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) })
+      .getByRole("list", { name: "Explore tournaments" })
       .getByText(event.title),
   ).toBeVisible();
   await page.goto("/profile");
@@ -314,28 +316,45 @@ for (const width of [320, 390, 768]) {
     await expect(
       page.getByText("The teams you love. The games around you."),
     ).toHaveCount(0);
-    const near = page
-      .locator("section")
-      .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) });
+    await expect(page.getByRole("heading", { name: /^Near / })).toHaveCount(0);
     await expect(
-      near.getByRole("combobox", { name: "Event location" }),
+      page
+        .locator(".discovery-filters")
+        .getByRole("combobox", { name: "Event location" }),
     ).toBeVisible();
     const rects = await page.locator(".discovery-filters").evaluate((el) => {
       const a = el.querySelector(".segmented")!.getBoundingClientRect();
       const b = el.querySelector("select")!.getBoundingClientRect();
-      return { a: a.top, b: b.top, right: b.right };
+      const c = el
+        .querySelector(".discovery-location")!
+        .getBoundingClientRect();
+      return {
+        a: a.top,
+        b: b.top,
+        c: c.top,
+        right: c.right,
+        locationWidth: c.width,
+      };
     });
     expect(Math.abs(rects.a - rects.b)).toBeLessThan(5);
+    expect(Math.abs(rects.a - rects.c)).toBeLessThan(5);
     expect(rects.right).toBeLessThanOrEqual(width);
+    expect(rects.locationWidth).toBe(50);
     await expect(page.locator(".platform-header .by-ova")).toHaveText(
       "By Ontario Volleyball Association",
     );
-    if (width === 390)
+    if (width === 390) {
+      const location = page.getByRole("combobox", { name: "Event location" });
+      await location.selectOption("Toronto");
+      await expect(location).toHaveValue("Toronto");
+      await expect(page.getByText("Within 100 km of Toronto")).toBeVisible();
+      await location.selectOption("all");
       await page.screenshot({
         path: "test-results/discover-polished-mobile.png",
         fullPage: true,
         animations: "disabled",
       });
+    }
     await page.goto("/tournaments");
     await page.getByRole("button", { name: "Save tournament" }).first().click();
     await page.goto("/");
@@ -381,7 +400,7 @@ test("overview uses compact attendance and label actions without redundant tabs 
   await expect(nav.getByRole("link", { name: "My event day" })).toHaveCount(0);
   await expect(nav.getByRole("link", { name: "My teams" })).toHaveCount(0);
   await expect(
-    page.getByRole("link", { name: "Manage team labels" }),
+    page.getByRole("link", { name: "My teams and kids’ names" }),
   ).toHaveAttribute("href", "/events/ontario-demo/my-teams");
   const attended = page.getByRole("button", { name: "Attended", exact: true });
   await attended.click();
@@ -502,17 +521,19 @@ test("current location can be replaced and event venues link to directions", asy
     }),
   );
   await page.goto("/");
+  await page
+    .getByRole("combobox", { name: "Event location" })
+    .selectOption("current");
+  await expect(page.getByText("Within 100 km of your location")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Near your location" }),
-  ).toBeVisible();
+    page.getByRole("list", { name: "Explore tournaments" }),
+  ).toHaveCount(0);
   await page
     .getByRole("combobox", { name: "Event location" })
     .selectOption("Toronto");
-  const nearby = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) });
+  await expect(page.getByText("Within 100 km of Toronto")).toBeVisible();
   await expect(
-    nearby.getByRole("link", { name: "Directions to Enercare Centre" }).first(),
+    page.getByRole("link", { name: "Directions to Enercare Centre" }).first(),
   ).toHaveAttribute(
     "href",
     /google.com\/maps\/dir\/\?api=1&destination=Enercare%20Centre%2C%20Toronto/,
@@ -548,9 +569,9 @@ test("compact saved picks, sponsor ribbon and profile saved-team lists", async (
   );
   await page.goto("/");
   const pick = page.locator(".compact-pick .event-tile").first();
-  const nearby = page
+  const popular = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Near Toronto" }) });
+    .filter({ has: page.getByRole("heading", { name: "Popular on court" }) });
   await expect(pick).toBeVisible();
   const small = await pick.boundingBox();
   const heart = await pick
@@ -558,15 +579,15 @@ test("compact saved picks, sponsor ribbon and profile saved-team lists", async (
     .boundingBox();
   expect(small!.x + small!.width - heart!.x - heart!.width).toBeLessThan(12);
   expect(heart!.y - small!.y).toBeLessThan(12);
-  const full = await nearby.locator(".event-tile").first().boundingBox();
-  expect(small!.height).toBeLessThan(full!.height * 0.65);
+  const full = await popular.locator(".event-tile").first().boundingBox();
+  expect(Math.abs(small!.height - full!.height)).toBeLessThanOrEqual(2);
   const sponsor = page.getByRole("region", { name: "Our sponsors" });
   await expect(sponsor).toBeVisible();
   expect((await sponsor.boundingBox())!.y).toBeGreaterThan(
     (await page.locator(".saved-discovery").boundingBox())!.y,
   );
   expect((await sponsor.boundingBox())!.y).toBeLessThan(
-    (await nearby.boundingBox())!.y,
+    (await popular.boundingBox())!.y,
   );
   await page.goto("/profile");
   await expect(
@@ -967,7 +988,111 @@ for (const width of [320, 390]) {
   });
 }
 
-test("guide shows OVA match-day rules for the event's kind", async ({
+test("tag icon opens searchable teams and private kids names persist", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  const team = {
+    id: "t1",
+    team_name: "Lakeshore Thunder",
+    club_name: "Lakeshore VC",
+    division: { id: "d1", name: "15U Boys D1", code: "15UB" },
+  };
+  await page.route("**/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/teams")) {
+      const q = url.searchParams.get("q") ?? "";
+      return route.fulfill({
+        json: {
+          data: q === "missing" ? [] : [team],
+          total: q === "missing" ? 0 : 1,
+        },
+      });
+    }
+    if (url.pathname.endsWith("/entries/t1"))
+      return route.fulfill({ json: { data: team } });
+    return route.fallback();
+  });
+  await page.goto("/events/ontario-demo");
+  await page.getByRole("link", { name: "My teams and kids’ names" }).click();
+  const search = page.getByRole("searchbox", {
+    name: "Search teams, clubs or divisions",
+  });
+  await search.fill("missing");
+  await expect(
+    page.getByText("No teams match.", { exact: false }),
+  ).toBeVisible();
+  await search.fill("Lakeshore");
+  await page
+    .getByRole("button", { name: "Follow Lakeshore Thunder", exact: true })
+    .click();
+  const names = page.getByRole("textbox", {
+    name: "Kids’ names / private label",
+  });
+  await names.fill("Maya, Alex");
+  await page.reload();
+  await expect(names).toHaveValue("Maya, Alex");
+  await page
+    .locator(".team-grid")
+    .getByRole("button", { name: "Unfollow Lakeshore Thunder", exact: true })
+    .click();
+  await expect(names).toHaveCount(0);
+});
+
+test("discovery cards share the compact tournament card artwork", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  await page.route("**/v1/events", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            ...event,
+            venue_locations: [
+              {
+                city: "Toronto",
+                latitude: 43.65,
+                longitude: -79.38,
+                photo_url: "/venues/exhibition-place.jpg",
+                photo_credit: "Venue photo credit",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/");
+  const art = page.locator(".event-tile-art").first();
+  await expect(art).toBeVisible();
+  expect((await art.boundingBox())!.height).toBeCloseTo(62, 1);
+  await expect(art.locator("img.event-tile-photo")).toBeVisible();
+  await expect
+    .poll(() =>
+      art
+        .locator("img")
+        .evaluate((img) => (img as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  const discoveryWidth = (await page
+    .locator(".event-tile")
+    .first()
+    .boundingBox())!.width;
+  await page.goto("/tournaments");
+  await expect(art).toBeVisible();
+  expect((await art.boundingBox())!.height).toBeCloseTo(62, 1);
+  expect(
+    Math.abs(
+      (await page.locator(".event-tile").first().boundingBox())!.width -
+        discoveryWidth,
+    ),
+  ).toBeLessThanOrEqual(2);
+});
+
+test("venue omits match-day rules, keeps official documents and always has merchandise", async ({
   page,
 }) => {
   await setup(page);
@@ -976,14 +1101,17 @@ test("guide shows OVA match-day rules for the event's kind", async ({
     route.fulfill({ json: { data: guide } }),
   );
   await page.goto("/events/ontario-demo/guide");
-  const rules = page.getByRole("region", { name: "Match-day rules" });
-  await expect(rules.getByText(/uses 8-4-4/)).toBeVisible();
   await expect(
-    rules.getByRole("link", {
-      name: /Youth Competitions Manual 2026-27 §6\.5/,
-    }),
-  ).toHaveAttribute("href", /YCM_2026-2027/);
-  await expect(rules.getByText("Check-in")).toHaveCount(0);
+    page.getByRole("region", { name: "Match-day rules" }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "Merchandise", exact: true })
+      .getByRole("link", { name: /Shop merchandise/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://ovashop.ca/ontario_volleyball_association/shop/home",
+  );
   await expect(
     page
       .getByRole("region", { name: "Official OVA documents" })
@@ -1007,15 +1135,196 @@ test("guide shows OVA match-day rules for the event's kind", async ({
   );
   await page.reload();
   await expect(
-    rules.getByText(/both partners check in together/),
-  ).toBeVisible();
-  await expect(rules.getByText(/uses 8-4-4/)).toHaveCount(0);
+    page.getByRole("region", { name: "Match-day rules" }),
+  ).toHaveCount(0);
   await expect(
     page
       .getByRole("region", { name: "Official OVA documents" })
       .getByRole("link", { name: /Beach Tour Handbook 2026/ }),
   ).toBeVisible();
   await expect(page.locator('a[href="tel:647-467-5514"]')).toHaveCount(0);
+});
+
+test("Fall Classic venue uses official images, shop link and compact lead resources", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  await page.route("**/v1/events/ontario-demo", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          ...event,
+          title: "Fall Classic Championship 2026 · Demo",
+          divisions: [],
+          counts: { entries: 12, matches: 24 },
+        },
+        sources: [source],
+      },
+    }),
+  );
+  await page.route("**/v1/events/ontario-demo/guide", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          venues: [
+            {
+              id: "v1",
+              name: "Cohere Centre",
+              address: "4899 Uplands Dr, Ottawa",
+              courts: [],
+              photo_url: "/events/fall-classic-banner.webp",
+              photo_credit: "Image: Ontario Volleyball Association",
+              map_url: "/events/fall-classic-map.webp",
+            },
+          ],
+          items: [
+            {
+              id: "lead1",
+              kind: "officials",
+              title: "Lead briefing",
+              body: "Check the published lead documents before your assignment.",
+              link_url: "https://www.ontariovolleyball.org/contact-referees",
+            },
+          ],
+          partners: [],
+        },
+      },
+    }),
+  );
+  await page.goto("/events/ontario-demo/guide");
+  await expect(
+    page.getByRole("link", { name: /Shop merchandise/ }),
+  ).toHaveAttribute("href", "https://canuckstuff.com/fallclassic26/shop/home");
+  const logo = page.getByRole("img", { name: "Fall Classic merchandise" });
+  await expect(logo).toBeVisible();
+  await expect
+    .poll(() => logo.evaluate((img) => (img as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  await page.getByText("View venue map", { exact: true }).click();
+  await expect(
+    page.getByRole("img", { name: "Official venue map for Cohere Centre" }),
+  ).toBeVisible();
+  const lead = page
+    .locator(".venue-quick-card")
+    .filter({ has: page.getByRole("heading", { name: "Lead briefing" }) });
+  await expect(lead.locator("details")).not.toHaveAttribute("open");
+  await lead
+    .getByRole("link", { name: "View details for Lead briefing" })
+    .click();
+  await expect(
+    lead.getByText(
+      "Check the published lead documents before your assignment.",
+    ),
+  ).toBeVisible();
+  await expect(
+    lead.getByRole("link", { name: /Open official resource/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://www.ontariovolleyball.org/contact-referees",
+  );
+  await page.screenshot({
+    path: "test-results/fall-classic-venue.png",
+    fullPage: true,
+  });
+});
+
+test("event tile eyebrows keep 4.5:1 contrast over art and venue photos", async ({
+  page,
+}) => {
+  await setup(page);
+  const photo = (url: string) => [
+    { name: "Venue", latitude: null, longitude: null, photo_url: url },
+  ];
+  await page.route("**/v1/events", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          event,
+          {
+            ...event,
+            id: "e2",
+            slug: "beach-demo",
+            title: "Beach Tour",
+            kind: "beach",
+          },
+          {
+            ...event,
+            id: "e3",
+            slug: "enercare",
+            title: "Enercare Event",
+            venue_locations: photo("/venues/enercare-centre.jpg"),
+          },
+          {
+            ...event,
+            id: "e4",
+            slug: "exhibition",
+            title: "Exhibition Event",
+            venue_locations: photo("/venues/exhibition-place.jpg"),
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/");
+  const tiles = page.locator(
+    'ul[aria-label="Explore tournaments"] .event-tile',
+  );
+  await expect(tiles).toHaveCount(4);
+  await page.waitForLoadState("networkidle");
+  const luminance = ([r, g, b]: number[]) => {
+    const f = (c: number) => {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  for (let i = 0; i < 4; i++) {
+    const tile = tiles.nth(i);
+    await tile.scrollIntoViewIfNeeded();
+    // Hide the text, capture what sits behind it, then compare against the text colour.
+    const { box, color } = await tile.evaluate((el) => {
+      const eyebrow = el.querySelector<HTMLElement>(".eyebrow")!;
+      const range = document.createRange();
+      range.selectNodeContents(eyebrow);
+      const r = range.getBoundingClientRect();
+      const color = getComputedStyle(eyebrow)
+        .color.match(/\d+/g)!
+        .slice(0, 3)
+        .map(Number);
+      eyebrow.style.color = "transparent";
+      return {
+        box: { x: r.x, y: r.y, width: r.width, height: r.height },
+        color,
+      };
+    });
+    const png = await page.screenshot({ clip: box, animations: "disabled" });
+    await tile.evaluate((el) => {
+      el.querySelector<HTMLElement>(".eyebrow")!.style.color = "";
+    });
+    const pixels = await page.evaluate(async (b64) => {
+      const img = await createImageBitmap(
+        await (await fetch(`data:image/png;base64,${b64}`)).blob(),
+      );
+      const canvas = new OffscreenCanvas(img.width, img.height);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, img.width, img.height).data;
+      const out: number[][] = [];
+      for (let p = 0; p < d.length; p += 4)
+        out.push([d[p], d[p + 1], d[p + 2]]);
+      return out;
+    }, png.toString("base64"));
+    const text = luminance(color);
+    const ratios = pixels
+      .map((bg) => {
+        const [hi, lo] = [text, luminance(bg)].sort((a, b) => b - a);
+        return (hi + 0.05) / (lo + 0.05);
+      })
+      .sort((a, b) => a - b);
+    const worst = ratios[Math.floor(ratios.length * 0.02)];
+    expect(worst, `tile ${i} eyebrow contrast`).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 test.describe("courtside picks", () => {
@@ -1080,87 +1389,4 @@ test.describe("courtside picks", () => {
     await expect(next).toContainText("Maya's team is playing here");
     await expect(next).toContainText("vs Northern Lights");
   });
-});
-
-test("event tile eyebrows keep 4.5:1 contrast over art and venue photos", async ({
-  page,
-}) => {
-  await setup(page);
-  const photo = (url: string) => [
-    { name: "Venue", latitude: null, longitude: null, photo_url: url },
-  ];
-  await page.route("**/v1/events", (route) =>
-    route.fulfill({
-      json: {
-        data: [
-          event,
-          { ...event, id: "e2", slug: "beach-demo", title: "Beach Tour", kind: "beach" },
-          {
-            ...event,
-            id: "e3",
-            slug: "enercare",
-            title: "Enercare Event",
-            venue_locations: photo("/venues/enercare-centre.jpg"),
-          },
-          {
-            ...event,
-            id: "e4",
-            slug: "exhibition",
-            title: "Exhibition Event",
-            venue_locations: photo("/venues/exhibition-place.jpg"),
-          },
-        ],
-      },
-    }),
-  );
-  await page.goto("/");
-  const tiles = page.locator('ul[aria-label="Explore tournaments"] .event-tile');
-  await expect(tiles).toHaveCount(4);
-  await page.waitForLoadState("networkidle");
-  const luminance = ([r, g, b]: number[]) => {
-    const f = (c: number) => {
-      c /= 255;
-      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-  };
-  for (let i = 0; i < 4; i++) {
-    const tile = tiles.nth(i);
-    await tile.scrollIntoViewIfNeeded();
-    // Hide the text, capture what sits behind it, then compare against the text colour.
-    const { box, color } = await tile.evaluate((el) => {
-      const eyebrow = el.querySelector<HTMLElement>(".eyebrow")!;
-      const range = document.createRange();
-      range.selectNodeContents(eyebrow);
-      const r = range.getBoundingClientRect();
-      const color = getComputedStyle(eyebrow).color.match(/\d+/g)!.slice(0, 3).map(Number);
-      eyebrow.style.color = "transparent";
-      return { box: { x: r.x, y: r.y, width: r.width, height: r.height }, color };
-    });
-    const png = await page.screenshot({ clip: box, animations: "disabled" });
-    await tile.evaluate((el) => {
-      el.querySelector<HTMLElement>(".eyebrow")!.style.color = "";
-    });
-    const pixels = await page.evaluate(async (b64) => {
-      const img = await createImageBitmap(
-        await (await fetch(`data:image/png;base64,${b64}`)).blob(),
-      );
-      const canvas = new OffscreenCanvas(img.width, img.height);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0);
-      const d = ctx.getImageData(0, 0, img.width, img.height).data;
-      const out: number[][] = [];
-      for (let p = 0; p < d.length; p += 4) out.push([d[p], d[p + 1], d[p + 2]]);
-      return out;
-    }, png.toString("base64"));
-    const text = luminance(color);
-    const ratios = pixels
-      .map((bg) => {
-        const [hi, lo] = [text, luminance(bg)].sort((a, b) => b - a);
-        return (hi + 0.05) / (lo + 0.05);
-      })
-      .sort((a, b) => a - b);
-    const worst = ratios[Math.floor(ratios.length * 0.02)];
-    expect(worst, `tile ${i} eyebrow contrast`).toBeGreaterThanOrEqual(4.5);
-  }
 });
