@@ -354,9 +354,9 @@ for (const width of [320, 390, 768]) {
       };
     });
     expect(controls).toEqual({ sameRow: true, adjacent: true });
-    await expect(page.getByText("Visibility · 1 shown")).toBeHidden();
+    await expect(page.getByText("1 of 1 events shown")).toBeHidden();
     await page.locator(".schedule-visibility summary").click();
-    await expect(page.getByText("Visibility · 1 shown")).toBeVisible();
+    await expect(page.getByText("1 of 1 events shown")).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth + 1,
