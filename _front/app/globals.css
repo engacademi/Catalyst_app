@@ -389,6 +389,24 @@ caption {
   padding: 7px 20px;
   font-size: 11px;
 }
+/* Stale, paused or failed source: retained schedule stays visible underneath. */
+.source-warning {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.source-warning p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
 .event-main {
   max-width: 1184px;
   margin: 0 auto;

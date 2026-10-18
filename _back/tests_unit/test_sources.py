@@ -246,3 +246,27 @@ def test_timu_pool_d_slot_stays_a_placeholder():
     assert match["home_entry_id"] == "" and "D1" not in {
         e["team_name"] for e in snap.entries
     }
+
+
+def test_paused_or_failed_live_source_reports_at_once():
+    from datetime import datetime, timezone
+
+    from app.models import Source
+    from app.modules.projections import source_freshness
+
+    now = datetime.now(timezone.utc)
+    live = Source(
+        mode="aes",
+        status="active",
+        config={"last_sync_success": True},
+        expected_check_interval_minutes=15,
+        last_successful_check_at=now,
+    )
+    assert source_freshness(live, now) == "current"
+    live.status = "paused"
+    assert source_freshness(live, now) == "paused"
+    live.status = "unavailable"
+    assert source_freshness(live, now) == "unavailable"
+    snapshot = Source(mode="manual_import", status="paused", config={})
+    snapshot.last_import_at = now
+    assert source_freshness(snapshot, now) == "imported_snapshot"

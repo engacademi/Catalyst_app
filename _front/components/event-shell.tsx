@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEvent } from "@/lib/queries";
 import {
   House,
   MapPinned,
@@ -11,6 +12,7 @@ import {
   Images,
 } from "lucide-react";
 import { SponsorToast } from "./sponsor-toast";
+import { SourceWarning } from "./freshness";
 
 export function EventShell({
   eventId,
@@ -20,6 +22,7 @@ export function EventShell({
   children: ReactNode;
 }) {
   const path = usePathname();
+  const query = useEvent(eventId);
   const base = `/events/${eventId}`;
   const links = [
     { href: "", label: "Overview", icon: House },
@@ -60,6 +63,7 @@ export function EventShell({
         <SponsorToast key={path} eventId={eventId} />
       )}
       <main id="main" className="platform-main">
+        <SourceWarning sources={query.data?.sources} />
         <div key={path} className="route-content">
           {children}
         </div>

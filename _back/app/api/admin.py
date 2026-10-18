@@ -305,6 +305,8 @@ class SourcePatch(BaseModel):
     status: Literal["active", "paused", "unavailable"] | None = None
     official_url: HttpUrl | None = None
     expected_check_interval_minutes: int | None = Field(None, ge=1, le=1440)
+    # Merged into config so the toggle can't clobber keys like event_key.
+    auto_sync: bool | None = None
 
 
 @router.post("/events/{event_id}/sources", status_code=201)
@@ -332,8 +334,12 @@ def update_source(
 ) -> dict:
     source = get_owned(db, principal, Source, source_id)
     before = source.status
-    for key, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    auto_sync = changes.pop("auto_sync", None)
+    for key, value in changes.items():
         setattr(source, key, str(value) if key == "official_url" and value else value)
+    if auto_sync is not None:
+        source.config = {**source.config, "auto_sync": auto_sync}
     audit(
         db,
         request,
