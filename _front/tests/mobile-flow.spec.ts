@@ -659,3 +659,89 @@ test("visibility popover has compact switches and working bulk controls", async 
   await panel.getByRole("button", { name: "Close visibility" }).click();
   await expect(panel).not.toBeVisible();
 });
+
+test("team followers get division notices and clear change wording", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  const at = new Date().toISOString();
+  const base = { entity_type: "match", entity_id: "m1", entry_ids: ["t1"] };
+  await page.route("**/v1/events/ontario-demo/changes*", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id: 4,
+            entity_type: "announcement",
+            entity_id: "a1",
+            division_id: "d1",
+            entry_ids: ["t1", "t2"],
+            event_type: "announcement_published",
+            diff: {},
+            occurred_at: at,
+            simulated: false,
+          },
+          {
+            ...base,
+            id: 3,
+            event_type: "delay_cleared",
+            diff: { minutes: 0 },
+            notice: "cleared",
+            occurred_at: at,
+            simulated: false,
+          },
+          {
+            ...base,
+            id: 2,
+            event_type: "delay_notice",
+            diff: { minutes: 20, expires_at: at },
+            notice: "expired",
+            occurred_at: at,
+            simulated: false,
+          },
+          {
+            ...base,
+            id: 1,
+            event_type: "time_changed",
+            diff: {
+              scheduled_start: [match.scheduled_start, match.scheduled_start],
+              estimated_start: [null, `${today}T23:20:00Z`],
+            },
+            occurred_at: at,
+            simulated: false,
+          },
+        ],
+        next_before: null,
+        matches: { m1: match },
+        announcements: {
+          a1: {
+            id: "a1",
+            category: "general",
+            title: "Division warm-up moved",
+            body: "Gym B",
+            entry_id: null,
+            division_id: "d1",
+            entry_ids: ["t1", "t2"],
+            publish_at: at,
+            expire_at: null,
+            revision: 1,
+          },
+        },
+        latest_id: 4,
+        divisions: {},
+        sources: [source],
+      },
+    }),
+  );
+  await page.addInitScript(() =>
+    localStorage.setItem("courtside:follows:ontario-demo", '["t1"]'),
+  );
+  await page.goto("/events/ontario-demo/updates");
+  await expect(page.getByText("Division warm-up moved")).toBeVisible();
+  await expect(page.getByText("Court delay cleared")).toBeVisible();
+  await expect(page.getByText(/Court delay: 0 minutes/)).toHaveCount(0);
+  await expect(page.getByText("Court delay notice (expired)")).toBeVisible();
+  await expect(page.getByText("Estimated start changed")).toBeVisible();
+  await expect(page.getByText(/Official time unchanged/)).toBeVisible();
+});

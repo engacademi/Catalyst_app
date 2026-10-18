@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from app.models import (
     Announcement,
     Assignment,
-    ChangeEvent,
     Event,
     GuideItem,
     Match,
@@ -28,6 +27,7 @@ from app.models import (
     Venue,
     utcnow,
 )
+from app.modules.announcements import deliver_due
 from app.modules.imports import commit_import, stage_import
 
 DEMO_SLUG = "demo-championships"
@@ -303,22 +303,7 @@ def seed(db: Session, *, reset: bool = False) -> Event:
         ]
     )
     db.flush()
-    for a in db.scalars(
-        select(Announcement).where(
-            Announcement.event_id == event.id, Announcement.state == "published"
-        )
-    ):
-        db.add(
-            ChangeEvent(
-                event_id=event.id,
-                entity_type="announcement",
-                entity_id=a.id,
-                entity_revision=a.revision,
-                event_type="announcement_published",
-                diff={"title": a.title, "category": a.category},
-                entry_ids=[],
-            )
-        )
+    deliver_due(db, event)
 
     db.add_all(
         [

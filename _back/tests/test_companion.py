@@ -1,13 +1,16 @@
 from datetime import timedelta
+
 from sqlalchemy import select
+
 from app.models import (
+    Announcement,
     Division,
     EventEntry,
     Match,
-    RosterPublication,
     RoleGrant,
-    User,
+    RosterPublication,
     Source,
+    User,
     utcnow,
 )
 from tests.conftest import ADMIN, OFFICIAL
@@ -70,6 +73,71 @@ def test_expired_and_future_announcements_absent_from_feed(client, db, demo):
             "announcements"
         ]
     )
+
+
+def test_scheduled_notice_becomes_unread_when_it_publishes(client, db, demo):
+    future = utcnow() + timedelta(hours=2)
+    a = client.post(
+        f"/v1/admin/events/{demo.id}/announcements",
+        headers=ADMIN,
+        json={"title": "Awards at 4", "body": "Main gym", "publish_at": future.isoformat()},
+    ).json()["data"]
+    client.post(f"/v1/admin/announcements/{a['id']}/publish", headers=ADMIN)
+    before = client.get("/v1/events/demo-championships/changes").json()
+    assert before["latest_id"] == max(c["id"] for c in before["data"])
+    seen = before["latest_id"]
+
+    announcement = db.get(Announcement, a["id"])
+    announcement.publish_at = utcnow() - timedelta(minutes=1)
+    db.commit()
+    after = client.get(
+        "/v1/events/demo-championships/changes", params={"after": seen}
+    ).json()
+    delivered = [c for c in after["data"] if c["entity_id"] == a["id"]]
+    assert len(delivered) == 1 and delivered[0]["id"] > seen
+    assert after["latest_id"] == delivered[0]["id"]
+    # Reading the feed again doesn't deliver the notice twice.
+    again = client.get("/v1/events/demo-championships/changes").json()
+    assert sum(c["entity_id"] == a["id"] for c in again["data"]) == 1
+
+
+def test_division_notice_reaches_followers_of_its_teams(client, db, demo):
+    division = db.scalar(select(Division).where(Division.event_id == demo.id))
+    team = db.scalar(select(EventEntry).where(EventEntry.division_id == division.id))
+    a = client.post(
+        f"/v1/admin/events/{demo.id}/announcements",
+        headers=ADMIN,
+        json={"title": "Warm-up moved", "body": "Gym B", "division_id": str(division.id)},
+    ).json()["data"]
+    client.post(f"/v1/admin/announcements/{a['id']}/publish", headers=ADMIN)
+    change = client.get("/v1/events/demo-championships/changes").json()["data"][0]
+    assert change["entity_id"] == a["id"] and str(team.id) in change["entry_ids"]
+    notice = next(
+        n
+        for n in client.get("/v1/events/demo-championships/announcements").json()[
+            "data"
+        ]
+        if n["id"] == a["id"]
+    )
+    assert str(team.id) in notice["entry_ids"]
+
+
+def test_cleared_delay_notice_is_labelled(client, db, demo):
+    match = db.scalar(
+        select(Match).where(Match.status == "scheduled", Match.court_id.is_not(None))
+    )
+    for minutes in (15, 0):
+        client.patch(
+            f"/v1/admin/courts/{match.court_id}/notice",
+            headers=ADMIN,
+            json={"delay_minutes": minutes},
+        )
+    feed = client.get("/v1/events/demo-championships/changes").json()["data"]
+    mine = [c for c in feed if c["entity_id"] == str(match.id)]
+    assert [(c["event_type"], c["notice"]) for c in mine[:2]] == [
+        ("delay_cleared", "cleared"),
+        ("delay_notice", "superseded"),
+    ]
 
 
 def test_vendor_csv_fallback_stays_snapshot(client, db, demo):

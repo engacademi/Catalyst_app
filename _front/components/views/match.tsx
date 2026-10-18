@@ -4,6 +4,7 @@ import { useHydrated } from "@/lib/hydration";
 import Link from "next/link";
 import { ArrowLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Participant } from "@/lib/api";
+import { changeTitle, delayText, timeChangeText } from "@/lib/change-text";
 import { formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
 import { ScoreDispute } from "../score-dispute";
@@ -18,6 +19,8 @@ const LABELS: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Teams confirmed",
+  delay_notice: "Court delay notice",
+  delay_cleared: "Court delay cleared",
 };
 
 function describe(change: Change, timeZone: string): string {
@@ -26,7 +29,10 @@ function describe(change: Change, timeZone: string): string {
     case "court_changed":
       return `${d.court?.[0] ?? "No court"} → ${d.court?.[1] ?? "No court"}`;
     case "time_changed":
-      return `${formatTime(d.scheduled_start?.[0] as string | null, timeZone)} → ${formatTime(d.scheduled_start?.[1] as string | null, timeZone)}`;
+      return timeChangeText(change, timeZone);
+    case "delay_notice":
+    case "delay_cleared":
+      return delayText(change, timeZone);
     case "status_changed":
       return `${d.status?.[0]} → ${d.status?.[1]}`;
     default:
@@ -188,7 +194,7 @@ export function MatchView({
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
               >
                 <span className="font-semibold">
-                  {LABELS[h.event_type] ?? h.event_type}
+                  {changeTitle(h) ?? LABELS[h.event_type] ?? h.event_type}
                 </span>
                 {h.simulated && (
                   <span className="text-muted"> (simulated)</span>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
+import { changeTitle } from "@/lib/change-text";
 import { formatDay, formatTime } from "@/lib/format";
 import { useNow } from "@/lib/now";
 import { TeamAvatar } from "./brand";
@@ -48,7 +49,8 @@ export function ChangeBadge({ change }: { change: Change | null }) {
   const recent =
     now - new Date(change.occurred_at).getTime() < 6 * 60 * 60 * 1000;
   if (!recent) return null;
-  const label = CHANGE_LABELS[change.event_type] ?? "Updated";
+  const label =
+    changeTitle(change) ?? CHANGE_LABELS[change.event_type] ?? "Updated";
   return (
     <Badge tone={change.event_type.startsWith("result") ? "brand" : "warn"}>
       <ArrowRightLeft aria-hidden className="h-3 w-3" />
