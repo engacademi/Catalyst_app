@@ -2,11 +2,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
-import { formatTime } from "@/lib/format";
+import { formatDay, formatTime } from "@/lib/format";
 import Link from "next/link";
 import { MapPin, Search } from "lucide-react";
 import { useEvents } from "@/lib/queries";
-import { usePreference, useLocalFollows } from "@/lib/preferences";
+import {
+  usePreference,
+  useLocalFollows,
+  useEventSelections,
+} from "@/lib/preferences";
 import { EventTile, type DiscoveryEvent } from "../event-tile";
 import { EmptyState, ErrorState, Loading } from "../ui";
 import { SponsorRibbon } from "../sponsor-ribbon";
@@ -31,9 +35,8 @@ function nearest(e: DiscoveryEvent, location: typeof TORONTO) {
 }
 function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
   const follows = useLocalFollows(event.slug);
-  const [saved] = usePreference<string[]>("saved-events", []);
-  const params = new URLSearchParams({ status: "upcoming", limit: "1" });
-  if (!saved.includes(event.slug)) {
+  const params = new URLSearchParams({ status: "upcoming", limit: "5" });
+  if (follows.length) {
     params.set(
       "entry_ids",
       follows.filter((id) => !id.startsWith("division:")).join(","),
@@ -51,7 +54,10 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
     queryFn: () =>
       apiGet<{ data: Match[] }>(`/v1/events/${event.slug}/matches?${params}`),
   });
-  const match = query.data?.data[0];
+  const match = query.data?.data.find((m) => {
+    const start = m.estimated_start ?? m.scheduled_start;
+    return !!start && Date.parse(start) > new Date().getTime();
+  });
   return (
     <div className="compact-pick">
       <EventTile event={event} />
@@ -62,6 +68,11 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
         >
           <strong>
             Next published match ·{" "}
+            {formatDay(
+              match.estimated_start ?? match.scheduled_start,
+              match.timezone,
+            )}
+            ,{" "}
             {formatTime(
               match.estimated_start ?? match.scheduled_start,
               match.timezone,
@@ -118,6 +129,9 @@ export function DiscoverView({
   const [saved] = usePreference<string[]>("saved-events", []);
   const [interests] = usePreference<string[]>("interests", []);
   const [attended] = usePreference<string[]>("attended", []);
+  const follows = useEventSelections(events.data?.data ?? []);
+  const isPick = (e: DiscoveryEvent) =>
+    saved.includes(e.slug) || (follows.get(e.slug)?.length ?? 0) > 0;
   const requestLocation = () => {
     if (!navigator.geolocation) {
       setMessage("Location is unavailable. Showing Toronto instead.");
@@ -191,6 +205,16 @@ export function DiscoverView({
           : e.end_date <
             new Date().toLocaleDateString("en-CA", { timeZone: e.timezone }))),
   );
+  const isPast = (e: DiscoveryEvent) =>
+    e.end_date <
+    new Date().toLocaleDateString("en-CA", { timeZone: e.timezone });
+  const explore = [...filtered].sort(
+    (a, b) =>
+      Number(isPast(a)) - Number(isPast(b)) ||
+      (isPast(a)
+        ? b.start_date.localeCompare(a.start_date)
+        : a.start_date.localeCompare(b.start_date)),
+  );
   const near = filtered
     .map((event) => ({ event, distance: nearest(event, location) }))
     .filter((x) => x.distance != null && x.distance <= 100)
@@ -202,11 +226,11 @@ export function DiscoverView({
       .map((e) => e.kind),
   ]);
   const recommended = filtered.filter(
-    (e) => preferredKinds.has(e.kind) && !saved.includes(e.slug),
+    (e) => preferredKinds.has(e.kind) && !saved.includes(e.slug) && !isPast(e),
   );
-  const popular = [...filtered].sort(
-    (a, b) => (b.team_count ?? 0) - (a.team_count ?? 0),
-  );
+  const popular = filtered
+    .filter((e) => !isPast(e))
+    .sort((a, b) => (b.team_count ?? 0) - (a.team_count ?? 0));
   return (
     <main id="main" className="platform-main discovery-page">
       <div className="discovery-heading">
@@ -306,17 +330,15 @@ export function DiscoverView({
         <>
           {!catalogue && (
             <>
-              {filtered.some((e) => saved.includes(e.slug)) && (
+              {filtered.some(isPick) && (
                 <section className="saved-discovery reveal-section">
                   <h2>Your courtside picks</h2>
                   <ul className="event-carousel">
-                    {filtered
-                      .filter((e) => saved.includes(e.slug))
-                      .map((e) => (
-                        <li key={e.id}>
-                          <SavedEventPreview event={e} />
-                        </li>
-                      ))}
+                    {filtered.filter(isPick).map((e) => (
+                      <li key={e.id}>
+                        <SavedEventPreview event={e} />
+                      </li>
+                    ))}
                   </ul>
                 </section>
               )}
@@ -419,7 +441,7 @@ export function DiscoverView({
             </div>
             {filtered.length ? (
               <ul className="event-grid">
-                {filtered.map((e) => (
+                {explore.map((e) => (
                   <li key={e.id}>
                     <EventTile event={e} />
                   </li>

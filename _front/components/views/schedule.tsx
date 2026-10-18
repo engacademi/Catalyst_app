@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
-import { formatTime } from "@/lib/format";
+import { formatDateRange, formatDay, formatTime } from "@/lib/format";
 import { useEvents } from "@/lib/queries";
 import { useEventSelections, usePreference } from "@/lib/preferences";
 import { useHydrated } from "@/lib/hydration";
@@ -92,20 +92,20 @@ export function ScheduleView() {
         ? []
         : (queries[i].data?.matches ?? []).map((match) => ({ event, match })),
     )
-    .sort((a, b) =>
-      (
-        a.match.estimated_start ??
-        a.match.scheduled_start ??
-        "9999"
-      ).localeCompare(
-        b.match.estimated_start ?? b.match.scheduled_start ?? "9999",
-      ),
-    );
+    .sort((a, b) => {
+      const at =
+        Date.parse(a.match.estimated_start ?? a.match.scheduled_start ?? "") ||
+        Infinity;
+      const bt =
+        Date.parse(b.match.estimated_start ?? b.match.scheduled_start ?? "") ||
+        Infinity;
+      return at === bt ? 0 : at - bt;
+    });
   const today = dateKey(new Date().toISOString());
   const initialDay = rows.find(
     (r) =>
-      (r.match.estimated_start ?? r.match.scheduled_start ?? "") >=
-      new Date().toISOString(),
+      Date.parse(r.match.estimated_start ?? r.match.scheduled_start ?? "") >=
+      new Date().getTime(),
   )?.match;
   const first =
     start ||
@@ -261,9 +261,25 @@ export function ScheduleView() {
               </div>
             ) : null,
           )}
+          {queries.map((q, i) =>
+            !hidden.includes(selected[i].slug) &&
+            q.data &&
+            !q.data.matches.length ? (
+              <p key={selected[i].id} className="empty-inline">
+                {selected[i].title}: the draw isn’t published yet.
+              </p>
+            ) : null,
+          )}
           {!visible.length ? (
             <EmptyState title="All tournaments are hidden">
               Use the visibility controls above to show them again.
+            </EmptyState>
+          ) : !rows.length &&
+            queries.every(
+              (q, i) => hidden.includes(selected[i].slug) || q.isSuccess,
+            ) ? (
+            <EmptyState title="The draw isn’t published yet">
+              Matches will appear here once the organizer publishes them.
             </EmptyState>
           ) : mode === "calendar" ? (
             <TimeGrid rows={inRange} dates={dates} />
@@ -279,7 +295,17 @@ export function ScheduleView() {
               <summary className="min-h-11">
                 Awaiting a start time ({waiting.length})
               </summary>
-              {waiting.map(renderMatch)}
+              {waiting.map((r) => (
+                <div key={`${r.event.id}-${r.match.id}`}>
+                  <p className="mt-3 text-xs text-muted">
+                    {r.event.title} ·{" "}
+                    {r.match.estimated_start
+                      ? formatDay(r.match.estimated_start, r.match.timezone)
+                      : formatDateRange(r.event.start_date, r.event.end_date)}
+                  </p>
+                  {renderMatch(r)}
+                </div>
+              ))}
             </details>
           )}
         </>
