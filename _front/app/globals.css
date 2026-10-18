@@ -3821,3 +3821,20 @@ select[class] {
 .bracket-controls { margin: 6px 0 8px; }
 .bracket-team-filter { margin: 0 0 10px; }
 .pathway-toolbar { margin-bottom: 8px; }
+
+.match-card { position: relative; }
+.match-details-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.match-details-link:focus-visible::after { outline: 2px solid var(--brand); outline-offset: 3px; }
+.match-alert-link { position: relative; z-index: 2; }
+.sponsor-toast-icon { align-self: center; color: #0f513d; background: #cfe4bf; }
+.partner-carousel .partner-logo-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 115px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; text-align: center; color: var(--brand); }
+.partner-logo-card img { width: 160px; height: 70px; object-fit: contain; }
+.partner-logo-card strong { font-family: var(--font-heading), sans-serif; font-size: 22px; }
+.partner-logo-card small { font-size: 10px; color: var(--muted); }
+
+.dispute-dialog { margin: auto; width: min(420px,calc(100vw - 32px)); border: 1px solid var(--border); background: var(--surface); border-radius: 24px; padding: 26px; color: var(--foreground); box-shadow: 0 20px 70px #123b3140; }
+.dispute-dialog::backdrop { background: #153b3155; backdrop-filter: blur(5px); }
+.dispute-dialog h2 { font-size: 21px; font-weight: 700; margin: 0 30px 14px 0; }
+.dispute-dialog p { font-size: 14px; margin: 12px 0; }
+.dispute-dialog textarea { display: block; width: 100%; margin: 8px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; }
+.dispute-close { position: absolute; right: 12px; top: 12px; }

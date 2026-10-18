@@ -1,4 +1,5 @@
 "use client";
+import { Disputes } from "./disputes";
 
 import { EventAccess } from "./event-access";
 import Link from "next/link";
@@ -181,7 +182,12 @@ export function AdminEvent({ eventId }: { eventId: string }) {
         {tab === "Sources" && <ConnectionsPanel event={event} />}
         {tab === "Registration" && <RegistrationPanel event={event} />}
         {tab === "Assignments" && <AssignmentPanel event={event} />}
-        {tab === "Courts & clock" && <CourtOperations event={event} />}
+        {tab === "Courts & clock" && (
+          <>
+            <CourtOperations event={event} />
+            <Disputes eventId={event.id} />
+          </>
+        )}
         {tab === "Demo tools" && <DemoPanel event={event} />}
         {tab === "Audit" && <AuditPanel eventId={event.id} />}
       </div>

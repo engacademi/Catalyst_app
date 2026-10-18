@@ -306,3 +306,23 @@ def unfollow_player(
         )
     )
     db.commit()
+
+
+class ScoreDisputeIn(BaseModel):
+    comment: str = Field("", max_length=1000)
+
+
+@router.post("/matches/{match_id}/disputes", status_code=201)
+def submit_score_dispute(match_id: str, body: ScoreDisputeIn, db: Annotated[Session, Depends(get_db)], principal: CurrentPrincipal):
+    from sqlalchemy.dialects.postgresql import insert
+
+    from app.models import ScoreDispute
+    match = db.get(Match, parse_uuid(match_id))
+    event = db.get(Event, match.event_id) if match else None
+    if not match or not event or event.status != "published":
+        raise HTTPException(404, "Match not found")
+    if match.status not in {"in_progress", "completed"}:
+        raise HTTPException(409, "A score can be disputed once a match is live or completed")
+    db.execute(insert(ScoreDispute).values(match_id=match.id, reporter_id=principal.user.id, comment=body.comment.strip()).on_conflict_do_nothing(index_elements=["match_id", "reporter_id"]))
+    db.commit()
+    return {"data": {"submitted": True}}
