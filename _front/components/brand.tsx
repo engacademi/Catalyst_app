@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 
 /** Original vector motif: court lines, a net and a volleyball in flight. */
 export function CourtArt({ className = "" }: { className?: string }) {
@@ -65,20 +66,14 @@ export function CourtArt({ className = "" }: { className?: string }) {
 export function Wordmark({ light = false }: { light?: boolean }) {
   return (
     <span className={`wordmark ${light ? "wordmark-light" : ""}`}>
-      <svg
+      <Image
+        src="/ova-trillium.png"
+        alt=""
         aria-hidden="true"
-        width="29"
-        height="29"
-        viewBox="0 0 32 32"
-        fill="none"
-      >
-        <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2" />
-        <path
-          d="M3 11c10-2 17 1 21 10M10 3c-2 10 1 18 10 23M28 7c-9 1-16 8-18 18M4 19c8-5 16-5 24-1"
-          stroke="currentColor"
-          strokeWidth="1.8"
-        />
-      </svg>
+        width={29}
+        height={29}
+        className="wordmark-ova"
+      />
       olley<span className="wordmark-dot">.</span>
     </span>
   );

@@ -16,4 +16,6 @@ The supplied OVA trillium image is copied unchanged for background decorations a
 
 The schedule Visibility popover uses custom animated switches over native accessible checkboxes, stable event colour markers, visible/hidden status, bulk show/hide controls, keyboard Escape dismissal and a labelled close action.
 
-Discover artwork is a non-interactive background layer at 13% opacity, contained within the page with its original aspect ratio. Search, filters and cards stay above it, and the illustration reserves no vertical layout space.
+Discover artwork is a non-interactive background layer at 13% opacity, contained within the page with its original aspect ratio and anchored to the headline end so the ball follows its final punctuation. Search, filters and cards stay above it, and the illustration reserves no vertical layout space.
+
+The shared Olley wordmark now uses the supplied OVA trillium emblem in headers, footers and the staff workspace. The athlete illustration is reduced to 60vw (180–420px) and positioned from the headline rather than the page edge.

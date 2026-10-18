@@ -1861,7 +1861,8 @@ caption {
   gap: 0;
   font-size: 32px;
 }
-.wordmark > svg {
+.wordmark > svg,
+.wordmark > .wordmark-ova {
   margin-right: 9px;
   flex-shrink: 0;
 }
@@ -3206,23 +3207,31 @@ select[class] {
 .discovery-page {
   position: relative;
   isolation: isolate;
+  overflow-x: clip;
+}
+.discovery-heading h1 {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
 }
 .discover-illustration {
   position: absolute;
-  inset: 18px 0 0;
-  overflow: clip;
+  top: 7px;
+  left: calc(100% + 14px);
+  width: clamp(180px, 60vw, 420px);
+  aspect-ratio: 3 / 2;
+  transform: translateX(-55.3%);
   pointer-events: none;
   z-index: -1;
   opacity: 0.13;
 }
 .discover-illustration img {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: min(100%, 880px);
+  width: 100%;
   height: auto;
   object-fit: contain;
-  object-position: right top;
+}
+.wordmark-ova {
+  mix-blend-mode: multiply;
 }
 .staff-dashboard-tools {
   display: flex;
@@ -3258,9 +3267,6 @@ select[class] {
 @media (min-width: 700px) {
   .tournament-tabs a span {
     font-size: 11px;
-  }
-  .discover-illustration {
-    top: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
