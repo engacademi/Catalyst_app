@@ -17,8 +17,10 @@ def test_disputes_are_private_idempotent_and_reviewable(client, db):
     assert client.get(listing, headers={"X-Dev-User": "outsider"}).status_code == 403
     admin = {"X-Dev-User": "dev-admin"}
     rows = client.get(listing, headers=admin).json()["data"]
-    assert len(rows) == 1
-    response = client.patch(f"/v1/admin/disputes/{rows[0]['id']}/resolve", headers=admin, json={})
+    assert len(rows) == 4  # Three seeded examples plus the submitted report.
+    submitted = [row for row in rows if row["match_id"] == str(match.id)]
+    assert len(submitted) == 1
+    response = client.patch(f"/v1/admin/disputes/{submitted[0]['id']}/resolve", headers=admin, json={})
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "resolved"
 
