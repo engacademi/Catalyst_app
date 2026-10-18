@@ -19,18 +19,18 @@ export function CourtArt({ className = "" }: { className?: string }) {
           y2="340"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor="#E8F0E3" />
-          <stop offset="1" stopColor="#BBD4BC" />
+          <stop stopColor="#EAF4DF" />
+          <stop offset="1" stopColor="#C5E1A7" />
         </linearGradient>
       </defs>
       <circle cx="280" cy="178" r="154" fill="url(#court-field)" />
-      <path d="M45 302 260 214 457 289 240 377Z" fill="#164C3B" />
+      <path d="M45 302 260 214 457 289 240 377Z" fill="#24272A" />
       <path
         d="m80 306 182-73 158 60-182 73Zm92-37 156 61M262 233l-24 133"
-        stroke="#E8F0E3"
+        stroke="#EAF4DF"
         strokeWidth="2"
       />
-      <g stroke="#638B71" strokeWidth="2">
+      <g stroke="#5C6166" strokeWidth="2">
         <path
           d="M146 166v146m254-214v145M146 166l254-68v100l-254 69Z"
           fill="#FFF"
@@ -43,22 +43,22 @@ export function CourtArt({ className = "" }: { className?: string }) {
       </g>
       <path
         d="M64 181C66 72 166 11 253 48"
-        stroke="#164C3B"
+        stroke="#24272A"
         strokeOpacity=".4"
         strokeWidth="2"
         strokeDasharray="5 9"
         strokeLinecap="round"
       />
-      <g className="volley-ball" stroke="#164C3B" strokeWidth="2.5">
-        <circle cx="287" cy="65" r="47" fill="#D5E8AF" />
+      <g className="volley-ball" stroke="#24272A" strokeWidth="2.5">
+        <circle cx="287" cy="65" r="47" fill="#81BD41" />
         <path d="M244 46c31-5 50 5 61 31m-65-13c31-8 54 2 66 26m-43-67c-7 28 0 49 20 65m-6-70c-8 25-2 47 19 66m32-48c-23 2-41 16-48 41m53-25c-24-1-42 13-52 39m27 16c-14-11-20-27-18-46" />
       </g>
       <path
         d="m86 232 5 12 13 3-12 6-3 13-6-12-13-3 12-6Zm308-190 4 9 10 3-9 4-3 10-4-9-10-3 9-4Z"
-        fill="#164C3B"
+        fill="#24272A"
       />
-      <circle cx="103" cy="109" r="5" fill="#D5E8AF" />
-      <circle cx="429" cy="231" r="7" fill="#D5E8AF" />
+      <circle cx="103" cy="109" r="5" fill="#81BD41" />
+      <circle cx="429" cy="231" r="7" fill="#81BD41" />
     </svg>
   );
 }

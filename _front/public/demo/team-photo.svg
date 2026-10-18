@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 240" role="img" aria-label="Simulated team photo">
-  <rect width="480" height="240" fill="#1f5f3f"/>
-  <rect y="170" width="480" height="70" fill="#174a31"/>
-  <g fill="#cfe8a9">
+  <rect width="480" height="240" fill="#3b4046"/>
+  <rect y="170" width="480" height="70" fill="#24272a"/>
+  <g fill="#cce4b3">
     <circle cx="80" cy="96" r="20"/><path d="M44 200c3-40 18-62 36-62s33 22 36 62z"/>
     <circle cx="160" cy="88" r="20"/><path d="M124 200c3-44 18-68 36-68s33 24 36 68z"/>
     <circle cx="240" cy="84" r="20"/><path d="M204 200c3-46 18-70 36-70s33 24 36 70z"/>
