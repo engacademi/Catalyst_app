@@ -194,7 +194,9 @@ def test_aes_loader_coexists_with_mobile_seed_and_preserves_staff_metadata(
     assert (venue.city, venue.latitude, venue.longitude) == ("Toronto", 43.63, -79.41)
     assert not db.get(Event, event.id).is_demo
     assert set(db.scalars(select(Event.id))) == seeded_event_ids | {event.id}
-    assert seed_testing(db) == []
+    # Rebuilds reuse the synthetic events' ids and leave the AES event alone.
+    assert event.id not in {e.id for e in seed_testing(db)}
+    assert set(db.scalars(select(Event.id))) == seeded_event_ids | {event.id}
     listed = next(
         e for e in client.get("/v1/events").json()["data"] if e["id"] == str(event.id)
     )

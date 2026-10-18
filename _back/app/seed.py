@@ -1,23 +1,32 @@
-"""Synthetic demo event. Every team, player and partner here is fictional.
+"""Synthetic demo events. Every team, player and partner here is fictional.
 
 The seed loads its schedule through the same CSV staging and commit path staff use, so the
-demo exercises the real import pipeline. Dates are relative to today so My Day has upcoming
-matches whenever the demo runs.
+demo exercises the real import pipeline. Times are relative to the real current time (there
+is no demo clock), so every rebuild has finished, live and upcoming matches. A rebuild keeps
+the event row, its role grants and its team and division ids, so follows on a device and
+staff access survive a redeploy.
 """
 
 import csv
 import io
-from datetime import date, datetime, time, timedelta
+import uuid
+from datetime import datetime, time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    AccountProfile,
     Announcement,
     Assignment,
+    ChangeEvent,
+    Division,
     Event,
+    EventEntry,
     GuideItem,
+    ImportBatch,
     Match,
     Organization,
     PartnerCard,
@@ -71,6 +80,84 @@ FIRST_NAMES = [
     "Drew",
 ]
 
+# The demo script's family: a parent follows Maya's team and her sibling's team.
+MAYA_TEAM = "Lakeshore Thunder"
+SIBLING_TEAM = "Harbourfront Heat"
+# Harbourfront Heat's roster arrives from the registration export and waits for its coach.
+COACH_TEAM = "Harbourfront Heat"
+SOURCE_A = "Simulated feed A (demo)"
+SOURCE_B = "Simulated feed B (demo, second platform)"
+REGISTRATION_EXPORT = (
+    Path(__file__).resolve().parents[1] / "sample_data" / "demo_registration_export.csv"
+)
+REGISTRATION_COLUMNS = {
+    "external_entry_id": "Registration Team ID",
+    "jersey": "Jersey Number",
+    "display_name": "Public Name",
+    "position": "Position",
+    "photo_url": "Headshot URL",
+    "photo_approved": "Photo Consent",
+}
+
+# Venue, courts and the area label shown beside each court number.
+LAYOUT = {
+    "15U Boys D1": ("Exhibition Sports Centre", ("Court 3", "Court 4"), "Hall C"),
+    "6v6 Girls D1": ("Exhibition Sports Centre", ("Court 1", "Court 2"), "Hall A"),
+    "TLS Girls D1": ("Annex Gym", ("Court 5", "Court 6"), "Annex"),
+}
+# Pool A round robin: home, away, court, minutes from the anchor time, status, set scores,
+# work team. Maya's next match is in Hall C 45 minutes out; her sibling plays in Hall A 70
+# minutes after that, so a 20-minute Hall C delay makes the two overlap (demo step 4).
+POOLS = {
+    "15U Boys D1": [
+        (0, 1, 0, -120, "completed", "25-18 25-20", None),
+        (2, 3, 1, -120, "completed", "25-21 22-25 15-12", None),
+        (0, 2, 0, 45, "scheduled", "", None),
+        (1, 3, 1, 45, "scheduled", "", None),
+        (1, 2, 1, 180, "scheduled", "", 0),  # Lakeshore Thunder referees this one.
+        (0, 3, 0, 255, "scheduled", "", None),
+    ],
+    "6v6 Girls D1": [
+        (0, 1, 0, -75, "completed", "25-23 25-19", None),
+        (2, 3, 1, -30, "in_progress", "25-22", None),
+        (0, 2, 0, 115, "scheduled", "", None),
+        (1, 3, 1, 115, "scheduled", "", None),
+        (0, 3, 0, 240, "scheduled", "", None),
+        (1, 2, 1, 240, "scheduled", "", None),
+    ],
+    # Finished this morning, so its medal matches are the honest next step.
+    "TLS Girls D1": [
+        (0, 1, 0, -240, "completed", "25-19 25-21", None),
+        (2, 3, 1, -240, "completed", "25-21 22-25 15-12", None),
+        (0, 2, 0, -180, "completed", "25-17 25-22", None),
+        (1, 3, 1, -180, "completed", "23-25 25-20 15-11", None),
+        (0, 3, 0, -120, "completed", "25-15 25-18", None),
+        (1, 2, 1, -120, "completed", "25-23 26-24", None),
+    ],
+}
+# Medal matches: key, round, placeholders, court, start (minutes from the anchor, a time
+# tomorrow, or None while the source hasn't published one).
+MEDALS = {
+    "15U Boys D1": [
+        ("GOLD", "Gold medal", ("1st Pool A", "2nd Pool A"), 0, time(10, 0)),
+        ("BRONZE", "Bronze medal", ("3rd Pool A", "4th Pool A"), 1, None),
+    ],
+    "6v6 Girls D1": [
+        ("GOLD", "Gold medal", ("1st Pool A", "2nd Pool A"), 0, time(11, 0)),
+        ("BRONZE", "Bronze medal", ("3rd Pool A", "4th Pool A"), 1, time(11, 0)),
+    ],
+    "TLS Girls D1": [
+        ("GOLD", "Gold medal", ("1st Pool A", "2nd Pool A"), 0, 150),
+        ("BRONZE", "Bronze medal", ("3rd Pool A", "4th Pool A"), 1, None),
+    ],
+}
+# What the simulated source publishes once it resolves the playoff slots (demo step 5).
+PLAYOFF_DRAW = {
+    "15U Boys D1": {"GOLD": (0, 2), "BRONZE": (1, 3)},
+    "6v6 Girls D1": {"GOLD": (0, 1), "BRONZE": (2, 3)},
+    "TLS Girls D1": {"GOLD": (0, 1), "BRONZE": (2, 3)},
+}
+
 
 def _csv(rows: list[dict]) -> bytes:
     buffer = io.StringIO()
@@ -81,15 +168,23 @@ def _csv(rows: list[dict]) -> bytes:
 
 
 def _import(
-    db: Session, event: Event, source: Source, kind: str, rows: list[dict], **options
-) -> None:
+    db: Session,
+    event: Event,
+    source: Source,
+    kind: str,
+    rows: list[dict] | None = None,
+    *,
+    content: bytes | None = None,
+    filename: str | None = None,
+    **options,
+) -> ImportBatch:
     batch = stage_import(
         db,
         event=event,
         source=source,
         kind=kind,
-        filename=f"seed-{kind}.csv",
-        content=_csv(rows),
+        filename=filename or f"seed-{kind}.csv",
+        content=content if content is not None else _csv(rows),
         options={"strict": True, **options},
         actor_id=None,
     )
@@ -99,145 +194,232 @@ def _import(
         )
     commit_import(db, batch.id, None, "seed")
     db.refresh(source)
+    return batch
 
 
 def _ext(division: str, index: int) -> str:
     return f"{DIVISIONS[division][0].replace(' ', '-')}-{index + 1}"
 
 
-def _matches(
-    division: str, start_day: date, court_offset: int, venue: str, now: datetime
-) -> list[dict]:
-    """Round robin in one pool, then a final whose slots wait on the semifinal results."""
-    tz = ZoneInfo(TZ)
-    pairs = [(0, 1), (2, 3), (0, 2), (1, 3), (0, 3), (1, 2)]
+def _prefix(division: str) -> str:
+    return DIVISIONS[division][0].replace(" ", "-")
+
+
+def anchor_time(now: datetime | None = None) -> datetime:
+    """The scenario's reference time: the current Toronto time, down to the quarter hour."""
+    now = (now or datetime.now(ZoneInfo(TZ))).astimezone(ZoneInfo(TZ))
+    return now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+
+
+def _start(spec, anchor: datetime) -> datetime | None:
+    if spec is None:
+        return None
+    if isinstance(spec, time):
+        return datetime.combine(
+            anchor.date() + timedelta(days=1), spec, tzinfo=ZoneInfo(TZ)
+        )
+    return anchor + timedelta(minutes=spec)
+
+
+def _match_row(division: str, external_id: str, start, court: str, **cells) -> dict:
+    venue, _, area = LAYOUT[division]
+    return {
+        "external_match_id": external_id,
+        "division": division,
+        "scheduled_start": start.isoformat() if start else "",
+        "venue": venue,
+        "court": court,
+        "court_area": area,
+        "home_entry_id": cells.get("home", ""),
+        "away_entry_id": cells.get("away", ""),
+        "home_placeholder": cells.get("home_placeholder", ""),
+        "away_placeholder": cells.get("away_placeholder", ""),
+        "round": cells["round"],
+        "status": cells.get("status", "scheduled"),
+        "set_scores": cells.get("scores", ""),
+        "work_entry_id": cells.get("work", ""),
+    }
+
+
+def _matches(division: str, anchor: datetime) -> list[dict]:
+    """Pool A round robin, then medal matches whose slots wait on the source."""
+    courts = LAYOUT[division][1]
     rows = []
-    for number, (home, away) in enumerate(pairs):
-        start = datetime.combine(start_day, time(9, 0), tzinfo=tz) + timedelta(
-            hours=number // 2 * 1
-        )
-        court = f"Court {court_offset + number % 2}"
-        done = start + timedelta(minutes=75) < now
+    for number, (home, away, court, minutes, status, scores, work) in enumerate(
+        POOLS[division], start=1
+    ):
         rows.append(
-            {
-                "external_match_id": f"{_ext(division, 0)[:-2]}-M{number + 1}",
-                "division": division,
-                "scheduled_start": start.isoformat(),
-                "venue": venue,
-                "court": court,
-                "home_entry_id": _ext(division, home),
-                "away_entry_id": _ext(division, away),
-                "home_placeholder": "",
-                "away_placeholder": "",
-                "round": "Pool A",
-                "status": "completed" if done else "scheduled",
-                "set_scores": ("25-21 22-25 15-12" if number % 2 else "25-18 25-20")
-                if done
-                else "",
-            }
+            _match_row(
+                division,
+                f"{_prefix(division)}-M{number}",
+                anchor + timedelta(minutes=minutes),
+                courts[court],
+                home=_ext(division, home),
+                away=_ext(division, away),
+                round="Pool A",
+                status=status,
+                scores=scores,
+                work=_ext(division, work) if work is not None else "",
+            )
         )
-    final_start = datetime.combine(
-        start_day + timedelta(days=1), time(10, 0), tzinfo=tz
-    )
-    rows.append(
-        {
-            "external_match_id": f"{_ext(division, 0)[:-2]}-GOLD",
-            "division": division,
-            "scheduled_start": final_start.isoformat(),
-            "venue": venue,
-            "court": f"Court {court_offset}",
-            "home_entry_id": "",
-            "away_entry_id": "",
-            "home_placeholder": "1st Pool A",
-            "away_placeholder": "2nd Pool A",
-            "round": "Gold medal",
-            "status": "scheduled",
-            "set_scores": "",
-        }
-    )
-    rows.append(
-        {
-            "external_match_id": f"{_ext(division, 0)[:-2]}-BRONZE",
-            "division": division,
-            "scheduled_start": "",
-            "venue": venue,
-            "court": f"Court {court_offset + 1}",
-            "home_entry_id": "",
-            "away_entry_id": "",
-            "home_placeholder": "3rd Pool A",
-            "away_placeholder": "4th Pool A",
-            "round": "Bronze medal",
-            "status": "scheduled",
-            "set_scores": "",
-        }
-    )
+    for key, round_label, (home, away), court, when in MEDALS[division]:
+        rows.append(
+            _match_row(
+                division,
+                f"{_prefix(division)}-{key}",
+                _start(when, anchor),
+                courts[court],
+                home_placeholder=home,
+                away_placeholder=away,
+                round=round_label,
+            )
+        )
     return rows
 
 
-def seed(db: Session, *, reset: bool = False) -> Event:
-    existing = db.scalar(select(Event).where(Event.slug == DEMO_SLUG))
-    if existing and not reset:
-        return existing
-    if existing:
-        # Bulk delete so the database's ON DELETE CASCADE removes everything under the event.
-        db.execute(delete(Event).where(Event.id == existing.id))
-        db.commit()
+def _empty_demo_event(
+    db: Session, org: Organization, slug: str, **fields
+) -> tuple[Event, dict]:
+    """Return the synthetic event emptied for a rebuild, with what must survive it.
 
+    The event row and its event-wide role grants stay. Coach grants and account team
+    choices point at entries, so they are carried over by team name.
+    """
+    fields = {"status": "published", "is_demo": True, "demo_clock": {}, **fields}
+    event = db.scalar(select(Event).where(Event.slug == slug))
+    kept: dict = {"grants": [], "profiles": []}
+    if event is None:
+        event = Event(organization_id=org.id, slug=slug, timezone=TZ, **fields)
+        db.add(event)
+        db.flush()
+        return event, kept
+    if not event.is_demo:
+        raise RuntimeError(f"Event {slug} holds real data; refusing to rebuild it")
+    teams = dict(
+        db.execute(
+            select(EventEntry.id, EventEntry.team_name).where(
+                EventEntry.event_id == event.id
+            )
+        ).all()
+    )
+    kept["grants"] = [
+        {
+            "user_id": g.user_id,
+            "organization_id": g.organization_id,
+            "role": g.role,
+            "team": teams[g.entry_id],
+            "granted_by": g.granted_by,
+            "expires_at": g.expires_at,
+        }
+        for g in db.scalars(
+            select(RoleGrant).where(RoleGrant.entry_id.in_(list(teams)))
+        )
+    ]
+    kept["profiles"] = [
+        (p.user_id, teams[p.team_entry_id])
+        for p in db.scalars(
+            select(AccountProfile).where(AccountProfile.team_entry_id.in_(list(teams)))
+        )
+    ]
+    # Sources cascade to their matches, mappings and imports; entries to coach grants
+    # and rosters.
+    for model in (
+        ChangeEvent,
+        Announcement,
+        GuideItem,
+        PartnerCard,
+        Assignment,
+        ImportBatch,
+        Source,
+        EventEntry,
+        Division,
+        Venue,
+    ):
+        db.execute(delete(model).where(model.event_id == event.id))
+    for name, value in fields.items():
+        setattr(event, name, value)
+    db.flush()
+    return event, kept
+
+
+def _restore(db: Session, event: Event, kept: dict) -> None:
+    teams = dict(
+        db.execute(
+            select(EventEntry.team_name, EventEntry.id).where(
+                EventEntry.event_id == event.id
+            )
+        ).all()
+    )
+    for grant in kept["grants"]:
+        entry_id = teams.get(grant.pop("team"))
+        if entry_id:
+            db.add(RoleGrant(event_id=event.id, entry_id=entry_id, **grant))
+    for user_id, team in kept["profiles"]:
+        profile = db.get(AccountProfile, user_id)
+        if profile and team in teams:
+            profile.team_entry_id = teams[team]
+
+
+def _organization(db: Session) -> Organization:
     org = db.scalar(select(Organization).limit(1))
     if org is None:
         org = Organization(name="Ontario Volleyball Association")
         db.add(org)
         db.flush()
+    return org
 
-    today = datetime.now(ZoneInfo(TZ)).date()
-    event = Event(
-        organization_id=org.id,
-        slug=DEMO_SLUG,
+
+def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Event:
+    """Load the demo event, or with reset rebuild it around the current time."""
+    existing = db.scalar(select(Event).where(Event.slug == DEMO_SLUG))
+    if existing and not reset:
+        return existing
+
+    org = _organization(db)
+    anchor = anchor_time(now)
+    event, kept = _empty_demo_event(
+        db,
+        org,
+        DEMO_SLUG,
         title="Ontario Championships Demo (simulated source)",
         kind="indoor",
-        timezone=TZ,
-        start_date=today,
-        end_date=today + timedelta(days=1),
-        status="published",
-        is_demo=True,
+        start_date=(anchor - timedelta(hours=4)).date(),
+        end_date=anchor.date() + timedelta(days=1),
     )
-    db.add(event)
-    db.flush()
-    hall_a = Venue(
+    main_hall = Venue(
         event_id=event.id,
-        name="Hall A",
+        name="Exhibition Sports Centre",
         address="100 Princes' Blvd, Toronto, ON",
         city="Toronto",
         latitude=43.6532,  # Simulated demo location at the Toronto city reference point.
         longitude=-79.3832,
-        accessible_entrance="Step-free entrance at Door 2 on the east side, beside accessible parking.",
-        directions="From the main lobby, follow the green signs past registration. Courts 1 and 2 are on the left.",
+        accessible_entrance="Step-free entrance at Door 2 on the east side, beside accessible parking. "
+        "An elevator by registration goes up to Hall C.",
+        directions="Hall A (Courts 1 and 2) is on the left past registration. "
+        "Hall C (Courts 3 and 4) is on level 2: take the elevator or stairs and follow the green signs.",
         sort=0,
     )
-    hall_b = Venue(
+    annex = Venue(
         event_id=event.id,
-        name="Hall B",
+        name="Annex Gym",
         address="100 Princes' Blvd, Toronto, ON",
         city="Toronto",
         latitude=43.6532,  # Simulated demo location at the Toronto city reference point.
         longitude=-79.3832,
-        accessible_entrance="Elevator from the lobby to level 2; step-free route marked with blue floor decals.",
-        directions="Take the elevator or stairs to level 2 and turn right. Courts 3 and 4 are at the far end.",
+        accessible_entrance="Level entrance from the covered walkway, with automatic doors.",
+        directions="A five-minute walk from the main lobby along the covered walkway. "
+        "Courts 5 and 6 are inside the Annex.",
         sort=1,
     )
-    db.add_all([hall_a, hall_b])
-    primary = Source(
-        event_id=event.id, name="Demo fixture A (not a live feed)", mode="demo_fixture"
-    )
-    secondary = Source(
-        event_id=event.id, name="Demo fixture B (second platform)", mode="demo_fixture"
-    )
+    db.add_all([main_hall, annex])
+    # A failed refresh of feed A is how the demo shows a source outage (demo step 9).
+    primary = Source(event_id=event.id, name=SOURCE_A, mode="demo_fixture")
+    secondary = Source(event_id=event.id, name=SOURCE_B, mode="demo_fixture")
     db.add_all([primary, secondary])
     db.commit()
 
     # Two divisions come from one source and the third from another, to show two platforms
     # feeding the same screens.
-    now = datetime.now(ZoneInfo(TZ))
     for source, divisions in (
         (primary, ["15U Boys D1", "6v6 Girls D1"]),
         (secondary, ["TLS Girls D1"]),
@@ -253,34 +435,59 @@ def seed(db: Session, *, reset: bool = False) -> Event:
             for name in divisions
             for i, team in enumerate(DIVISIONS[name][1])
         ]
-        _import(db, event, source, "entries", entries)
-        match_rows = []
-        for n, name in enumerate(divisions):
-            venue = "Hall A" if source is primary and n == 0 else "Hall B"
-            court_offset = 1 if venue == "Hall A" else 3
-            if source is secondary:
-                court_offset = 5
-            match_rows += _matches(name, today, court_offset, venue, now)
+        # Ids derived from the event and external ids keep follows valid after a rebuild.
+        _import(
+            db,
+            event,
+            source,
+            "entries",
+            entries,
+            id_namespace=str(uuid.uuid5(event.id, source.name)),
+        )
+        match_rows = [row for name in divisions for row in _matches(name, anchor)]
         _import(db, event, source, "matches", match_rows)
 
-    roster_rows = []
-    for team_index, name in enumerate(["15U Boys D1", "6v6 Girls D1"]):
-        for jersey in range(1, 11):
-            roster_rows.append(
-                {
-                    "external_entry_id": _ext(name, 0),
-                    "jersey": str(jersey),
-                    "display_name": f"{FIRST_NAMES[(jersey + team_index) % 10]} {chr(64 + jersey)}.",
-                    "position": ["Setter", "Outside", "Middle", "Opposite", "Libero"][
-                        jersey % 5
-                    ],
-                    # Player 7's photo is supplied without approval, so it must not appear publicly.
-                    "photo_url": "/demo/player-placeholder.svg" if jersey == 7 else "",
-                    "photo_approved": "no" if jersey == 7 else "",
-                }
-            )
+    # Maya's team has a published roster with approved photos. Player 7's photo was
+    # supplied without approval, so it must not appear publicly.
+    roster_rows = [
+        {
+            "external_entry_id": _ext("15U Boys D1", 0),
+            "jersey": str(jersey),
+            "display_name": f"{FIRST_NAMES[jersey % 10]} {chr(64 + jersey)}.",
+            "position": ["Setter", "Outside", "Middle", "Opposite", "Libero"][
+                jersey % 5
+            ],
+            "photo_url": f"/demo/athlete-{(jersey - 1) % 4 + 1}.svg",
+            "photo_approved": "no" if jersey == 7 else "yes",
+            "team_photo_url": "/demo/team-photo.svg" if jersey == 1 else "",
+            "team_photo_approved": "yes" if jersey == 1 else "",
+        }
+        for jersey in range(1, 11)
+    ]
     _import(
         db, event, primary, "rosters", roster_rows, consent_review_ref="DEMO-REVIEW-001"
+    )
+    # Harbourfront Heat's roster comes from the registration export, mapped the way staff
+    # map it in Registration, and waits as a draft for the coach's review (demo step 7).
+    from app.modules.operations import map_registration
+
+    coach_team = db.scalar(
+        select(EventEntry.id).where(
+            EventEntry.event_id == event.id, EventEntry.team_name == COACH_TEAM
+        )
+    )
+    teams = {"REG-6V6G-0142": str(coach_team)}
+    _import(
+        db,
+        event,
+        primary,
+        "rosters",
+        content=map_registration(
+            REGISTRATION_EXPORT.read_bytes(), REGISTRATION_COLUMNS, teams
+        ),
+        filename=REGISTRATION_EXPORT.name,
+        team_mapping=teams,
+        require_review=True,
     )
 
     db.add_all(
@@ -313,7 +520,7 @@ def seed(db: Session, *, reset: bool = False) -> Event:
                 title="Parking",
                 sort=0,
                 body="Paid parking in the Princes' Blvd garage. Accessible spaces on level 1 near Door 2. "
-                "The lot fills by 9:30 on Saturday, so allow extra time.",
+                "The lot fills by mid-morning, so allow extra time.",
             ),
             GuideItem(
                 event_id=event.id,
@@ -387,13 +594,15 @@ def seed(db: Session, *, reset: bool = False) -> Event:
         ]
     )
 
+    _restore(db, event, kept)
     ensure_dev_users(db, org, event)
     db.commit()
     return event
 
 
 def ensure_dev_users(db: Session, org: Organization, event: Event) -> None:
-    """Local-only identities for AUTH_MODE=dev: dev-admin (admin) and dev-official (official)."""
+    """Local-only identities for AUTH_MODE=dev: dev-admin (admin), dev-official (official)
+    and dev-coach (coach of the team whose roster waits for review)."""
     admin = db.scalar(select(User).where(User.clerk_subject == "dev-admin")) or User(
         clerk_subject="dev-admin", display_name="Dev admin"
     )
@@ -411,32 +620,45 @@ def ensure_dev_users(db: Session, org: Organization, event: Event) -> None:
         )
     ):
         db.add(RoleGrant(user_id=admin.id, organization_id=org.id, role="admin"))
-    db.add(
-        RoleGrant(
-            user_id=official.id,
-            organization_id=org.id,
-            event_id=event.id,
-            role="official",
-        )
+    # A rebuild keeps event grants, so only add the ones that are missing.
+    held = set(
+        db.execute(
+            select(RoleGrant.user_id, RoleGrant.role).where(
+                RoleGrant.event_id == event.id
+            )
+        ).all()
     )
-    db.flush()
-    from app.models import EventEntry
-
+    if (official.id, "official") not in held:
+        db.add(
+            RoleGrant(
+                user_id=official.id,
+                organization_id=org.id,
+                event_id=event.id,
+                role="official",
+            )
+        )
+    # The demo event's coach runs COACH_TEAM; other events (the staff showcase)
+    # fall back to their first team by name.
     entry = db.scalar(
+        select(EventEntry).where(
+            EventEntry.event_id == event.id, EventEntry.team_name == COACH_TEAM
+        )
+    ) or db.scalar(
         select(EventEntry)
         .where(EventEntry.event_id == event.id)
         .order_by(EventEntry.team_name)
         .limit(1)
     )
-    db.add(
-        RoleGrant(
-            user_id=coach.id,
-            organization_id=org.id,
-            event_id=event.id,
-            entry_id=entry.id,
-            role="coach",
+    if (coach.id, "coach") not in held:
+        db.add(
+            RoleGrant(
+                user_id=coach.id,
+                organization_id=org.id,
+                event_id=event.id,
+                entry_id=entry.id,
+                role="coach",
+            )
         )
-    )
     matches = list(
         db.scalars(
             select(Match)
@@ -463,14 +685,13 @@ def ensure_dev_users(db: Session, org: Organization, event: Event) -> None:
 
 
 def seed_testing(db: Session) -> list[Event]:
-    """Add two synthetic tournaments without resetting or changing existing events."""
-    org = db.scalar(select(Organization).limit(1))
-    if org is None:
-        org = Organization(name="Ontario Volleyball Association")
-        db.add(org)
-        db.flush()
+    """Rebuild the synthetic events around the current time. Real events are untouched.
+
+    Runs on every deploy, so the demo event always has upcoming matches.
+    """
+    added = [seed(db, reset=True)]
+    org = _organization(db)
     now = datetime.now(ZoneInfo(TZ)).replace(second=0, microsecond=0)
-    added = []
     fixtures = [
         (
             "test-lakeside-beach",
@@ -494,21 +715,15 @@ def seed_testing(db: Session) -> list[Event]:
         ),
     ]
     for slug, title, kind, day, venue, lat, lon, city in fixtures:
-        if db.scalar(select(Event.id).where(Event.slug == slug)):
-            continue
-        event = Event(
-            organization_id=org.id,
-            slug=slug,
+        event, kept = _empty_demo_event(
+            db,
+            org,
+            slug,
             title=title,
             kind=kind,
-            timezone=TZ,
             start_date=day,
             end_date=day + timedelta(days=1),
-            status="published",
-            is_demo=True,
         )
-        db.add(event)
-        db.flush()
         db.add(
             Venue(
                 event_id=event.id,
@@ -549,6 +764,7 @@ def seed_testing(db: Session) -> list[Event]:
                 }
                 for i, name in enumerate(names)
             ],
+            id_namespace=str(uuid.uuid5(event.id, source.name)),
         )
         rows = []
         for i, (home, away) in enumerate([(0, 1), (2, 3), (0, 2), (1, 3)]):
@@ -611,9 +827,107 @@ def seed_testing(db: Session) -> list[Event]:
                 body="Testing fixture: confirm real parking arrangements before travel.",
             )
         )
+        _restore(db, event, kept)
         added.append(event)
     from app.showcase import seed_staff_showcase
 
     seed_staff_showcase(db)
     db.commit()
     return added
+
+
+def _demo_event(db: Session) -> Event:
+    event = db.scalar(select(Event).where(Event.slug == DEMO_SLUG))
+    if event is None:
+        raise RuntimeError("No demo event; run seed-testing or demo-reset first")
+    return event
+
+
+def publish_playoff_draw(db: Session) -> int:
+    """Demo step 5: the simulated sources resolve every medal-match placeholder.
+
+    The draw goes through the import pipeline, so followers get "Next match set" updates.
+    A medal match without a time takes its division's gold-medal time. Returns the number
+    of change events; publishing the same draw again changes nothing.
+    """
+    event = _demo_event(db)
+    emitted = 0
+    for source in db.scalars(select(Source).where(Source.event_id == event.id)):
+        rows = []
+        for division, draw in PLAYOFF_DRAW.items():
+            found = {
+                key: db.scalar(
+                    select(Match).where(
+                        Match.source_id == source.id,
+                        Match.external_id == f"{_prefix(division)}-{key}",
+                    )
+                )
+                for key in draw
+            }
+            for key, (home, away) in draw.items():
+                match = found[key]
+                if match is None or match.court is None:
+                    continue
+                start = match.scheduled_start or found["GOLD"].scheduled_start
+                slots = {p.slot: p.placeholder_label or "" for p in match.participants}
+                row = _match_row(
+                    division,
+                    match.external_id,
+                    start,
+                    match.court.label,
+                    home=_ext(division, home),
+                    away=_ext(division, away),
+                    home_placeholder=slots.get("home", ""),
+                    away_placeholder=slots.get("away", ""),
+                    round=match.round_label,
+                    status=match.status,
+                )
+                # Keep the venue and area the match has now, in case staff moved it.
+                row["venue"] = match.court.venue.name
+                row["court_area"] = match.court.area_label or ""
+                rows.append(row)
+        if rows:
+            batch = _import(
+                db, event, source, "matches", rows, filename="playoff-draw.csv"
+            )
+            emitted += batch.summary.get("change_events", 0)
+    return emitted
+
+
+def set_feed_outage(db: Session, down: bool = True) -> dict:
+    """Demo step 9: make feed A unreachable (or reachable again) and refresh it.
+
+    The refresh runs the real sync path, so a failure keeps the last schedule and marks
+    the source unavailable, exactly as a vendor outage would.
+    """
+    from app.modules.sync import sync_source
+
+    event = _demo_event(db)
+    source = db.scalar(
+        select(Source).where(Source.event_id == event.id, Source.name == SOURCE_A)
+    )
+    if source is None:
+        raise RuntimeError(f"No {SOURCE_A} source; run demo-reset first")
+    source.config = {**source.config, "simulated_outage": down}
+    if source.status == "paused":
+        source.status = "active"
+    db.commit()
+    return sync_source(source.id)
+
+
+def demo_summary(db: Session) -> list[str]:
+    """Lines the CLI prints so a presenter can find the scenario's moving parts."""
+    event = _demo_event(db)
+    teams = dict(
+        db.execute(
+            select(EventEntry.team_name, EventEntry.id).where(
+                EventEntry.event_id == event.id
+            )
+        ).all()
+    )
+    return [
+        f"Demo event: /events/{event.slug} ({event.start_date} to {event.end_date})",
+        f"Maya's team: {MAYA_TEAM} {teams[MAYA_TEAM]}",
+        f"Sibling's team: {SIBLING_TEAM} {teams[SIBLING_TEAM]}",
+        f"Roster awaiting coach review: {COACH_TEAM} {teams[COACH_TEAM]}",
+    ]
