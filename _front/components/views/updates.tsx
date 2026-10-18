@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { Megaphone, RefreshCw } from "lucide-react";
 import type { Change, Match } from "@/lib/api";
 import { changeTitle, delayText, timeChangeText } from "@/lib/change-text";
-import { useFollows, useLastSeen } from "@/lib/follows";
+import { useEventKey, useFollows, useLastSeen } from "@/lib/follows";
 import { formatRelative, formatTime } from "@/lib/format";
 import { useSearchParams } from "next/navigation";
 import { useMatch, useChanges } from "@/lib/queries";
@@ -54,12 +54,13 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   const [saved] = usePreference<string[]>("saved-events", []);
   const query = useChanges(eventId);
   const { ids, divisionIds } = useFollows(eventId);
+  const { lastSeen, markSeen } = useLastSeen(eventId);
+  const eventKey = useEventKey(eventId);
   const audience = {
-    savedEvent: saved.includes(eventId),
+    savedEvent: saved.includes(eventKey),
     entryIds: ids,
     divisionIds,
   };
-  const { lastSeen, markSeen } = useLastSeen(eventId);
   const latest = query.data?.latest_id ?? 0;
 
   // Mark everything as seen a moment after the page shows it.

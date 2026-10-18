@@ -1,12 +1,80 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "./api";
+import { useEvent } from "./queries";
 
 // Guest follows stay on this device. The ids are canonical entry ids from the API, so a
 // later sign-in can merge them into an account without guessing.
 const KEY = (eventId: string) => `courtside:follows:${eventId}`;
+
+// Event routes accept a UUID or a slug, but Schedule, Profile, Discover and saved events all
+// key by slug. Device state is therefore always stored under the slug; the URL id is used only
+// until the event has loaded.
+export function useEventKey(eventId: string) {
+  const slug = useEvent(eventId).data?.data.slug;
+  useEffect(() => {
+    if (slug && slug !== eventId) migrateEventKeys(eventId, slug);
+  }, [eventId, slug]);
+  return slug ?? eventId;
+}
+
+// Moves follows, read state and labels saved under an event's UUID onto its slug.
+export function migrateEventKeys(id: string, slug: string) {
+  if (!id || id === slug) return;
+  let changed = false;
+  try {
+    const store = window.localStorage;
+    const oldFollows = store.getItem(KEY(id));
+    if (oldFollows !== null) {
+      const parse = (raw: string | null) => {
+        try {
+          const v = raw ? JSON.parse(raw) : [];
+          return Array.isArray(v)
+            ? v.filter((x): x is string => typeof x === "string")
+            : [];
+        } catch {
+          return [];
+        }
+      };
+      const merged = [
+        ...new Set([...parse(store.getItem(KEY(slug))), ...parse(oldFollows)]),
+      ];
+      store.setItem(KEY(slug), JSON.stringify(merged));
+      store.removeItem(KEY(id));
+      changed = true;
+    }
+    const oldSeen = store.getItem(`courtside:seen:${id}`);
+    if (oldSeen !== null) {
+      const seen = Math.max(
+        Number(oldSeen) || 0,
+        Number(store.getItem(`courtside:seen:${slug}`)) || 0,
+      );
+      store.setItem(`courtside:seen:${slug}`, String(seen));
+      store.removeItem(`courtside:seen:${id}`);
+      changed = true;
+    }
+    const prefix = `courtside:label:${id}:`;
+    const labelKeys: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i);
+      if (k?.startsWith(prefix)) labelKeys.push(k);
+    }
+    for (const k of labelKeys) {
+      const target = `courtside:label:${slug}:${k.slice(prefix.length)}`;
+      if (!store.getItem(target)) store.setItem(target, store.getItem(k) ?? "");
+      store.removeItem(k);
+      changed = true;
+    }
+  } catch {
+    return;
+  }
+  if (changed) {
+    listeners.forEach((l) => l());
+    window.dispatchEvent(new Event("courtside:preferences"));
+  }
+}
 const listeners = new Set<() => void>();
 const cache = new Map<string, { raw: string | null; ids: string[] }>();
 const EMPTY: string[] = [];
@@ -50,22 +118,23 @@ function subscribe(listener: () => void) {
 }
 
 export function useFollows(eventId: string) {
+  const key = useEventKey(eventId);
   const ids = useSyncExternalStore(
     subscribe,
-    () => read(eventId),
+    () => read(key),
     () => EMPTY,
   );
   const toggle = useCallback(
     (entryId: string) => {
-      const current = read(eventId);
+      const current = read(key);
       write(
-        eventId,
+        key,
         current.includes(entryId)
           ? current.filter((id) => id !== entryId)
           : [...current, entryId],
       );
     },
-    [eventId],
+    [key],
   );
   const divisionIds = ids
     .filter((id) => id.startsWith("division:"))
@@ -74,7 +143,7 @@ export function useFollows(eventId: string) {
   const selected = useQuery({
     queryKey: [
       "followed-division-entries",
-      eventId,
+      key,
       [...divisionIds].sort().join(","),
     ],
     queryFn: () =>
@@ -99,7 +168,7 @@ export function useFollows(eventId: string) {
 
 // The last change the guest has seen, so Updates can mark new items. Local only.
 export function useLastSeen(eventId: string) {
-  const key = `courtside:seen:${eventId}`;
+  const key = `courtside:seen:${useEventKey(eventId)}`;
   const value = useSyncExternalStore(
     subscribe,
     () => {
@@ -125,7 +194,7 @@ export function useLastSeen(eventId: string) {
 }
 
 export function useTeamLabel(eventId: string, entryId: string) {
-  const key = `courtside:label:${eventId}:${entryId}`;
+  const key = `courtside:label:${useEventKey(eventId)}:${entryId}`;
   const label = useSyncExternalStore(
     subscribe,
     () => {

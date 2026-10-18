@@ -13,6 +13,7 @@ import { MatchCard } from "../match-card";
 import { usePreference } from "@/lib/preferences";
 import { isRelevantAnnouncement } from "@/lib/relevance";
 import { CourtOverview } from "../court-overview";
+import { MyDayPanel } from "../my-day-links";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
 export function EventHomeView({ eventId }: { eventId: string }) {
@@ -87,6 +88,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           <Check size={15} aria-hidden /> Attended
         </button>
       </div>
+      <MyDayPanel eventId={eventId} />
       {e.counts.matches > 0 && (
         <>
           <SectionTitle

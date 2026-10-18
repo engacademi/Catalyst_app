@@ -7,6 +7,7 @@ import { useEvent, useMyDay } from "@/lib/queries";
 import { WelcomeBanner } from "../brand";
 import { MatchCard } from "../match-card";
 import { FreshnessNote } from "../freshness";
+import { MyEventLinks } from "../my-day-links";
 import {
   Card,
   EmptyState,
@@ -55,6 +56,7 @@ export function MyDayView({ eventId }: { eventId: string }) {
       <PageTitle subtitle="Your teams first. The wider competition just below.">
         My Day
       </PageTitle>
+      <MyEventLinks eventId={eventId} current="my-day" />
       {!!directTeamIds.length &&
         (query.isPending ? (
           <Loading label="Building your day" />

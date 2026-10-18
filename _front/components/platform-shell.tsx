@@ -11,7 +11,8 @@ import { useEvents } from "@/lib/queries";
 import { apiGet, type Change } from "@/lib/api";
 import { usePreference } from "@/lib/preferences";
 import { audienceFrom, isRelevantChange } from "@/lib/relevance";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { migrateEventKeys } from "@/lib/follows";
 
 function subscribe(cb: () => void) {
   window.addEventListener("storage", cb);
@@ -101,6 +102,11 @@ const tabs = [
 ];
 export function PlatformShell({ children }: { children: ReactNode }) {
   const path = usePathname();
+  const events = useEvents();
+  // Follows saved under a UUID event URL move to the slug key everything else reads.
+  useEffect(() => {
+    for (const e of events.data?.data ?? []) migrateEventKeys(e.id, e.slug);
+  }, [events.data]);
   const counts = useNotificationCounts();
   const unread = counts.reduce((n, c) => n + c.count, 0);
   const nav = tabs.map(({ href, label, icon: Icon }) => {

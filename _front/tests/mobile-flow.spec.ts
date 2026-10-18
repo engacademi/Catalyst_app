@@ -745,3 +745,84 @@ test("team followers get division notices and clear change wording", async ({
   await expect(page.getByText("Estimated start changed")).toBeVisible();
   await expect(page.getByText(/Official time unchanged/)).toBeVisible();
 });
+
+test("overview and team follow lead to My event day, labels and updates", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  await page.route("**/v1/entries/t1", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          id: "t1",
+          team_name: "Northern Lights",
+          club_name: null,
+          division: null,
+          event,
+          roster: null,
+          matches: [match],
+        },
+        sources: [source],
+      },
+    }),
+  );
+  await page.goto("/events/ontario-demo");
+  const panel = page.getByRole("region", { name: "Make this event yours" });
+  await expect(
+    panel.getByRole("link", { name: "Find your teams" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/teams");
+  await expect(
+    panel.getByRole("link", { name: /Event updates/ }),
+  ).toHaveAttribute("href", "/events/ontario-demo/updates");
+  await page.goto("/events/ontario-demo/teams/t1");
+  await page.getByRole("button", { name: "Follow Northern Lights" }).click();
+  await expect(
+    page.getByRole("link", { name: "Add a private label" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/my-teams");
+  await page.getByRole("link", { name: "Open My event day" }).click();
+  await expect(page).toHaveURL(/\/events\/ontario-demo\/my-day$/);
+  await page.goto("/events/ontario-demo");
+  const following = page.getByRole("region", { name: "Following 1 team" });
+  await expect(
+    following.getByRole("link", { name: "Open My event day" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/my-day");
+  await expect(
+    following.getByRole("link", { name: "My teams & labels" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/my-teams");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth + 1,
+    ),
+  ).toBeTruthy();
+});
+
+test("follows saved under an event UUID move to the slug key", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("courtside:follows:e1", '["t1","division:d1"]');
+    localStorage.setItem("courtside:follows:ontario-demo", '["t2"]');
+    localStorage.setItem("courtside:label:e1:t1", "Maya");
+    localStorage.setItem("courtside:seen:e1", "4");
+  });
+  await page.goto("/profile");
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("courtside:follows:e1")),
+    )
+    .toBeNull();
+  const stored = await page.evaluate(() => ({
+    follows: JSON.parse(
+      localStorage.getItem("courtside:follows:ontario-demo") ?? "[]",
+    ),
+    label: localStorage.getItem("courtside:label:ontario-demo:t1"),
+    seen: localStorage.getItem("courtside:seen:ontario-demo"),
+  }));
+  expect(stored.follows.sort()).toEqual(["division:d1", "t1", "t2"]);
+  expect(stored.label).toBe("Maya");
+  expect(stored.seen).toBe("4");
+});
