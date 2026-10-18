@@ -38,7 +38,7 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/api/public.py` | Public reads under `/v1` |
 | `app/api/admin.py` | Staff workspace under `/v1/admin` |
 | `app/api/me.py` | Signed-in user's own data (official assignments) |
-| `app/cli.py` | `seed`, `grant`, `aes-load`, `aes-discover`, `myteam-load`, `timu-load` and `geocode-venues` commands |
+| `app/cli.py` | `seed`, `seed-testing`, the `demo-*` demo transitions, `grant`, `aes-load`, `aes-discover`, `myteam-load`, `timu-load` and `geocode-venues` commands |
 | `sample_data/` | Example CSVs and the column reference |
 
 ## How data gets in
@@ -86,7 +86,7 @@ uv run python -m app.cli grant --subject user_2xyz... --role staff --event demo-
 
 ## Compatibility with mobile flows (PRs 22 and 23)
 
-The `seed`, `seed-testing`, `grant` and `aes-load` commands coexist. Railway pre-deploy migrates through `0004` and seeds the two synthetic tournaments only; it does not fetch AES. Run `aes-load` explicitly for approved events. No additional migration or environment variable is required for AES.
+The `seed`, `seed-testing`, `grant` and `aes-load` commands coexist. Railway pre-deploy migrates and runs `seed-testing`, which rebuilds the synthetic demo event and the two test tournaments around the current time and adds the staff showcase once (see the demo scenario in `docs/implementation-workflows.md`); it never touches real events and does not fetch AES. Run `aes-load` explicitly for approved events. No additional migration or environment variable is required for AES.
 
 AES events use real dates and completed results, without a demo flag or replay clock. The April 2026 Championships therefore appears in Discover under Past or All dates, rather than Upcoming & ongoing. To include it in Nearby, use the staff venue editor to enter verified city/latitude/longitude. No coordinates are inferred from its name. PR 22's access controls also apply to AES events: local official-match edits return 409; update the schedule in AES and refresh. Staff can still edit venue, guide and sponsor content.
 

@@ -459,6 +459,10 @@ def commit_import(
 def _commit_entries(
     db: Session, event: Event, source: Source, batch: ImportBatch, actor_id
 ) -> int:
+    # Synthetic demo events derive ids from the external ids, so a rebuilt demo keeps the
+    # team and division ids that devices already follow.
+    namespace = batch.options.get("id_namespace")
+    stable = (lambda key: uuid.uuid5(uuid.UUID(namespace), key)) if namespace else None
     for row in batch.rows:
         if row["action"] == "unchanged":
             continue
@@ -468,10 +472,13 @@ def _commit_entries(
             division = Division(
                 event_id=event.id, name=d["division"], code=d.get("division_code")
             )
+            if stable:
+                division.id = stable(f"division:{d['division']}")
             db.add(division)
             db.flush()
         if row["action"] == "add":
             entry = EventEntry(
+                id=stable(f"entry:{row['external_id']}") if stable else uuid.uuid4(),
                 event_id=event.id,
                 team_name=d["team_name"],
                 club_name=d["club_name"],

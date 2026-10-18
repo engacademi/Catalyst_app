@@ -58,7 +58,8 @@ def test_public_roster_omits_withheld_photo(client, db, demo):
     team = client.get(f"/v1/entries/{entry_id(db, 'Lakeshore Thunder')}").json()["data"]
     players = team["roster"]["players"]
     assert len(players) == 10
-    assert all(p["photo_url"] is None for p in players)
+    # Player 7's photo was supplied without approval; the approved ones are public.
+    assert [p["jersey"] for p in players if p["photo_url"] is None] == [7]
     assert set(players[0]) == {"jersey", "display_name", "position", "photo_url"}
     # A team with no approved roster shows no athletes at all.
     assert (
@@ -240,7 +241,8 @@ def test_demo_reset_deletes_cleanly(client, db, demo):
         headers=ADMIN,
     )
     fresh = seed(db, reset=True)
-    assert fresh.id != demo.id
+    # The event row is kept, so staff grants and links survive the rebuild.
+    assert fresh.id == demo.id
     assert (
         client.get("/v1/events/demo-championships").json()["data"]["counts"]["entries"]
         == 12

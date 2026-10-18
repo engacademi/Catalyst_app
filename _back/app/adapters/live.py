@@ -186,6 +186,12 @@ def parse_aes(data: dict) -> Snapshot:
 
 
 def fetch_snapshot(mode: str, config: dict) -> Snapshot:
+    if mode == "demo_fixture":
+        # A simulated demo feed has nothing new to fetch. `simulated_outage` makes the
+        # check fail like an unreachable platform, so the real failure path runs.
+        if config.get("simulated_outage"):
+            raise ConnectionError("Simulated demo feed outage")
+        return Snapshot(unchanged=True)
     if not config.get("authorized"):
         raise ValueError("Confirm source access before connecting")
     if mode == "timu":

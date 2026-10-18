@@ -7,8 +7,9 @@ from tests.conftest import ADMIN, OFFICIAL
 
 def test_search_and_testing_tournaments(client, db, demo):
     first = seed_testing(db)
-    assert len(first) == 2
-    assert seed_testing(db) == []
+    assert len(first) == 3
+    # Every run rebuilds the same synthetic events instead of adding more.
+    assert [e.slug for e in seed_testing(db)] == [e.slug for e in first]
     assert len(client.get("/v1/events").json()["data"]) == 4
     assert set(
         db.scalars(
@@ -98,7 +99,7 @@ def test_account_type_cannot_escalate_and_following_is_scoped(client, db, demo):
 
 
 def test_admin_grants_and_revokes_officer_event_access(client, db, demo):
-    other = seed_testing(db)[0]
+    other = seed_testing(db)[1]
     officer = {"X-Dev-User": "new-officer"}
     uid = client.get("/v1/me/profile", headers=officer).json()["data"]["user_id"]
     path = f"/v1/admin/events/{demo.id}/access"
