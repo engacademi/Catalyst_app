@@ -155,7 +155,7 @@ export function MatchesView({ eventId }: { eventId: string }) {
       <div className="mt-2" aria-live="polite">
         {matches.isPending ? (
           <Loading label="Loading matches" />
-        ) : matches.error ? (
+        ) : matches.error && !matches.data ? (
           <ErrorState error={matches.error} />
         ) : matches.data!.data.length === 0 ? (
           <div className="mt-4">

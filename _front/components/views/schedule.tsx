@@ -186,7 +186,7 @@ export function ScheduleView() {
       </div>
       {!hydrated || events.isPending ? (
         <Loading />
-      ) : events.error ? (
+      ) : events.error && !events.data ? (
         <ErrorState error={events.error} />
       ) : !selected.length ? (
         <EmptyState title="Your schedule starts with a favourite">
@@ -363,7 +363,7 @@ export function ScheduleView() {
             (q, i) => !hidden.includes(selected[i].slug) && q.isPending,
           ) && <Loading label="Loading your matches" />}
           {queries.map((q, i) =>
-            !hidden.includes(selected[i].slug) && q.error ? (
+            !hidden.includes(selected[i].slug) && q.error && !q.data ? (
               <div key={selected[i].id}>
                 <p>{selected[i].title}</p>
                 <ErrorState error={q.error} />

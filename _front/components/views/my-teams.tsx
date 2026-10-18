@@ -68,7 +68,7 @@ function LabelEditor({ eventId, id }: { eventId: string; id: string }) {
     <Card>
       {entry.isPending ? (
         <Loading />
-      ) : entry.error ? (
+      ) : entry.error && !entry.data ? (
         <ErrorState error={entry.error} />
       ) : (
         <>

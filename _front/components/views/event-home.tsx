@@ -33,7 +33,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
   const { ids, divisionIds } = useFollows(eventId);
 
   if (!hydrated || event.isPending) return <Loading label="Loading event" />;
-  if (event.error) return <ErrorState error={event.error} />;
+  if (event.error && !event.data) return <ErrorState error={event.error} />;
   const e = event.data.data;
   const audience = {
     savedEvent: saved.includes(eventId),
@@ -105,7 +105,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           </SectionTitle>
           {live.isPending ? (
             <Loading label="Loading live matches" />
-          ) : live.error ? (
+          ) : live.error && !live.data ? (
             <ErrorState error={live.error} />
           ) : live.data?.data.length ? (
             <>
@@ -136,7 +136,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
       <SectionTitle>Coming up</SectionTitle>
       {upcoming.isPending ? (
         <Loading label="Loading upcoming matches" />
-      ) : upcoming.error ? (
+      ) : upcoming.error && !upcoming.data ? (
         <ErrorState error={upcoming.error} />
       ) : comingUp.length ? (
         <ul className="event-carousel live-carousel">

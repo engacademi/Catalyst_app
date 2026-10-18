@@ -39,7 +39,7 @@ export function GuideView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
   const query = useGuide(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading guide" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const { venues, items, partners } = query.data.data;
   const general = items.filter(
     (i) => i.kind !== "officials" && !i.kind.startsWith("media_"),

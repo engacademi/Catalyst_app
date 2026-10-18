@@ -69,7 +69,7 @@ export function MatchView({
   const query = useMatch(matchId);
   const { ids } = useFollows(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading match" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const m = query.data.data;
 
   return (

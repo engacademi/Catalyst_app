@@ -341,7 +341,7 @@ export function DiscoverView({
       </div>
       {events.isPending ? (
         <Loading label="Loading tournaments" />
-      ) : events.error ? (
+      ) : events.error && !events.data ? (
         <ErrorState error={events.error} />
       ) : (
         <>

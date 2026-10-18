@@ -101,7 +101,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
           <div className="mt-5" aria-live="polite">
             {teams.isPending ? (
               <Loading label="Searching" />
-            ) : teams.error ? (
+            ) : teams.error && !teams.data ? (
               <ErrorState error={teams.error} />
             ) : teams.data!.data.length === 0 ? (
               <EmptyState title="No teams match that search">
