@@ -40,6 +40,7 @@ export function MyTeamsView({ eventId }: { eventId: string }) {
             />
             <input
               type="search"
+              maxLength={100}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search team, club or division"

@@ -21,7 +21,13 @@ export function TeamsView({ eventId }: { eventId: string }) {
   const q = params.get("q") ?? "";
   const division = params.get("division") ?? "";
   const [text, setText] = useState(q);
+  const [previousQuery, setPreviousQuery] = useState(q);
+  if (previousQuery !== q) {
+    setPreviousQuery(q);
+    if (text === previousQuery) setText(q);
+  }
   const [rankings, showRankings] = useState(true);
+  const [pickerOpen, setPickerOpen] = useState(!!q || !!division);
   const event = useEvent(eventId);
   const teams = useTeams(eventId, q, division);
   const { ids, divisionIds, isFollowing, toggle } = useFollows(eventId);
@@ -39,6 +45,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
   }, [text, q, params, pathname, router]);
 
   const setDivision = (value: string) => {
+    setPickerOpen(true);
     const next = new URLSearchParams(params);
     if (value) next.set("division", value);
     else next.delete("division");
@@ -60,7 +67,11 @@ export function TeamsView({ eventId }: { eventId: string }) {
           <input
             type="search"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            maxLength={100}
+            onChange={(e) => {
+              setText(e.target.value);
+              setPickerOpen(true);
+            }}
             placeholder="Team, club or division"
             className="min-h-11 w-full rounded-full border border-border bg-surface pl-9 pr-4 text-base"
           />
@@ -82,7 +93,11 @@ export function TeamsView({ eventId }: { eventId: string }) {
         </label>
       </div>
 
-      <details className="team-picker">
+      <details
+        className="team-picker"
+        open={pickerOpen}
+        onToggle={(e) => setPickerOpen(e.currentTarget.open)}
+      >
         <summary>Follow teams · {ids.length} selected</summary>
         <div className="team-picker-options">
           {event.data?.data.divisions.map((d) => (

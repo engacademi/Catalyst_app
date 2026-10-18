@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+// Fixture routes must receive requests instead of the offline service worker.
+test.use({ serviceWorkers: "block" });
 const today = new Date().toISOString().slice(0, 10);
 const source = {
   id: "s1",
@@ -485,6 +487,7 @@ test("discovery searches teams with navigable suggestions", async ({
     }),
   );
   await page.goto("/");
+  await expect(page.getByRole("list", { name: "Explore tournaments" })).toBeVisible();
   await page
     .getByRole("textbox", { name: "Search teams, tournaments or venues" })
     .fill("Northern");
@@ -506,6 +509,98 @@ test("discovery searches teams with navigable suggestions", async ({
     .getByRole("textbox", { name: "Search teams, tournaments or venues" })
     .press("Escape");
   await expect(results).toHaveCount(0);
+});
+
+test.describe("mobile search selection", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  for (const path of ["/", "/tournaments"]) {
+    for (const kind of ["Team", "Tournament", "Venue"]) {
+      test(`${path} opens a ${kind} result after a null-target blur`, async ({ page }) => {
+        await setup(page);
+        const href = kind === "Team"
+          ? `/events/${event.slug}/teams/t1`
+          : kind === "Venue" ? `/events/${event.slug}/guide` : `/events/${event.slug}`;
+        await page.route("**/v1/entries/t1", (route) => route.fulfill({ json: {
+          data: { id: "t1", team_name: "Northern Lights", division: null, matches: [], roster: null },
+          sources: [source],
+        } }));
+        await page.route("**/v1/search?**", (route) => route.fulfill({ json: {
+          data: [{ id: "t1", kind, label: "Northern Lights", event_slug: event.slug, href }],
+        } }));
+        await page.goto(path);
+        await expect(page.getByRole("list", { name: "Explore tournaments" })).toBeVisible();
+        const input = page.getByRole("textbox", { name: "Search teams, tournaments or venues" });
+        await input.fill("Northern");
+        const result = page.getByRole("region", { name: "Search results" }).getByRole("link");
+        await expect(result).toBeVisible();
+        // Reproduce Safari hiding the keyboard before dispatching the link click.
+        await input.evaluate((el) => el.blur());
+        await expect(result).toBeVisible();
+        await result.tap();
+        await expect(page).toHaveURL(new RegExp(`${href}$`));
+        if (kind === "Team") await expect(page.getByRole("heading", { name: "Northern Lights" })).toBeVisible();
+      });
+    }
+  }
+  test("dismisses outside, reopens, clears and supports keyboard activation", async ({ page }) => {
+    await setup(page);
+    await page.route("**/v1/search?**", (route) => route.fulfill({ json: {
+      data: [{ id: "e1", kind: "Tournament", label: event.title, event_slug: event.slug, href: `/events/${event.slug}` }],
+    } }));
+    await page.goto("/");
+    await expect(page.getByRole("list", { name: "Explore tournaments" })).toBeVisible();
+    const input = page.getByRole("textbox", { name: "Search teams, tournaments or venues" });
+    const results = page.getByRole("region", { name: "Search results" });
+    await input.fill("Ontario");
+    await expect(results.getByRole("link")).toBeVisible();
+    await page.getByRole("heading", { level: 1 }).tap();
+    await expect(results).toHaveCount(0);
+    await input.tap();
+    await expect(results).toBeVisible();
+    await input.fill("");
+    await expect(results).toHaveCount(0);
+    await input.fill("Ontario");
+    await expect(results.getByRole("link")).toBeVisible();
+    await input.press("Tab");
+    await expect(results.getByRole("link")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(results).toHaveCount(0);
+    await input.focus();
+    await input.press("Tab");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(`/events/${event.slug}`);
+  });
+});
+
+test("team search reveals collapsed results and opens team details", async ({ page }) => {
+  await setup(page);
+  await page.route("**/v1/events/ontario-demo/teams?**", (route) => route.fulfill({ json: {
+    data: [{ id: "t1", team_name: "Northern Lights", division: null }], total: 1,
+  } }));
+  await page.goto(`/events/${event.slug}/teams`);
+  const picker = page.locator(".team-picker");
+  await expect(picker).not.toHaveAttribute("open");
+  await page.getByRole("searchbox").fill("Northern");
+  await expect(picker).toHaveAttribute("open");
+  await expect(page).toHaveURL(/q=Northern/);
+  await picker.getByRole("link", { name: /Details/ }).click();
+  await expect(page).toHaveURL(`/events/${event.slug}/teams/t1`);
+});
+
+test("match search keeps rapid typing and clearing in the URL and API", async ({ page }) => {
+  await setup(page);
+  await page.goto(`/events/${event.slug}/matches`);
+  const input = page.getByRole("searchbox", { name: "Search matches by team or round" });
+  const request = page.waitForRequest((r) => {
+    const url = new URL(r.url());
+    return url.pathname.endsWith("/matches") && url.searchParams.get("q") === "Northern";
+  });
+  await input.pressSequentially("Northern");
+  await expect(input).toHaveValue("Northern");
+  await expect(page).toHaveURL(/q=Northern/);
+  await request;
+  await input.fill("");
+  await expect(page).not.toHaveURL(/q=/);
 });
 
 test("current location can be replaced and event venues link to directions", async ({

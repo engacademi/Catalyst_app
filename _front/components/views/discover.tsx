@@ -133,6 +133,26 @@ export function DiscoverView({
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchContainer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!searchOpen) return;
+    // Mobile Safari can blur the input with no relatedTarget before a result's
+    // click. Dismiss on an actual outside interaction, leaving the link mounted.
+    const dismissOutside = (event: PointerEvent | FocusEvent) => {
+      if (
+        event.target instanceof Node &&
+        !searchContainer.current?.contains(event.target)
+      ) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("focusin", dismissOutside);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("focusin", dismissOutside);
+    };
+  }, [searchOpen]);
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search.trim()), 180);
     return () => clearTimeout(timer);
@@ -273,9 +293,10 @@ export function DiscoverView({
         )}
       </div>
       <div
+        ref={searchContainer}
         className="discovery-search"
-        onBlur={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget)) setSearchOpen(false);
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setSearchOpen(false);
         }}
       >
         <Search size={19} aria-hidden />
@@ -283,15 +304,15 @@ export function DiscoverView({
           aria-label="Search teams, tournaments or venues"
           placeholder="teams, tournaments or venues"
           value={search}
+          maxLength={150}
           onChange={(e) => {
             setSearch(e.target.value);
             setSearchOpen(true);
           }}
           onFocus={() => setSearchOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setSearchOpen(false);
-          }}
+          onClick={() => setSearchOpen(true)}
           aria-haspopup="true"
+          aria-expanded={searchOpen && search.trim().length >= 2}
           aria-controls="discovery-results"
         />
         {searchOpen && search.trim().length >= 2 && (

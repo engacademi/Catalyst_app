@@ -2,6 +2,7 @@
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { LoadMore } from "../load-more";
 import { useFollows } from "@/lib/follows";
@@ -37,6 +38,25 @@ export function MatchesView({ eventId }: { eventId: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const q = params.get("q") ?? "";
+  const [search, setSearch] = useState(q);
+  const [previousQuery, setPreviousQuery] = useState(q);
+  // Keep typing immediate while URL navigation is pending. External URL changes
+  // (including Back) update the input when it has no newer edits.
+  if (previousQuery !== q) {
+    setPreviousQuery(q);
+    if (search === previousQuery) setSearch(q);
+  }
+  useEffect(() => {
+    if (search === q) return;
+    const timer = setTimeout(() => {
+      const next = new URLSearchParams(params);
+      if (search) next.set("q", search);
+      else next.delete("q");
+      router.replace(`${pathname}?${next}`, { scroll: false });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, q, params, pathname, router]);
   const event = useEvent(eventId);
   const { ids, directTeamIds, divisionIds } = useFollows(eventId);
 
@@ -103,8 +123,9 @@ export function MatchesView({ eventId }: { eventId: string }) {
         <input
           type="search"
           placeholder="Search team, club, round or match number"
-          value={params.get("q") ?? ""}
-          onChange={(e) => set("q", e.target.value)}
+          value={search}
+          maxLength={200}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </label>
       <div className="filter-panel mt-4">
