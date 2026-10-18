@@ -40,6 +40,17 @@ def test_match_between_two_followed_teams_appears_once():
     assert result["conflicts"] == []
 
 
+def test_parallel_division_matches_are_not_overlaps():
+    a, x1, x2, x3, x4 = (uuid.uuid4() for _ in range(5))
+    # Following a division brings in every match in it; parallel courts aren't a clash.
+    court_1 = match(T0, x1, x2)
+    court_2 = match(T0, x3, x4)
+    mine = match(T0 + timedelta(minutes=15), a, x1)
+    result = build_my_day([court_1, court_2, mine], {a}, assumed_minutes=75)
+    assert result["conflicts"] == []
+    assert len(result["upcoming_ids"]) == 3
+
+
 def test_unscheduled_and_finished_matches_are_kept_apart():
     a = uuid.uuid4()
     tbd = match(None, a, None)
