@@ -216,6 +216,7 @@ export function DiscoverView({
         : a.start_date.localeCompare(b.start_date)),
   );
   const near = filtered
+    .filter((e) => !isPast(e))
     .map((event) => ({ event, distance: nearest(event, location) }))
     .filter((x) => x.distance != null && x.distance <= 100)
     .sort((a, b) => a.distance! - b.distance!);
