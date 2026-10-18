@@ -205,6 +205,16 @@ export function DiscoverView({
           : e.end_date <
             new Date().toLocaleDateString("en-CA", { timeZone: e.timezone }))),
   );
+  const isPast = (e: DiscoveryEvent) =>
+    e.end_date <
+    new Date().toLocaleDateString("en-CA", { timeZone: e.timezone });
+  const explore = [...filtered].sort(
+    (a, b) =>
+      Number(isPast(a)) - Number(isPast(b)) ||
+      (isPast(a)
+        ? b.start_date.localeCompare(a.start_date)
+        : a.start_date.localeCompare(b.start_date)),
+  );
   const near = filtered
     .map((event) => ({ event, distance: nearest(event, location) }))
     .filter((x) => x.distance != null && x.distance <= 100)
@@ -216,11 +226,11 @@ export function DiscoverView({
       .map((e) => e.kind),
   ]);
   const recommended = filtered.filter(
-    (e) => preferredKinds.has(e.kind) && !saved.includes(e.slug),
+    (e) => preferredKinds.has(e.kind) && !saved.includes(e.slug) && !isPast(e),
   );
-  const popular = [...filtered].sort(
-    (a, b) => (b.team_count ?? 0) - (a.team_count ?? 0),
-  );
+  const popular = filtered
+    .filter((e) => !isPast(e))
+    .sort((a, b) => (b.team_count ?? 0) - (a.team_count ?? 0));
   return (
     <main id="main" className="platform-main discovery-page">
       <div className="discovery-heading">
@@ -324,13 +334,11 @@ export function DiscoverView({
                 <section className="saved-discovery reveal-section">
                   <h2>Your courtside picks</h2>
                   <ul className="event-carousel">
-                    {filtered
-                      .filter(isPick)
-                      .map((e) => (
-                        <li key={e.id}>
-                          <SavedEventPreview event={e} />
-                        </li>
-                      ))}
+                    {filtered.filter(isPick).map((e) => (
+                      <li key={e.id}>
+                        <SavedEventPreview event={e} />
+                      </li>
+                    ))}
                   </ul>
                 </section>
               )}
@@ -433,7 +441,7 @@ export function DiscoverView({
             </div>
             {filtered.length ? (
               <ul className="event-grid">
-                {filtered.map((e) => (
+                {explore.map((e) => (
                   <li key={e.id}>
                     <EventTile event={e} />
                   </li>
