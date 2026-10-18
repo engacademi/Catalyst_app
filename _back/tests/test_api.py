@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -52,6 +53,30 @@ def test_my_day_merges_two_sources_and_dedupes(client, db, demo):
     ids = data["upcoming_ids"] + data["completed_ids"] + data["awaiting_schedule_ids"]
     assert len(ids) == len(set(ids))
     assert data["assumed_match_minutes"] == 60
+
+
+def test_work_duty_names_the_followed_work_team(client, db, demo):
+    worker = entry_id(db, "Lakeshore Thunder")
+    duty = next(
+        m
+        for m in db.scalars(select(Match).where(Match.status == "scheduled"))
+        if worker not in {str(p.entry_id) for p in m.participants}
+    )
+    duty.work_entry_id = uuid.UUID(worker)
+    db.commit()
+    team = client.get(f"/v1/entries/{worker}").json()["data"]
+    listed = next(m for m in team["matches"] if m["id"] == str(duty.id))
+    assert listed["work_team"] == {"entry_id": worker, "team_name": "Lakeshore Thunder"}
+    day = client.get(
+        "/v1/events/demo-championships/my-day", params={"entry_ids": worker}
+    ).json()["data"]
+    assert [m["work_team"]["team_name"] for m in day["work_duties"]] == [
+        "Lakeshore Thunder"
+    ]
+    # Ordinary matches carry no work team.
+    assert all(
+        m["work_team"] is None for m in team["matches"] if m["id"] != str(duty.id)
+    )
 
 
 def test_public_roster_omits_withheld_photo(client, db, demo):

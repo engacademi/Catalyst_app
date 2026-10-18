@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRightLeft, Clock, MapPin } from "lucide-react";
+import { ArrowRightLeft, Clock, MapPin, Whistle } from "lucide-react";
 import type { Change, Match, Participant } from "@/lib/api";
 import { changeTitle } from "@/lib/change-text";
 import { formatDay, formatTime } from "@/lib/format";
@@ -60,6 +60,25 @@ export function ChangeBadge({ change }: { change: Change | null }) {
   );
 }
 
+/** Name of the followed team the source assigns to work this match, if any. */
+export function workDutyTeam(match: Match, followed: string[]) {
+  if (!match.work_entry_id || !followed.includes(match.work_entry_id))
+    return null;
+  return match.work_team?.team_name ?? "Your team";
+}
+
+export function WorkDutyLabel({ team }: { team: string }) {
+  return (
+    <p className="match-duty">
+      <Whistle aria-hidden className="h-4 w-4 shrink-0" />
+      <span>
+        <strong>Work duty: referee / scorekeeping</strong>
+        <span className="match-duty-team">{team} officiates this match</span>
+      </span>
+    </p>
+  );
+}
+
 function name(p: Participant) {
   return p.team_name ?? p.placeholder ?? "To be decided";
 }
@@ -115,10 +134,12 @@ export function MatchCard({
     !!p.entry_id && followed.includes(p.entry_id);
   const homeSets = match.sets.map((s) => s.home);
   const awaySets = match.sets.map((s) => s.away);
+  const duty = workDutyTeam(match, followed);
   return (
     <article
-      className={`match-card ${match.status === "cancelled" ? "match-card-cancelled" : ""}`}
+      className={`match-card ${match.status === "cancelled" ? "match-card-cancelled" : ""} ${duty ? "match-card-duty" : ""}`}
     >
+      {duty && <WorkDutyLabel team={duty} />}
       <div className="match-card-header">
         <span className="flex items-center gap-1 font-semibold">
           <Clock aria-hidden className="h-4 w-4 text-brand" />

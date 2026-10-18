@@ -3,6 +3,7 @@ import Link from "next/link";
 import { eventColor } from "@/lib/event-colors";
 import type { Match } from "@/lib/api";
 import { formatTime } from "@/lib/format";
+import { workDutyTeam } from "./match-card";
 import type { DiscoveryEvent } from "./event-tile";
 
 type CalendarRow = { event: DiscoveryEvent; match: Match };
@@ -83,9 +84,12 @@ function layout(rows: CalendarRow[]) {
 export function TimeGrid({
   rows,
   dates,
+  follows,
 }: {
   rows: CalendarRow[];
   dates: string[];
+  /** Followed team ids per event slug, used to mark work duties. */
+  follows?: Map<string, string[]>;
 }) {
   const minutes = rows.map((row) =>
     localMinutes((row.match.estimated_start ?? row.match.scheduled_start)!),
@@ -194,12 +198,16 @@ export function TimeGrid({
                     match.away.team_name ?? match.away.placeholder ?? "TBD";
                   const timeLabel = `${match.estimated_start ? "Est. " : ""}${formatTime(time, "America/Toronto")}`;
                   const clock = clockParts(time);
-                  const label = `${home} vs ${away}, ${timeLabel}, ${match.court?.label ?? "court pending"}, ${event.title}. ${match.status.replaceAll("_", " ")}. One-hour display slot; match duration may vary.`;
+                  const duty = workDutyTeam(
+                    match,
+                    follows?.get(event.slug) ?? [],
+                  );
+                  const label = `${duty ? `Work duty for ${duty}: referee / scorekeeping. ` : ""}${home} vs ${away}, ${timeLabel}, ${match.court?.label ?? "court pending"}, ${event.title}. ${match.status.replaceAll("_", " ")}. One-hour display slot; match duration may vary.`;
                   return (
                     <Link
                       key={`${event.id}-${match.id}`}
                       href={`/events/${event.slug}/matches/${match.id}`}
-                      className={`time-block time-block-${eventColor(event.id)}`}
+                      className={`time-block time-block-${eventColor(event.id)} ${duty ? "time-block-duty" : ""}`}
                       data-start-minutes={start}
                       data-dense={lanes > 1}
                       aria-label={label}
@@ -221,6 +229,9 @@ export function TimeGrid({
                         </span>
                         <small>{clock.period}</small>
                       </time>
+                      {duty && (
+                        <span className="time-block-duty-label">Work duty</span>
+                      )}
                       {match.estimated_start && (
                         <span className="time-block-official">
                           Official{" "}

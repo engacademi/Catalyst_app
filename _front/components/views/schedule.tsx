@@ -8,7 +8,7 @@ import { formatDateRange, formatDay, formatTime } from "@/lib/format";
 import { useEvents } from "@/lib/queries";
 import { useEventSelections, usePreference } from "@/lib/preferences";
 import { useHydrated } from "@/lib/hydration";
-import { MatchCard } from "../match-card";
+import { MatchCard, workDutyTeam } from "../match-card";
 import { SourceWarning } from "../freshness";
 import { ErrorState, Loading, EmptyState } from "../ui";
 import { TimeGrid } from "../time-grid";
@@ -145,6 +145,11 @@ export function ScheduleView() {
           href={`/events/${event.slug}/matches/${match.id}`}
           className="calendar-match-card"
         >
+          {workDutyTeam(match, follows.get(event.slug) ?? []) && (
+            <span className="calendar-duty">
+              Work duty: referee / scorekeeping
+            </span>
+          )}
           <time>{formatTime(match.scheduled_start, match.timezone)}</time>
           {match.estimated_start && (
             <span className="text-warn">
@@ -167,6 +172,7 @@ export function ScheduleView() {
         <MatchCard
           match={match}
           eventId={event.slug}
+          followed={follows.get(event.slug) ?? []}
           showDay
           showSource={false}
         />
@@ -387,7 +393,7 @@ export function ScheduleView() {
               Matches will appear here once the organizer publishes them.
             </EmptyState>
           ) : mode === "calendar" ? (
-            <TimeGrid rows={inRange} dates={dates} />
+            <TimeGrid rows={inRange} dates={dates} follows={follows} />
           ) : inRange.length ? (
             <div className="schedule-list">{inRange.map(renderMatch)}</div>
           ) : (

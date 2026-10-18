@@ -9,7 +9,8 @@ import { formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
 import { ScoreDispute } from "../score-dispute";
 import { checkedLabel, FreshnessNote } from "../freshness";
-import { StatusBadge } from "../match-card";
+import { useFollows } from "@/lib/follows";
+import { StatusBadge, WorkDutyLabel, workDutyTeam } from "../match-card";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
 const LABELS: Record<string, string> = {
@@ -66,6 +67,7 @@ export function MatchView({
 }) {
   const hydrated = useHydrated();
   const query = useMatch(matchId);
+  const { ids } = useFollows(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading match" />;
   if (query.error) return <ErrorState error={query.error} />;
   const m = query.data.data;
@@ -92,6 +94,17 @@ export function MatchView({
           <ScoreDispute matchId={m.id} />
         )}
       </div>
+      {workDutyTeam(m, ids) ? (
+        <div className="mt-4">
+          <WorkDutyLabel team={workDutyTeam(m, ids)!} />
+        </div>
+      ) : (
+        m.work_team && (
+          <p className="mt-2 text-sm text-muted">
+            Work team (referee / scorekeeping): {m.work_team.team_name}
+          </p>
+        )
+      )}
 
       <Card className="mt-4 space-y-2">
         <p className="flex items-center gap-2">
