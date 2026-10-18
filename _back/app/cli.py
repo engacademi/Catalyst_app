@@ -14,8 +14,8 @@ import json
 import re
 import sys
 from datetime import date, datetime
-from zoneinfo import ZoneInfo
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
@@ -147,16 +147,19 @@ def timu_load(tid=None, get=fetch_text, today=None) -> list[Event]:
     else:
         tids = [str(tid)]
     events = []
-    for tid in tids:
+    for tournament_id in tids:
         info, _ = read_schedule(
-            get(f"https://www.timu.ca/scoreboards/schedule.php?tid={tid}")
+            get(f"https://www.timu.ca/scoreboards/schedule.php?tid={tournament_id}")
         )
-        title = f"{info['division']} {info['gender']} {info['tournament']} - {info['tier']}"
+        title = f"{info['division']} {info['gender']} {info['tournament']}"
+        # TIMU names often already end with the tier ("... Fall Exhibition").
+        if info["tier"] and not title.lower().endswith(info["tier"].lower()):
+            title = f"{title} - {info['tier']}"
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:100]
         with get_sessionmaker()() as db:
             # The TIMU tournament id is the identity; titles can change or share a slug.
             sources = list(db.scalars(select(Source).where(Source.mode == "timu")))
-            matching = [s for s in sources if s.config.get("tournament_id") == tid]
+            matching = [s for s in sources if s.config.get("tournament_id") == tournament_id]
             if len(matching) > 1:
                 raise ValueError(
                     "Multiple TIMU sources use this tournament; resolve them before loading"
@@ -197,10 +200,12 @@ def timu_load(tid=None, get=fetch_text, today=None) -> list[Event]:
                     event_id=event.id,
                     name="TIMU",
                     mode="timu",
-                    official_url=f"https://www.timu.ca/scoreboards/results.php?tid={tid}",
-                    config={"authorized": True, "tournament_id": tid},
+                    official_url=f"https://www.timu.ca/scoreboards/results.php?tid={tournament_id}",
+                    config={"authorized": True, "tournament_id": tournament_id},
                 )
                 db.add(source)
+            # Polling picks up times and results as TIMU publishes them.
+            source.config = {**source.config, "auto_sync": True}
             db.commit()
             result = sync_source(source.id)
             if not result["ok"]:

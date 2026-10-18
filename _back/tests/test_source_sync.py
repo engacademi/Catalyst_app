@@ -222,3 +222,26 @@ def test_timu_load_builds_upcoming_events_from_recordings_and_is_idempotent(
     assert db.scalar(select(func.count()).select_from(Event)) == 1
     assert db.scalar(select(func.count()).select_from(Source)) == 1
     assert db.scalar(select(func.count()).select_from(ChangeEvent)) == changes
+
+
+def test_timu_load_keeps_title_tier_once_and_turns_on_polling(db, monkeypatch):
+    from app.adapters.timu import read_timu
+    from app.cli import timu_load
+    from app.modules import sync
+    from tests_unit.test_sources import timu_recorded
+
+    monkeypatch.setattr(
+        sync, "fetch_snapshot", lambda mode, config: read_timu(config, get=timu_recorded)
+    )
+    [event] = timu_load("4196", get=timu_recorded)
+    assert event.title == "18U Girls Storm Ice Fall Exhibition"
+    assert event.slug == "18u-girls-storm-ice-fall-exhibition"
+    source = db.scalar(select(Source).where(Source.event_id == event.id))
+    assert source.config["auto_sync"] is True
+
+    # A source loaded before polling was switched on gets it on refresh.
+    source.config = {k: v for k, v in source.config.items() if k != "auto_sync"}
+    db.commit()
+    timu_load("4196", get=timu_recorded)
+    db.expire_all()
+    assert db.get(Source, source.id).config["auto_sync"] is True
