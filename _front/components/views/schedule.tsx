@@ -104,8 +104,8 @@ export function ScheduleView() {
   const today = dateKey(new Date().toISOString());
   const initialDay = rows.find(
     (r) =>
-      (r.match.estimated_start ?? r.match.scheduled_start ?? "") >=
-      new Date().toISOString(),
+      Date.parse(r.match.estimated_start ?? r.match.scheduled_start ?? "") >=
+      new Date().getTime(),
   )?.match;
   const first =
     start ||
