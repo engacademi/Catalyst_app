@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
-from app.models import Source
+from app.models import Source, utcnow
 from tests.conftest import ADMIN
 
 
@@ -47,6 +47,54 @@ def test_paused_source_does_not_request_upstream(client, db, demo, monkeypatch):
     )
 
 
+def test_pausing_live_source_warns_attendees_at_once(client, db, demo):
+    source = db.scalar(select(Source).where(Source.event_id == demo.id))
+    source.mode = "aes"
+    source.config = {"authorized": True, "event_key": "key", "last_sync_success": True}
+    source.last_successful_check_at = utcnow()
+    db.commit()
+
+    def freshness():
+        detail = client.get("/v1/events/demo-championships").json()
+        return next(s for s in detail["sources"] if s["id"] == str(source.id))
+
+    assert freshness()["freshness"] == "current"
+    response = client.patch(
+        f"/v1/admin/sources/{source.id}", json={"status": "paused"}, headers=ADMIN
+    )
+    assert response.status_code == 200
+    assert freshness()["freshness"] == "paused"
+    # Retained schedule stays visible, and cards carry the source's last check.
+    # The demo has two feeds; check a match from the paused one.
+    match = next(
+        m
+        for m in client.get("/v1/events/demo-championships/matches").json()["data"]
+        if m["source"]["id"] == str(source.id)
+    )
+    assert match["source"]["freshness"] == "paused"
+    assert match["source"]["last_checked_at"] == freshness()["last_checked_at"]
+
+
+def test_auto_sync_toggle_keeps_source_config(client, db, demo):
+    source = db.scalar(select(Source).where(Source.event_id == demo.id))
+    source.mode = "aes"
+    source.config = {"authorized": True, "event_key": "key"}
+    db.commit()
+    response = client.patch(
+        f"/v1/admin/sources/{source.id}",
+        json={"auto_sync": True, "expected_check_interval_minutes": 5},
+        headers=ADMIN,
+    )
+    data = response.json()["data"]
+    assert (data["auto_sync"], data["check_interval_minutes"]) == (True, 5)
+    db.expire_all()
+    assert db.get(Source, source.id).config == {
+        "authorized": True,
+        "event_key": "key",
+        "auto_sync": True,
+    }
+
+
 def test_aes_load_builds_event_from_recordings_and_is_idempotent(
     client, db, monkeypatch
 ):
@@ -60,6 +108,8 @@ def test_aes_load_builds_event_from_recordings_and_is_idempotent(
         sync, "fetch_snapshot", lambda mode, config: read_aes(config, get=recorded())
     )
     event = aes_load(AES_KEY, get=recorded())
+    loaded = db.scalar(select(Source).where(Source.event_id == event.id))
+    assert loaded.config["auto_sync"] is True
     listed = next(
         e for e in client.get("/v1/events").json()["data"] if e["slug"] == event.slug
     )
@@ -149,7 +199,9 @@ def test_aes_loader_coexists_with_mobile_seed_and_preserves_staff_metadata(
     assert (venue.city, venue.latitude, venue.longitude) == ("Toronto", 43.63, -79.41)
     assert not db.get(Event, event.id).is_demo
     assert set(db.scalars(select(Event.id))) == seeded_event_ids | {event.id}
-    assert seed_testing(db) == []
+    # Rebuilds reuse the synthetic events' ids and leave the AES event alone.
+    assert event.id not in {e.id for e in seed_testing(db)}
+    assert set(db.scalars(select(Event.id))) == seeded_event_ids | {event.id}
     listed = next(
         e for e in client.get("/v1/events").json()["data"] if e["id"] == str(event.id)
     )
@@ -321,3 +373,95 @@ def test_timu_load_keeps_title_tier_once_and_turns_on_polling(db, monkeypatch):
     timu_load("4196", get=timu_recorded)
     db.expire_all()
     assert db.get(Source, source.id).config["auto_sync"] is True
+
+
+def _load_recorded_aes(monkeypatch, snapshot=None):
+    from app.adapters.aes import read_aes
+    from app.cli import aes_load
+    from app.modules import sync
+    from tests_unit.test_sources import AES_KEY, recorded
+
+    monkeypatch.setattr(
+        sync,
+        "fetch_snapshot",
+        lambda mode, config: (snapshot or read_aes)(config, get=recorded()),
+    )
+    return aes_load(AES_KEY, get=recorded())
+
+
+def test_failed_refresh_rolls_back_metadata_and_entries_together(
+    client, db, monkeypatch
+):
+    from app.adapters.aes import read_aes
+    from app.models import Division
+    from app.modules import imports, sync
+
+    event = _load_recorded_aes(monkeypatch)
+    teams = client.get(f"/v1/events/{event.slug}/teams").json()["data"]
+    divisions = db.scalar(
+        select(func.count()).select_from(Division).where(Division.event_id == event.id)
+    )
+
+    def changed(config, get):
+        snap = read_aes({**config, "last_sync_success": False}, get=get)
+        snap.divisions.append({"name": "Upstream Ghost", "code": "G", "external_id": "g"})
+        for entry in snap.entries:
+            entry["team_name"] += " (renamed)"
+        return snap
+
+    def broken(*args):
+        raise ValueError("matches failed mid-refresh")
+
+    from tests_unit.test_sources import recorded
+
+    monkeypatch.setattr(
+        sync, "fetch_snapshot", lambda mode, config: changed(config, recorded())
+    )
+    monkeypatch.setattr(imports, "_commit_matches", broken)
+    source = db.scalar(select(Source).where(Source.event_id == event.id))
+    result = sync.sync_source(source.id)
+    assert result == {"ok": False, "message": "matches failed mid-refresh"}
+
+    db.expire_all()
+    assert client.get(f"/v1/events/{event.slug}/teams").json()["data"] == teams
+    assert (
+        db.scalar(
+            select(func.count())
+            .select_from(Division)
+            .where(Division.event_id == event.id)
+        )
+        == divisions
+    )
+    source = db.get(Source, source.id)
+    assert source.status == "unavailable"
+    assert source.last_error == "matches failed mid-refresh"
+
+
+def test_aes_partial_set_score_reaches_the_api_as_pending(client, db, monkeypatch):
+    import json
+
+    from app.adapters.aes import read_aes
+    from tests_unit.test_sources import AES_KEY, recorded
+
+    def partial(url):
+        data = json.loads(recorded()(url))
+        if url.endswith("/poolsheet/-50024"):
+            match = data["Matches"][0]
+            match["FirstTeamWon"] = match["SecondTeamWon"] = False
+            match["Sets"][1]["SecondTeamScore"] = None
+        return json.dumps(data)
+
+    event = _load_recorded_aes(
+        monkeypatch, lambda config, get: read_aes(config, get=partial)
+    )
+    match_id = json.loads(partial(f"x{AES_KEY}/poolsheet/-50024"))["Matches"][0][
+        "MatchId"
+    ]
+    matches = client.get(
+        f"/v1/events/{event.slug}/matches", params={"limit": 200}
+    ).json()["data"]
+    match = next(m for m in matches if m["source_match_id"] == str(match_id))
+    first, second = match["sets"][:2]
+    assert first["home"] is not None and first["away"] is not None
+    assert second["home"] is not None and second["away"] is None
+    assert match["result_state"] != "final"

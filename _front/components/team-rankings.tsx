@@ -28,7 +28,7 @@ export function TeamRankings({
     refetchInterval: 30_000,
   });
   if (query.isPending) return <Loading label="Loading rankings" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const divisions = new Map<
     string,
     {

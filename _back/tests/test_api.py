@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -54,11 +55,41 @@ def test_my_day_merges_two_sources_and_dedupes(client, db, demo):
     assert data["assumed_match_minutes"] == 60
 
 
+def test_work_duty_names_the_followed_work_team(client, db, demo):
+    worker = entry_id(db, "Lakeshore Thunder")
+    duty = next(
+        m
+        for m in db.scalars(select(Match).where(Match.status == "scheduled"))
+        if worker not in {str(p.entry_id) for p in m.participants}
+    )
+    duty.work_entry_id = uuid.UUID(worker)
+    db.commit()
+    team = client.get(f"/v1/entries/{worker}").json()["data"]
+    listed = next(m for m in team["matches"] if m["id"] == str(duty.id))
+    assert listed["work_team"] == {"entry_id": worker, "team_name": "Lakeshore Thunder"}
+    day = client.get(
+        "/v1/events/demo-championships/my-day", params={"entry_ids": worker}
+    ).json()["data"]
+    # The demo seed gives Lakeshore Thunder a work duty of its own as well.
+    assert str(duty.id) in {m["id"] for m in day["work_duties"]}
+    assert {m["work_team"]["team_name"] for m in day["work_duties"]} == {
+        "Lakeshore Thunder"
+    }
+    # Matches without a work team assignment carry no work team.
+    unassigned = {
+        str(m.id) for m in db.scalars(select(Match).where(Match.work_entry_id.is_(None)))
+    }
+    assert all(
+        m["work_team"] is None for m in team["matches"] if m["id"] in unassigned
+    )
+
+
 def test_public_roster_omits_withheld_photo(client, db, demo):
     team = client.get(f"/v1/entries/{entry_id(db, 'Lakeshore Thunder')}").json()["data"]
     players = team["roster"]["players"]
     assert len(players) == 10
-    assert all(p["photo_url"] is None for p in players)
+    # Player 7's photo was supplied without approval; the approved ones are public.
+    assert [p["jersey"] for p in players if p["photo_url"] is None] == [7]
     assert set(players[0]) == {"jersey", "display_name", "position", "photo_url"}
     # A team with no approved roster shows no athletes at all.
     assert (
@@ -240,8 +271,44 @@ def test_demo_reset_deletes_cleanly(client, db, demo):
         headers=ADMIN,
     )
     fresh = seed(db, reset=True)
-    assert fresh.id != demo.id
+    # The event row is kept, so staff grants and links survive the rebuild.
+    assert fresh.id == demo.id
     assert (
         client.get("/v1/events/demo-championships").json()["data"]["counts"]["entries"]
         == 12
+    )
+
+
+def test_match_list_date_window_bounds_calendar_fetches(client, demo):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    url = "/v1/events/demo-championships/matches"
+    everything = client.get(url, params={"limit": 200}).json()
+    assert "total_all_dates" not in everything
+
+    def local_day(m):
+        start = m["estimated_start"] or m["scheduled_start"]
+        tz = ZoneInfo(m["timezone"])
+        return datetime.fromisoformat(start).astimezone(tz).date().isoformat()
+
+    timed = [m for m in everything["data"] if m["scheduled_start"]]
+    day = local_day(timed[0])
+    expected = {m["id"] for m in timed if local_day(m) == day}
+    window = client.get(url, params={"from": day, "to": day, "limit": 200}).json()
+    assert {m["id"] for m in window["data"]} == expected
+    assert window["total_all_dates"] == len(everything["data"])
+
+    unscheduled = {m["id"] for m in everything["data"] if not m["scheduled_start"]}
+    with_waiting = client.get(
+        url,
+        params={"from": day, "to": day, "include_unscheduled": "true", "limit": 200},
+    ).json()
+    assert {m["id"] for m in with_waiting["data"]} >= expected | unscheduled
+
+    later = client.get(url, params={"from": "2001-01-01", "to": "2001-01-02"}).json()
+    assert later["data"] == [] and later["total_all_dates"] == len(everything["data"])
+    assert (
+        client.get(url, params={"from": "2001-01-02", "to": "2001-01-01"}).status_code
+        == 422
     )

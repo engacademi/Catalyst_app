@@ -54,6 +54,34 @@ def _mapping(
     )
 
 
+# Registration exports use their own team IDs. Staff map them to event entries once per
+# source; the mapping is kept so the next export of the same system needs no re-entry.
+REGISTRATION_TEAM = "registration_team"
+
+
+def remember_registration_team(
+    db: Session, source_id: uuid.UUID, external_id: str, entry_id: uuid.UUID
+) -> None:
+    saved = db.scalar(
+        select(ExternalMapping).where(
+            ExternalMapping.source_id == source_id,
+            ExternalMapping.entity_type == REGISTRATION_TEAM,
+            ExternalMapping.external_id == external_id,
+        )
+    )
+    if saved is None:
+        db.add(
+            ExternalMapping(
+                source_id=source_id,
+                entity_type=REGISTRATION_TEAM,
+                external_id=external_id,
+                canonical_id=entry_id,
+            )
+        )
+    else:
+        saved.canonical_id = entry_id
+
+
 def _division(db: Session, event_id: uuid.UUID, name: str) -> Division | None:
     return db.scalar(
         select(Division).where(Division.event_id == event_id, Division.name == name)
@@ -86,7 +114,9 @@ def stage_import(
     content: bytes,
     options: dict[str, Any],
     actor_id: uuid.UUID | None,
+    commit: bool = True,
 ) -> ImportBatch:
+    """Stage a batch. `commit=False` only flushes, so a caller can apply several atomically."""
     settings = get_settings()
     if len(content) > settings.import_max_bytes:
         raise HTTPException(
@@ -147,7 +177,7 @@ def stage_import(
         },
     )
     db.add(batch)
-    db.commit()
+    db.commit() if commit else db.flush()
     return batch
 
 
@@ -319,14 +349,21 @@ def _stage_rosters(
         jerseys = [p.data["jersey"] for p in members if p.data["jersey"] is not None]
         if len(jerseys) != len(set(jerseys)):
             errors.append("jersey numbers repeat within the team")
-        mapped = (options or {}).get("team_mapping", {}).get(external_id)
-        entry_id = (
-            uuid.UUID(mapped)
-            if mapped
-            else (
+        submitted = (options or {}).get("team_mapping", {}).get(external_id)
+        remembered = (
+            _mapping(db, source.id, REGISTRATION_TEAM, external_id)
+            if external_id
+            else None
+        )
+        if submitted:
+            entry_id, mapping_source = uuid.UUID(submitted), "submitted"
+        elif remembered:
+            entry_id, mapping_source = remembered, "remembered"
+        else:
+            entry_id = (
                 _mapping(db, source.id, "entry", external_id) if external_id else None
             )
-        )
+            mapping_source = "source_id" if entry_id else None
         if entry_id and not db.scalar(
             select(EventEntry.id).where(
                 EventEntry.id == entry_id, EventEntry.event_id == event.id
@@ -353,6 +390,12 @@ def _stage_rosters(
             None,
         )
         withheld = sum(1 for p in members if p.data.get("photo_withheld"))
+        if team_photo:
+            team_photo_status = "approved"
+        elif any(p.data.get("team_photo_withheld") for p in members):
+            team_photo_status = "withheld"
+        else:
+            team_photo_status = "none"
         row = {
             "row": members[0].row,
             "external_id": external_id,
@@ -363,7 +406,12 @@ def _stage_rosters(
                 "entry_id": str(entry_id) if entry_id else None,
                 "players": players,
                 "team_photo_url": team_photo,
+                "team_photo_status": team_photo_status,
                 "photos_withheld": withheld,
+                "mapping_source": mapping_source,
+                "previous_entry_id": str(remembered)
+                if remembered and entry_id != remembered
+                else None,
             },
         }
         if not errors:
@@ -380,8 +428,13 @@ def _stage_rosters(
 
 
 def commit_import(
-    db: Session, batch_id: uuid.UUID, actor_id: uuid.UUID | None, request_id: str | None
+    db: Session,
+    batch_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
+    request_id: str | None,
+    commit: bool = True,
 ) -> ImportBatch:
+    """Apply a staged batch. `commit=False` leaves the transaction open for the caller."""
     batch = db.scalar(
         select(ImportBatch).where(ImportBatch.id == batch_id).with_for_update()
     )
@@ -406,7 +459,7 @@ def commit_import(
             **batch.summary,
             "rejected_reason": "source changed since preview",
         }
-        db.commit()
+        db.commit() if commit else db.flush()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "The source changed since this preview. Upload the file again.",
@@ -452,13 +505,17 @@ def commit_import(
             },
         )
     )
-    db.commit()
+    db.commit() if commit else db.flush()
     return batch
 
 
 def _commit_entries(
     db: Session, event: Event, source: Source, batch: ImportBatch, actor_id
 ) -> int:
+    # Synthetic demo events derive ids from the external ids, so a rebuilt demo keeps the
+    # team and division ids that devices already follow.
+    namespace = batch.options.get("id_namespace")
+    stable = (lambda key: uuid.uuid5(uuid.UUID(namespace), key)) if namespace else None
     for row in batch.rows:
         if row["action"] == "unchanged":
             continue
@@ -468,10 +525,13 @@ def _commit_entries(
             division = Division(
                 event_id=event.id, name=d["division"], code=d.get("division_code")
             )
+            if stable:
+                division.id = stable(f"division:{d['division']}")
             db.add(division)
             db.flush()
         if row["action"] == "add":
             entry = EventEntry(
+                id=stable(f"entry:{row['external_id']}") if stable else uuid.uuid4(),
                 event_id=event.id,
                 team_name=d["team_name"],
                 club_name=d["club_name"],
@@ -557,9 +617,13 @@ def _commit_rosters(
 ) -> int:
     review_ref = batch.options.get("consent_review_ref")
     for row in batch.rows:
+        d = row["data"]
+        if d.get("mapping_source") == "submitted":
+            remember_registration_team(
+                db, source.id, row["external_id"], uuid.UUID(d["entry_id"])
+            )
         if row["action"] == "unchanged":
             continue
-        d = row["data"]
         entry_id = uuid.UUID(d["entry_id"])
         latest_version = db.scalar(
             select(func.max(RosterPublication.version)).where(
@@ -589,6 +653,8 @@ def _commit_rosters(
                     "source": source.name,
                     "import_batch": str(batch.id),
                     "photos_withheld": d.get("photos_withheld", 0),
+                    "team_photo": d.get("team_photo_status")
+                    or ("approved" if d.get("team_photo_url") else "none"),
                     "state": "pending",
                     "required": batch.options.get("require_review", False),
                 },

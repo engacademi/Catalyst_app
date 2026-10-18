@@ -1,6 +1,10 @@
 """Management commands.
 
     python -m app.cli seed [--reset]
+    python -m app.cli seed-testing
+    python -m app.cli demo-reset
+    python -m app.cli demo-playoffs
+    python -m app.cli demo-outage [--restore]
     python -m app.cli grant --subject user_2abc --role admin
     python -m app.cli grant --subject user_2abc --role staff --event demo-championships
     python -m app.cli aes-load <event_key>
@@ -29,7 +33,7 @@ from app.adapters.timu import INDEX_URL, read_schedule, upcoming_tids
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
 from app.modules.geocode import geocode_venues
-from app.seed import TZ, seed
+from app.seed import TZ, demo_summary, publish_playoff_draw, seed, set_feed_outage
 
 
 def grant(
@@ -134,6 +138,8 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
                 config={"authorized": True, "event_key": event_key},
             )
             db.add(source)
+        # Polling keeps scores and court changes current, as TIMU and MyTeam.click do.
+        source.config = {**source.config, "auto_sync": True}
         db.commit()
         result = sync_source(source.id)
         if not result["ok"]:
@@ -308,7 +314,22 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser(
         "seed-testing",
-        help="Add varied testing tournaments and a complete staff showcase without resetting data",
+        help="Rebuild the demo event and two test tournaments around the current time; add the staff showcase and sync OVA sponsor cards",
+    )
+    sub.add_parser(
+        "demo-reset",
+        help="Rebuild the demo event around the current time, keeping its grants",
+    )
+    sub.add_parser(
+        "demo-playoffs",
+        help="Demo step 5: the simulated sources fill the medal-match placeholders",
+    )
+    outage_cmd = sub.add_parser(
+        "demo-outage",
+        help="Demo step 9: make the demo's feed A fail its refresh",
+    )
+    outage_cmd.add_argument(
+        "--restore", action="store_true", help="Bring feed A back and refresh it"
     )
     seed_cmd = sub.add_parser("seed", help="Load the synthetic demo event")
     seed_cmd.add_argument(
@@ -349,7 +370,27 @@ def main() -> None:
 
         with get_sessionmaker()() as db:
             events = seed_testing(db)
-            print(f"Testing tournaments added: {len(events)}")
+            print(f"Synthetic events rebuilt: {len(events)}")
+            print("\n".join(demo_summary(db)))
+    elif args.command == "demo-reset":
+        with get_sessionmaker()() as db:
+            seed(db, reset=True)
+            print("\n".join(demo_summary(db)))
+    elif args.command == "demo-playoffs":
+        with get_sessionmaker()() as db:
+            emitted = publish_playoff_draw(db)
+            print(f"Playoff draw published: {emitted} updates")
+    elif args.command == "demo-outage":
+        with get_sessionmaker()() as db:
+            result = set_feed_outage(db, down=not args.restore)
+        if args.restore:
+            print(
+                "Feed A restored"
+                if result["ok"]
+                else f"Feed A still failing: {result['message']}"
+            )
+        else:
+            print(f"Feed A refresh failed as intended: {result.get('message')}")
     elif args.command == "seed":
         with get_sessionmaker()() as db:
             event = seed(db, reset=args.reset)

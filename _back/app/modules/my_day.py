@@ -49,11 +49,13 @@ def build_my_day(
         for entry_id in _followed_in(m, followed):
             next_by_entry.setdefault(str(entry_id), str(m.id))
 
+    # Only matches a followed team plays in can clash; a followed division's other
+    # matches run on parallel courts by design.
     window = timedelta(minutes=assumed_minutes)
     conflicts: list[dict] = []
     group: list[Match] = []
     group_end: datetime | None = None
-    for m in timed:
+    for m in (m for m in timed if _followed_in(m, followed)):
         start = start_at(m)
         if group and group_end and start < group_end:
             group.append(m)

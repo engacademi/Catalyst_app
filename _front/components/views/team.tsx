@@ -7,6 +7,7 @@ import { UserRound } from "lucide-react";
 import { useEntry } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
 import { FollowButton } from "../follow-button";
+import { FollowNextSteps } from "../my-day-links";
 import { FreshnessNote } from "../freshness";
 import { MatchCard } from "../match-card";
 import { Card, EmptyState, ErrorState, Loading, SectionTitle } from "../ui";
@@ -22,7 +23,7 @@ export function TeamView({
   const query = useEntry(entryId);
   const { ids } = useFollows(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading team" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const team = query.data.data;
 
   return (
@@ -42,6 +43,12 @@ export function TeamView({
           teamName={team.team_name}
         />
       </div>
+
+      <FollowNextSteps
+        eventId={eventId}
+        entryId={team.id}
+        teamName={team.team_name}
+      />
 
       {team.roster?.team_photo_url && (
         <div className="relative mt-4 aspect-video overflow-hidden rounded-xl border border-border bg-background">

@@ -30,6 +30,7 @@ from app.models import (
     Division,
     Event,
     EventEntry,
+    ExternalMapping,
     GuideItem,
     ImportBatch,
     Match,
@@ -40,7 +41,9 @@ from app.models import (
     utcnow,
 )
 from app.modules import projections as P
+from app.modules.announcements import deliver_due
 from app.modules.imports import commit_import, stage_import
+from app.modules.sponsors import engagement_report
 from app.modules.matches import (
     MATCH_STATUSES,
     apply_match_state,
@@ -305,6 +308,8 @@ class SourcePatch(BaseModel):
     status: Literal["active", "paused", "unavailable"] | None = None
     official_url: HttpUrl | None = None
     expected_check_interval_minutes: int | None = Field(None, ge=1, le=1440)
+    # Merged into config so the toggle can't clobber keys like event_key.
+    auto_sync: bool | None = None
 
 
 @router.post("/events/{event_id}/sources", status_code=201)
@@ -332,8 +337,12 @@ def update_source(
 ) -> dict:
     source = get_owned(db, principal, Source, source_id)
     before = source.status
-    for key, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    auto_sync = changes.pop("auto_sync", None)
+    for key, value in changes.items():
         setattr(source, key, str(value) if key == "official_url" and value else value)
+    if auto_sync is not None:
+        source.config = {**source.config, "auto_sync": auto_sync}
     audit(
         db,
         request,
@@ -584,20 +593,13 @@ def publish_announcement(
     if a.state == "published":
         return {"data": P.announcement_admin(a)}
     old = a.revision
+    event = db.get(Event, a.event_id)
     a.state = "published"
-    a.publish_at = a.publish_at or P.event_now(db.get(Event, a.event_id))
+    a.publish_at = a.publish_at or P.event_now(event)
     a.revision += 1
-    db.add(
-        ChangeEvent(
-            event_id=a.event_id,
-            entity_type="announcement",
-            entity_id=a.id,
-            entity_revision=a.revision,
-            event_type="announcement_published",
-            diff={"title": a.title, "category": a.category},
-            entry_ids=[str(a.entry_id)] if a.entry_id else [],
-        )
-    )
+    db.flush()
+    # A scheduled notice enters the change feed when its time comes, not now.
+    deliver_due(db, event)
     audit(
         db, request, principal, "announcement.publish", a.event_id, a, old, a.revision
     )
@@ -744,6 +746,13 @@ def admin_partners(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
         .order_by(PartnerCard.sort)
     )
     return {"data": [P.partner_public(p) for p in rows]}
+
+
+@router.get("/events/{event_id}/sponsor-report")
+def sponsor_report(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
+    """Views, clicks and click-through rate per sponsor card, split by placement."""
+    event = staff_event(db, principal, event_id)
+    return {"data": engagement_report(db, event)}
 
 
 @router.post("/events/{event_id}/partners", status_code=201)
@@ -1003,6 +1012,64 @@ def refresh_source(source_id: str, db: DB, principal: CurrentPrincipal):
     return {"data": sync_source(source_id, actor_id)}
 
 
+@router.get("/sources/{source_id}/registration-mappings")
+def registration_mappings(source_id: str, db: DB, principal: CurrentPrincipal):
+    from app.modules.imports import REGISTRATION_TEAM
+
+    source = get_owned(db, principal, Source, source_id)
+    rows = db.execute(
+        select(ExternalMapping, EventEntry.team_name)
+        .join(EventEntry, EventEntry.id == ExternalMapping.canonical_id)
+        .where(
+            ExternalMapping.source_id == source.id,
+            ExternalMapping.entity_type == REGISTRATION_TEAM,
+            EventEntry.event_id == source.event_id,
+        )
+        .order_by(ExternalMapping.external_id)
+    )
+    return {
+        "data": [
+            {
+                "external_id": m.external_id,
+                "entry_id": str(m.canonical_id),
+                "team_name": team_name,
+            }
+            for m, team_name in rows
+        ]
+    }
+
+
+@router.delete("/sources/{source_id}/registration-mappings/{external_id}")
+def forget_registration_mapping(
+    source_id: str, external_id: str, db: DB, principal: CurrentPrincipal
+):
+    from app.modules.imports import REGISTRATION_TEAM
+
+    source = get_owned(db, principal, Source, source_id)
+    mapping = db.scalar(
+        select(ExternalMapping).where(
+            ExternalMapping.source_id == source.id,
+            ExternalMapping.entity_type == REGISTRATION_TEAM,
+            ExternalMapping.external_id == external_id,
+        )
+    )
+    if mapping is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mapping not found")
+    db.delete(mapping)
+    db.add(
+        AuditEntry(
+            actor_user_id=principal.user.id,
+            action="registration_mapping.forget",
+            event_id=source.event_id,
+            target_type="source",
+            target_id=str(source.id),
+            summary={"external_id": external_id},
+        )
+    )
+    db.commit()
+    return {"data": {"external_id": external_id}}
+
+
 @router.post("/registration/columns")
 async def registration_columns(
     principal: CurrentPrincipal, file: Annotated[UploadFile, File()]
@@ -1256,7 +1323,7 @@ def court_notice(
                     entity_type="match",
                     entity_id=m.id,
                     entity_revision=m.revision,
-                    event_type="delay_notice",
+                    event_type="delay_notice" if body.delay_minutes else "delay_cleared",
                     entry_ids=[str(p.entry_id) for p in m.participants if p.entry_id],
                     diff={
                         "minutes": body.delay_minutes,

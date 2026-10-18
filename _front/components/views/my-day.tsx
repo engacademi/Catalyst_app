@@ -7,6 +7,7 @@ import { useEvent, useMyDay } from "@/lib/queries";
 import { WelcomeBanner } from "../brand";
 import { MatchCard } from "../match-card";
 import { FreshnessNote } from "../freshness";
+import { MyEventLinks } from "../my-day-links";
 import {
   Card,
   EmptyState,
@@ -55,10 +56,11 @@ export function MyDayView({ eventId }: { eventId: string }) {
       <PageTitle subtitle="Your teams first. The wider competition just below.">
         My Day
       </PageTitle>
+      <MyEventLinks eventId={eventId} current="my-day" />
       {!!directTeamIds.length &&
         (query.isPending ? (
           <Loading label="Building your day" />
-        ) : query.error ? (
+        ) : query.error && !query.data ? (
           <ErrorState error={query.error} />
         ) : (
           day && (
@@ -121,12 +123,12 @@ export function MyDayView({ eventId }: { eventId: string }) {
                   <ul className="match-list">
                     {day.work_duties.map((m) => (
                       <li key={m.id}>
-                        <Card className="border-info/30">
-                          <p className="mb-2 text-sm font-semibold text-info">
-                            Work duty · referee / scorekeeping
-                          </p>
-                          <MatchCard match={m} eventId={eventId} showDay />
-                        </Card>
+                        <MatchCard
+                          match={m}
+                          eventId={eventId}
+                          followed={directTeamIds}
+                          showDay
+                        />
                       </li>
                     ))}
                   </ul>
@@ -272,7 +274,7 @@ function DivisionContents({ eventId, id }: { eventId: string; id: string }) {
     <div className="px-4 pb-4">
       {query.isPending ? (
         <Loading />
-      ) : query.error ? (
+      ) : query.error && !query.data ? (
         <ErrorState error={query.error} />
       ) : day ? (
         <>

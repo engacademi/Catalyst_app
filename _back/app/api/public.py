@@ -2,10 +2,11 @@
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -25,14 +26,17 @@ from app.models import (
     Venue,
 )
 from app.modules import projections as P
+from app.modules.announcements import audiences, deliver_due, is_visible
 from app.modules.calendar import build_ics
 from app.modules.matches import (
     STATUS_GROUPS,
     latest_changes,
     match_load_options,
     match_query,
+    within_dates,
 )
 from app.modules.my_day import build_my_day
+from app.modules.sponsors import record_engagement
 
 router = APIRouter(prefix="/v1", tags=["public"])
 DB = Annotated[Session, Depends(get_db)]
@@ -211,7 +215,8 @@ def discovery_sponsors(request: Request, db: DB) -> Response:
             PartnerCard.active.is_(True),
             PartnerCard.kind == "sponsor",
         )
-        .order_by(PartnerCard.sort, PartnerCard.name)
+        # Deterministic so the ribbon credits views and clicks to the same card each time.
+        .order_by(PartnerCard.sort, PartnerCard.name, Event.start_date, PartnerCard.id)
     )
     seen = set()
     data = []
@@ -220,6 +225,49 @@ def discovery_sponsors(request: Request, db: DB) -> Response:
             data.append(P.partner_public(row))
             seen.add(row.name)
     return json_response(request, {"data": data}, max_age=60)
+
+
+class EngagementItem(BaseModel):
+    partner_id: uuid.UUID
+    placement: Literal["ribbon", "guide", "message"]
+    action: Literal["view", "click"]
+
+
+class EngagementIn(BaseModel):
+    items: list[EngagementItem] = Field(min_length=1, max_length=40)
+
+
+@router.post("/sponsor-engagement", status_code=status.HTTP_204_NO_CONTENT)
+def sponsor_engagement(body: EngagementIn, db: DB) -> Response:
+    """Count sponsor views and outbound clicks. Anonymous aggregates only.
+
+    The browser sends a view once per session per placement and a click before it
+    navigates. Unknown, hidden or non-sponsor cards are ignored rather than reported, so
+    the endpoint reveals nothing about which ids exist.
+    """
+    ids = {item.partner_id for item in body.items}
+    cards = {
+        card.id: card
+        for card in db.scalars(
+            select(PartnerCard)
+            .join(Event, Event.id == PartnerCard.event_id)
+            .where(
+                PartnerCard.id.in_(ids),
+                PartnerCard.kind == "sponsor",
+                PartnerCard.active.is_(True),
+                Event.status == "published",
+            )
+        )
+    }
+    record_engagement(
+        db,
+        [
+            (cards[item.partner_id], item.placement, item.action)
+            for item in body.items
+            if item.partner_id in cards
+        ],
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/events/{event_ref}")
@@ -299,10 +347,17 @@ def list_matches(
     venue_id: str | None = None,
     division_id: str | None = None,
     day: date | None = Query(None, alias="date"),
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
+    include_unscheduled: bool = False,
     cursor: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ) -> Response:
     event = load_event(db, event_ref)
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "from must not be after to"
+        )
     stmt = match_query(
         event.id,
         entry_ids=selection(db, event, entry_ids, division_ids)[0]
@@ -340,6 +395,20 @@ def list_matches(
                 ),
             )
         )
+    windowed = date_from is not None or date_to is not None
+    # A date window can be empty while the draw is published; say how many exist overall.
+    all_dates = (
+        db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
+        if windowed and cursor == 0
+        else None
+    )
+    stmt = within_dates(
+        stmt,
+        date_from,
+        date_to,
+        event.timezone,
+        include_unscheduled=include_unscheduled,
+    )
     matches = list(db.scalars(stmt.offset(cursor).limit(limit + 1)))
     next_cursor = cursor + limit if len(matches) > limit else None
     payload = {
@@ -349,6 +418,8 @@ def list_matches(
         "status_groups": list(STATUS_GROUPS),
         "sources": sources_envelope(event),
     }
+    if all_dates is not None:
+        payload["total_all_dates"] = all_dates
     return json_response(request, payload)
 
 
@@ -416,6 +487,20 @@ def my_day(
     return json_response(request, payload)
 
 
+def delay_state(change: ChangeEvent, now: datetime, match: Match | None) -> str:
+    """Whether a court delay notice in the feed still applies: active, expired,
+    cleared, or superseded by a later notice on the match's court."""
+    if change.event_type == "delay_cleared" or not change.diff.get("minutes"):
+        return "cleared"
+    expires = change.diff.get("expires_at")
+    if not expires or datetime.fromisoformat(expires) <= now:
+        return "expired"
+    current = (match.court.delay or {}) if match and match.court else {}
+    if current.get("expires_at") != expires:
+        return "superseded"
+    return "active"
+
+
 @router.get("/events/{event_ref}/changes")
 def change_feed(
     event_ref: str,
@@ -427,6 +512,8 @@ def change_feed(
 ) -> Response:
     """Public change feed. Guests filter it on the device by their followed entries."""
     event = load_event(db, event_ref)
+    if deliver_due(db, event):
+        db.commit()
     rows = list(
         db.scalars(
             select(ChangeEvent)
@@ -442,7 +529,6 @@ def change_feed(
     has_more = len(rows) > limit
     rows = rows[:limit]
     next_before = rows[-1].id if has_more and rows else None
-    latest_id = rows[0].id if rows else after
     match_ids = [r.entity_id for r in rows if r.entity_type == "match"]
     matches = (
         list(
@@ -455,6 +541,7 @@ def change_feed(
         if match_ids
         else []
     )
+    by_id = {m.id: m for m in matches}
     announcement_ids = [r.entity_id for r in rows if r.entity_type == "announcement"]
     now = P.event_now(event)
     notices = (
@@ -466,16 +553,14 @@ def change_feed(
         if announcement_ids
         else []
     )
-    visible = {
-        a.id: a
-        for a in notices
-        if a.state == "published"
-        and (not a.publish_at or a.publish_at <= now)
-        and (not a.expire_at or a.expire_at > now)
-    }
+    visible = {a.id: a for a in notices if is_visible(a, now)}
+    audience = audiences(db, list(visible.values()))
     rows = [
         r for r in rows if r.entity_type != "announcement" or r.entity_id in visible
     ]
+    # The cursor only moves past what a guest can see now, so nothing hidden is ever
+    # marked as read.
+    latest_id = max((r.id for r in rows), default=after)
     payload = {
         "data": [
             {
@@ -483,6 +568,16 @@ def change_feed(
                 "division_id": str(visible[r.entity_id].division_id)
                 if r.entity_id in visible and visible[r.entity_id].division_id
                 else None,
+                **(
+                    {"entry_ids": audience[r.entity_id]}
+                    if r.entity_id in visible
+                    else {}
+                ),
+                **(
+                    {"notice": delay_state(r, now, by_id.get(r.entity_id))}
+                    if r.event_type in ("delay_notice", "delay_cleared")
+                    else {}
+                ),
             }
             for r in rows
         ],
@@ -512,7 +607,16 @@ def announcements(event_ref: str, request: Request, db: DB) -> Response:
         )
         .order_by(Announcement.publish_at.desc().nulls_last())
     )
-    return json_response(request, {"data": [P.announcement_public(a) for a in rows]})
+    rows = list(rows)
+    audience = audiences(db, rows)
+    return json_response(
+        request,
+        {
+            "data": [
+                {**P.announcement_public(a), "entry_ids": audience[a.id]} for a in rows
+            ]
+        },
+    )
 
 
 @router.get("/events/{event_ref}/guide")

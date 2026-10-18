@@ -1,13 +1,16 @@
 from datetime import timedelta
+
 from sqlalchemy import select
+
 from app.models import (
+    Announcement,
     Division,
     EventEntry,
     Match,
-    RosterPublication,
     RoleGrant,
-    User,
+    RosterPublication,
     Source,
+    User,
     utcnow,
 )
 from tests.conftest import ADMIN, OFFICIAL
@@ -70,6 +73,71 @@ def test_expired_and_future_announcements_absent_from_feed(client, db, demo):
             "announcements"
         ]
     )
+
+
+def test_scheduled_notice_becomes_unread_when_it_publishes(client, db, demo):
+    future = utcnow() + timedelta(hours=2)
+    a = client.post(
+        f"/v1/admin/events/{demo.id}/announcements",
+        headers=ADMIN,
+        json={"title": "Awards at 4", "body": "Main gym", "publish_at": future.isoformat()},
+    ).json()["data"]
+    client.post(f"/v1/admin/announcements/{a['id']}/publish", headers=ADMIN)
+    before = client.get("/v1/events/demo-championships/changes").json()
+    assert before["latest_id"] == max(c["id"] for c in before["data"])
+    seen = before["latest_id"]
+
+    announcement = db.get(Announcement, a["id"])
+    announcement.publish_at = utcnow() - timedelta(minutes=1)
+    db.commit()
+    after = client.get(
+        "/v1/events/demo-championships/changes", params={"after": seen}
+    ).json()
+    delivered = [c for c in after["data"] if c["entity_id"] == a["id"]]
+    assert len(delivered) == 1 and delivered[0]["id"] > seen
+    assert after["latest_id"] == delivered[0]["id"]
+    # Reading the feed again doesn't deliver the notice twice.
+    again = client.get("/v1/events/demo-championships/changes").json()
+    assert sum(c["entity_id"] == a["id"] for c in again["data"]) == 1
+
+
+def test_division_notice_reaches_followers_of_its_teams(client, db, demo):
+    division = db.scalar(select(Division).where(Division.event_id == demo.id))
+    team = db.scalar(select(EventEntry).where(EventEntry.division_id == division.id))
+    a = client.post(
+        f"/v1/admin/events/{demo.id}/announcements",
+        headers=ADMIN,
+        json={"title": "Warm-up moved", "body": "Gym B", "division_id": str(division.id)},
+    ).json()["data"]
+    client.post(f"/v1/admin/announcements/{a['id']}/publish", headers=ADMIN)
+    change = client.get("/v1/events/demo-championships/changes").json()["data"][0]
+    assert change["entity_id"] == a["id"] and str(team.id) in change["entry_ids"]
+    notice = next(
+        n
+        for n in client.get("/v1/events/demo-championships/announcements").json()[
+            "data"
+        ]
+        if n["id"] == a["id"]
+    )
+    assert str(team.id) in notice["entry_ids"]
+
+
+def test_cleared_delay_notice_is_labelled(client, db, demo):
+    match = db.scalar(
+        select(Match).where(Match.status == "scheduled", Match.court_id.is_not(None))
+    )
+    for minutes in (15, 0):
+        client.patch(
+            f"/v1/admin/courts/{match.court_id}/notice",
+            headers=ADMIN,
+            json={"delay_minutes": minutes},
+        )
+    feed = client.get("/v1/events/demo-championships/changes").json()["data"]
+    mine = [c for c in feed if c["entity_id"] == str(match.id)]
+    assert [(c["event_type"], c["notice"]) for c in mine[:2]] == [
+        ("delay_cleared", "cleared"),
+        ("delay_notice", "superseded"),
+    ]
 
 
 def test_vendor_csv_fallback_stays_snapshot(client, db, demo):
@@ -191,6 +259,128 @@ def test_registration_mapping_coach_review_and_publish(client, db, demo):
             publish, headers=ADMIN, json={"consent_review_ref": "Approved-2026"}
         ).status_code
         == 409
+    )
+
+
+REGISTRATION_COLUMNS = {
+    "external_entry_id": "Team ID",
+    "jersey": "Number",
+    "display_name": "Display Name",
+    "team_photo_url": "Team Photo",
+    "team_photo_approved": "Team Photo OK",
+}
+
+
+def _registration_upload(client, demo, source, body, teams=None):
+    import json
+
+    data = {
+        "event_id": str(demo.id),
+        "source_id": str(source.id),
+        "kind": "rosters",
+        "column_mapping": json.dumps(REGISTRATION_COLUMNS),
+    }
+    if teams is not None:
+        data["team_mapping"] = json.dumps(teams)
+    result = client.post(
+        "/v1/admin/imports",
+        headers=ADMIN,
+        data=data,
+        files={"file": ("registration.csv", body)},
+    )
+    assert result.status_code == 201, result.text
+    return result.json()["data"]
+
+
+def test_registration_team_mappings_are_remembered_per_source(client, db, demo):
+    first, second = db.scalars(
+        select(EventEntry).where(EventEntry.event_id == demo.id).limit(2)
+    ).all()
+    source = db.scalar(select(Source).where(Source.event_id == demo.id))
+    coach = User(clerk_subject="coach-photo")
+    db.add(coach)
+    db.flush()
+    db.add(
+        RoleGrant(
+            user_id=coach.id,
+            organization_id=demo.organization_id,
+            event_id=demo.id,
+            entry_id=first.id,
+            role="coach",
+        )
+    )
+    db.commit()
+    header = b"Team ID,Number,Display Name,Team Photo,Team Photo OK\n"
+    export = header + b"REG-77,4,Example A.,https://example.org/team.jpg,no\n"
+
+    preview = _registration_upload(
+        client, demo, source, export, {"REG-77": str(first.id)}
+    )
+    assert preview["rows"][0]["data"]["mapping_source"] == "submitted"
+    assert preview["rows"][0]["data"]["team_photo_status"] == "withheld"
+    commit = client.post(f"/v1/admin/imports/{preview['id']}/commit", headers=ADMIN)
+    assert commit.status_code == 200, commit.text
+
+    saved = client.get(
+        f"/v1/admin/sources/{source.id}/registration-mappings", headers=ADMIN
+    ).json()["data"]
+    # The demo seed's own registration import is remembered alongside this one.
+    assert {
+        "external_id": "REG-77",
+        "entry_id": str(first.id),
+        "team_name": first.team_name,
+    } in saved
+
+    # The next export of the same system needs no team mapping at all.
+    again = _registration_upload(
+        client, demo, source, header + b"REG-77,4,Example A.,,\n", {}
+    )
+    row = again["rows"][0]
+    assert row["action"] != "error", row
+    assert row["data"]["mapping_source"] == "remembered"
+    assert row["data"]["entry_id"] == str(first.id)
+
+    # Staff can still change it; the preview names the mapping it replaces.
+    changed = _registration_upload(
+        client, demo, source, header + b"REG-77,5,Example B.,,\n",
+        {"REG-77": str(second.id)},
+    )
+    data = changed["rows"][0]["data"]
+    assert data["mapping_source"] == "submitted"
+    assert data["previous_entry_id"] == str(first.id)
+    client.post(f"/v1/admin/imports/{changed['id']}/commit", headers=ADMIN)
+    saved = client.get(
+        f"/v1/admin/sources/{source.id}/registration-mappings", headers=ADMIN
+    ).json()["data"]
+    assert [m["entry_id"] for m in saved if m["external_id"] == "REG-77"] == [
+        str(second.id)
+    ]
+
+    # Forgetting it brings back the unknown-ID error.
+    forget = client.delete(
+        f"/v1/admin/sources/{source.id}/registration-mappings/REG-77", headers=ADMIN
+    )
+    assert forget.status_code == 200
+    unknown = _registration_upload(
+        client, demo, source, header + b"REG-77,5,Example B.,,\n", {}
+    )
+    assert unknown["rows"][0]["action"] == "error"
+
+    # The coach sees that the team photo was withheld for missing approval.
+    reviews = client.get(
+        "/v1/me/roster-reviews", headers={"X-Dev-User": "coach-photo"}
+    ).json()["data"]
+    assert reviews[0]["team_photo_status"] == "withheld"
+    assert reviews[0]["team_photo_url"] is None
+
+
+def test_registration_mappings_require_an_event_grant(client, db, demo):
+    source = db.scalar(select(Source).where(Source.event_id == demo.id))
+    url = f"/v1/admin/sources/{source.id}/registration-mappings"
+    assert client.get(url, headers={"X-Dev-User": "no-grants"}).status_code == 403
+    assert (
+        client.delete(f"{url}/REG-1", headers={"X-Dev-User": "no-grants"}).status_code
+        == 403
     )
 
 

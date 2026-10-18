@@ -73,6 +73,10 @@ def my_roster_reviews(
                 "players": r.public_players,
                 "review": r.review,
                 "state": r.state,
+                "team_photo_url": r.team_photo_url,
+                # Older drafts predate the recorded status; a missing URL there is "none".
+                "team_photo_status": r.review.get("team_photo")
+                or ("approved" if r.team_photo_url else "none"),
             }
             for r in rows
         ]

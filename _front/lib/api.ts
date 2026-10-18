@@ -5,6 +5,7 @@ export const API_BASE = "/api/backend";
 export type Freshness =
   | "current"
   | "stale"
+  | "paused"
   | "unavailable"
   | "imported_snapshot"
   | "no_data"
@@ -20,6 +21,8 @@ export type SourceInfo = {
   last_import_at: string | null;
   upstream_updated_at: string | null;
   freshness: Freshness;
+  auto_sync?: boolean;
+  check_interval_minutes?: number;
 };
 
 export type Division = { id: string; name: string; code: string | null };
@@ -88,6 +91,8 @@ export type Change = {
   entry_ids: string[];
   simulated: boolean;
   occurred_at: string;
+  /** Change feed only: whether a court delay notice still applies. */
+  notice?: "active" | "expired" | "cleared" | "superseded";
 };
 
 export type Match = {
@@ -108,6 +113,9 @@ export type Match = {
     expires_at: string;
   } | null;
   expected_start_soon?: boolean;
+  /** The team the source assigns to referee and keep score, if any. */
+  work_entry_id?: string | null;
+  work_team?: { entry_id: string; team_name: string } | null;
   timezone: string;
   court: {
     id: string;
@@ -124,6 +132,8 @@ export type Match = {
     name: string;
     mode: string;
     observed_at: string;
+    /** The source's last successful check; unchanged checks don't touch observed_at. */
+    last_checked_at?: string | null;
     source_updated_at: string | null;
     freshness: Freshness;
   };
@@ -137,6 +147,8 @@ export type Announcement = {
   body: string;
   entry_id: string | null;
   division_id: string | null;
+  /** Teams the notice reaches; a division notice lists every team in it. */
+  entry_ids?: string[];
   publish_at: string | null;
   expire_at: string | null;
   revision: number;

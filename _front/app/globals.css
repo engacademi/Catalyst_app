@@ -389,6 +389,24 @@ caption {
   padding: 7px 20px;
   font-size: 11px;
 }
+/* Stale, paused or failed source: retained schedule stays visible underneath. */
+.source-warning {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.source-warning p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
 .event-main {
   max-width: 1184px;
   margin: 0 auto;
@@ -471,6 +489,25 @@ caption {
   border-color: #91ae8a;
   box-shadow: 0 10px 30px -16px #164c3b45;
   transform: translateY(-2px);
+}
+.match-card-duty {
+  border-color: #245677;
+  border-left-width: 6px;
+  background: var(--info-soft);
+}
+.match-duty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--info);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.match-duty .match-duty-team {
+  display: block;
+  font-size: 0.75rem;
 }
 .match-card-cancelled {
   border-color: #a12d244d;
@@ -1850,6 +1887,15 @@ caption {
   color: var(--muted);
   margin: -5px 0;
 }
+.calendar-duty {
+  align-self: flex-start;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--info-soft);
+  color: var(--info);
+  font-size: 10px;
+  font-weight: 700;
+}
 .calendar-match-status {
   font-size: 10px;
   text-transform: capitalize;
@@ -2110,6 +2156,69 @@ button[aria-pressed="true"] svg,
   gap: 14px;
   margin-top: 20px;
 }
+.my-day-panel {
+  margin-top: 22px;
+  padding: 22px;
+  border-radius: 28px;
+  border: 1px solid #d7e2cc;
+  background: linear-gradient(135deg, #e8f0e3, #f5f8ef);
+}
+.my-day-panel h2 {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.my-day-panel-copy {
+  margin-top: 6px;
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.my-day-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.my-day-panel .secondary-link,
+.follow-next-steps .secondary-link,
+nav.my-day-panel-actions .secondary-link {
+  background: var(--surface);
+}
+.my-day-unread {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: white;
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+}
+.follow-next-steps {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid #d7e2cc;
+  background: var(--brand-soft);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-strong);
+}
+.follow-next-steps .my-day-panel-actions {
+  margin-top: 12px;
+}
+nav.my-day-panel-actions {
+  margin-top: 0;
+}
+@media (max-width: 420px) {
+  .my-day-panel-actions > .primary-link {
+    flex-basis: 100%;
+  }
+}
 .tournament-save {
   display: flex;
   gap: 8px;
@@ -2268,6 +2377,15 @@ button[aria-pressed="true"] svg,
   margin-top: auto;
   font-size: 9px;
   color: #405744;
+}
+.time-block-duty {
+  border-left: 4px solid var(--info);
+}
+.time-block-duty-label {
+  font-size: 9px;
+  font-weight: 750;
+  color: var(--info);
+  text-transform: uppercase;
 }
 .time-block-official {
   font-size: 8px;
@@ -2540,25 +2658,59 @@ select:focus-visible {
 .sponsor-track {
   display: flex;
   width: max-content;
-  animation: sponsor-scroll 32s linear infinite;
+  animation: sponsor-scroll calc(var(--sponsor-count, 6) * 4.5s) linear infinite;
 }
 .sponsor-group {
   display: flex;
-  gap: 22px;
+  gap: 14px;
   align-items: center;
-  padding: 12px 11px;
+  margin: 0;
+  padding: 10px 7px;
+  list-style: none;
 }
+/* Logos sit on white tiles in every theme: they are drawn for light backgrounds. */
 .sponsor-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 165px;
-  padding: 17px 22px;
+  width: 156px;
+  height: 68px;
+  padding: 10px 16px;
   font-weight: 750;
-  color: #406352;
-  border: 1px solid rgb(70 105 86 / 12%);
+  color: #22392e;
+  border: 1px solid rgb(70 105 86 / 14%);
   border-radius: 14px;
-  background: rgb(255 255 255 / 60%);
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(20 40 30 / 6%);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+a.sponsor-mark:hover,
+a.sponsor-mark:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgb(20 40 30 / 12%);
+}
+.sponsor-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sponsor-name {
+  white-space: nowrap;
+}
+.guide-sponsor-logo {
+  flex: none;
+  width: 116px;
+  height: 52px;
+  padding: 6px 10px;
+}
+@media (prefers-color-scheme: dark) {
+  .sponsor-mark {
+    border-color: rgb(255 255 255 / 10%);
+    box-shadow: none;
+  }
 }
 .sponsor-window:hover .sponsor-track,
 .sponsor-window:focus-within .sponsor-track {
@@ -2616,6 +2768,9 @@ select:focus-visible {
   background: linear-gradient(125deg, white, #f2f7f4);
   border-radius: 20px;
 }
+.schedule-list .match-card.match-card-duty {
+  background: var(--info-soft);
+}
 .footer-socials {
   display: flex;
   flex-wrap: wrap;
@@ -2647,6 +2802,9 @@ select:focus-visible {
   .sponsor-track,
   .volleyball-background svg {
     animation: none;
+  }
+  .sponsor-mark {
+    transition: none;
   }
   .event-tile,
   .ui-card,
@@ -2748,16 +2906,6 @@ select:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 3px 10px;
-}
-.sponsor-mark img {
-  max-height: 36px;
-  width: auto;
-  object-fit: contain;
-}
-.sponsor-mark:has(img) {
-  flex-direction: column;
-  gap: 8px;
-  font-size: 11px;
 }
 
 /* Let rounded card shadows finish inside the horizontal scroll area. */
@@ -2921,6 +3069,16 @@ select[class] {
 }
 .court-overview {
   margin-top: 14px;
+}
+.court-area + .court-area {
+  margin-top: 14px;
+}
+.court-area-heading {
+  margin-top: 9px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--brand);
+  overflow-wrap: anywhere;
 }
 .court-map {
   display: grid;
@@ -3787,10 +3945,24 @@ select[class] {
 }
 .team-picker-option {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 12px 4px;
   border-bottom: 1px solid var(--border);
+}
+/* Name and details link share a row until larger text needs the space,
+   then the link wraps below instead of overflowing the viewport. */
+.team-picker-option > label,
+.team-picker-option > label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.team-picker-option > label {
+  flex: 1 1 10rem;
+}
+.team-picker-option > a {
+  flex-shrink: 0;
 }
 .team-picker-option input {
   accent-color: var(--brand);
@@ -3838,3 +4010,47 @@ select[class] {
 .dispute-dialog p { font-size: 14px; margin: 12px 0; }
 .dispute-dialog textarea { display: block; width: 100%; margin: 8px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; }
 .dispute-close { position: absolute; right: 12px; top: 12px; }
+
+/* Saved-data notice: shown whenever the screen is not a live answer from the API.
+   It floats above the mobile dock so it stays visible while scrolling. */
+.connection-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  z-index: 45;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  border: 1px solid #24567733;
+  border-radius: 18px;
+  box-shadow: 0 8px 28px #183c2926;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  background: var(--info-soft);
+  color: var(--info);
+}
+.connection-banner svg {
+  flex-shrink: 0;
+}
+.connection-banner--offline,
+.connection-banner--weak {
+  border-color: #80501533;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+@media (min-width: 1000px) {
+  .connection-banner {
+    bottom: 24px;
+  }
+}
+/* The sponsor toast shares the bottom edge on phones; stack the notice above it. */
+@media (max-width: 999px) {
+  body:has(.sponsor-toast) .connection-banner {
+    bottom: calc(262px + env(safe-area-inset-bottom));
+  }
+}

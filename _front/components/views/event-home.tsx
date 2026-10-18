@@ -11,7 +11,9 @@ import { FreshnessNote } from "../freshness";
 import { SaveEventButton } from "../event-tile";
 import { MatchCard } from "../match-card";
 import { usePreference } from "@/lib/preferences";
+import { isRelevantAnnouncement } from "@/lib/relevance";
 import { CourtOverview } from "../court-overview";
+import { MyDayPanel } from "../my-day-links";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
 export function EventHomeView({ eventId }: { eventId: string }) {
@@ -25,19 +27,22 @@ export function EventHomeView({ eventId }: { eventId: string }) {
     new URLSearchParams({ status: "upcoming" }),
   );
   const [attended, setAttended] = usePreference<string[]>("attended", []);
+  const [saved] = usePreference<string[]>("saved-events", []);
   const event = useEvent(eventId);
   const announcements = useAnnouncements(eventId);
   const { ids, divisionIds } = useFollows(eventId);
 
   if (!hydrated || event.isPending) return <Loading label="Loading event" />;
-  if (event.error) return <ErrorState error={event.error} />;
+  if (event.error && !event.data) return <ErrorState error={event.error} />;
   const e = event.data.data;
+  const audience = {
+    savedEvent: saved.includes(eventId),
+    entryIds: ids,
+    divisionIds,
+  };
   const notices =
-    announcements.data?.data.filter(
-      (a) =>
-        (!a.entry_id && !a.division_id) ||
-        (!!a.entry_id && ids.includes(a.entry_id)) ||
-        (!!a.division_id && divisionIds.includes(a.division_id)),
+    announcements.data?.data.filter((a) =>
+      isRelevantAnnouncement(a, audience),
     ) ?? [];
   const comingUp =
     upcoming.data?.data.filter((m) => {
@@ -83,6 +88,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           <Check size={15} aria-hidden /> Attended
         </button>
       </div>
+      <MyDayPanel eventId={eventId} />
       {e.counts.matches > 0 && (
         <>
           <SectionTitle
@@ -99,7 +105,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           </SectionTitle>
           {live.isPending ? (
             <Loading label="Loading live matches" />
-          ) : live.error ? (
+          ) : live.error && !live.data ? (
             <ErrorState error={live.error} />
           ) : live.data?.data.length ? (
             <>
@@ -130,7 +136,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
       <SectionTitle>Coming up</SectionTitle>
       {upcoming.isPending ? (
         <Loading label="Loading upcoming matches" />
-      ) : upcoming.error ? (
+      ) : upcoming.error && !upcoming.data ? (
         <ErrorState error={upcoming.error} />
       ) : comingUp.length ? (
         <ul className="event-carousel live-carousel">

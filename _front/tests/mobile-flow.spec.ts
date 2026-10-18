@@ -199,6 +199,7 @@ test("saved tournament populates calendar, persists, hides and restores", async 
     fullPage: true,
   });
 });
+
 test("location denial keeps Toronto and interests drive recommendations", async ({
   page,
 }) => {
@@ -239,6 +240,7 @@ test("location denial keeps Toronto and interests drive recommendations", async 
     fullPage: true,
   });
 });
+
 test("new public pages pass axe AA checks", async ({ page }) => {
   await setup(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -364,6 +366,7 @@ for (const width of [320, 390, 768]) {
     ).toBeTruthy();
   });
 }
+
 test("overview uses compact attendance and label actions without redundant tabs or banner", async ({
   page,
 }) => {
@@ -391,6 +394,7 @@ test("overview uses compact attendance and label actions without redundant tabs 
     ),
   ).toBeTruthy();
 });
+
 test("calendar uses scaled start times and separate overlap lanes", async ({
   page,
 }) => {
@@ -659,3 +663,302 @@ test("visibility popover has compact switches and working bulk controls", async 
   await panel.getByRole("button", { name: "Close visibility" }).click();
   await expect(panel).not.toBeVisible();
 });
+
+test("team followers get division notices and clear change wording", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  const at = new Date().toISOString();
+  const base = { entity_type: "match", entity_id: "m1", entry_ids: ["t1"] };
+  await page.route("**/v1/events/ontario-demo/changes*", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id: 4,
+            entity_type: "announcement",
+            entity_id: "a1",
+            division_id: "d1",
+            entry_ids: ["t1", "t2"],
+            event_type: "announcement_published",
+            diff: {},
+            occurred_at: at,
+            simulated: false,
+          },
+          {
+            ...base,
+            id: 3,
+            event_type: "delay_cleared",
+            diff: { minutes: 0 },
+            notice: "cleared",
+            occurred_at: at,
+            simulated: false,
+          },
+          {
+            ...base,
+            id: 2,
+            event_type: "delay_notice",
+            diff: { minutes: 20, expires_at: at },
+            notice: "expired",
+            occurred_at: at,
+            simulated: false,
+          },
+          {
+            ...base,
+            id: 1,
+            event_type: "time_changed",
+            diff: {
+              scheduled_start: [match.scheduled_start, match.scheduled_start],
+              estimated_start: [null, `${today}T23:20:00Z`],
+            },
+            occurred_at: at,
+            simulated: false,
+          },
+        ],
+        next_before: null,
+        matches: { m1: match },
+        announcements: {
+          a1: {
+            id: "a1",
+            category: "general",
+            title: "Division warm-up moved",
+            body: "Gym B",
+            entry_id: null,
+            division_id: "d1",
+            entry_ids: ["t1", "t2"],
+            publish_at: at,
+            expire_at: null,
+            revision: 1,
+          },
+        },
+        latest_id: 4,
+        divisions: {},
+        sources: [source],
+      },
+    }),
+  );
+  await page.addInitScript(() =>
+    localStorage.setItem("courtside:follows:ontario-demo", '["t1"]'),
+  );
+  await page.goto("/events/ontario-demo/updates");
+  await expect(page.getByText("Division warm-up moved")).toBeVisible();
+  await expect(page.getByText("Court delay cleared")).toBeVisible();
+  await expect(page.getByText(/Court delay: 0 minutes/)).toHaveCount(0);
+  await expect(page.getByText("Court delay notice (expired)")).toBeVisible();
+  await expect(page.getByText("Estimated start changed")).toBeVisible();
+  await expect(page.getByText(/Official time unchanged/)).toBeVisible();
+});
+
+test("overview and team follow lead to My event day, labels and updates", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  await page.route("**/v1/entries/t1", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          id: "t1",
+          team_name: "Northern Lights",
+          club_name: null,
+          division: null,
+          event,
+          roster: null,
+          matches: [match],
+        },
+        sources: [source],
+      },
+    }),
+  );
+  await page.goto("/events/ontario-demo");
+  const panel = page.getByRole("region", { name: "Make this event yours" });
+  await expect(
+    panel.getByRole("link", { name: "Find your teams" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/teams");
+  await expect(
+    panel.getByRole("link", { name: /Event updates/ }),
+  ).toHaveAttribute("href", "/events/ontario-demo/updates");
+  await page.goto("/events/ontario-demo/teams/t1");
+  await page.getByRole("button", { name: "Follow Northern Lights" }).click();
+  await expect(
+    page.getByRole("link", { name: "Add a private label" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/my-teams");
+  await page.getByRole("link", { name: "Open My event day" }).click();
+  await expect(page).toHaveURL(/\/events\/ontario-demo\/my-day$/);
+  await page.goto("/events/ontario-demo");
+  const following = page.getByRole("region", { name: "Following 1 team" });
+  await expect(
+    following.getByRole("link", { name: "Open My event day" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/my-day");
+  await expect(
+    following.getByRole("link", { name: "My teams & labels" }),
+  ).toHaveAttribute("href", "/events/ontario-demo/my-teams");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth + 1,
+    ),
+  ).toBeTruthy();
+});
+
+test("follows saved under an event UUID move to the slug key", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("courtside:follows:e1", '["t1","division:d1"]');
+    localStorage.setItem("courtside:follows:ontario-demo", '["t2"]');
+    localStorage.setItem("courtside:label:e1:t1", "Maya");
+    localStorage.setItem("courtside:seen:e1", "4");
+  });
+  await page.goto("/profile");
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("courtside:follows:e1")),
+    )
+    .toBeNull();
+  const stored = await page.evaluate(() => ({
+    follows: JSON.parse(
+      localStorage.getItem("courtside:follows:ontario-demo") ?? "[]",
+    ),
+    label: localStorage.getItem("courtside:label:ontario-demo:t1"),
+    seen: localStorage.getItem("courtside:seen:ontario-demo"),
+  }));
+  expect(stored.follows.sort()).toEqual(["division:d1", "t1", "t2"]);
+  expect(stored.label).toBe("Maya");
+  expect(stored.seen).toBe("4");
+});
+
+test("work duties are labelled on the schedule, matches and calendar", async ({
+  page,
+}) => {
+  await setup(page);
+  const duty = {
+    ...match,
+    id: "m2",
+    work_entry_id: "t9",
+    work_team: { entry_id: "t9", team_name: "Forest Hill Spikers" },
+  };
+  await page.route("**/v1/events/ontario-demo/matches?**", (route) =>
+    route.fulfill({
+      json: { data: [match, duty], sources: [source], next_cursor: null },
+    }),
+  );
+  await page.addInitScript(() =>
+    localStorage.setItem("courtside:follows:ontario-demo", '["t9"]'),
+  );
+  await page.goto("/schedule");
+  await expect(
+    page.getByRole("link", { name: /^Work duty for Forest Hill Spikers/ }),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "List", exact: true }).click();
+  const cards = page.locator(".schedule-list .match-card");
+  await expect(cards).toHaveCount(2);
+  await expect(page.locator(".match-card-duty")).toHaveCount(1);
+  await expect(page.locator(".match-card-duty")).toContainText(
+    "Work duty: referee / scorekeeping",
+  );
+  await expect(page.locator(".match-card-duty")).toContainText(
+    "Forest Hill Spikers officiates this match",
+  );
+  await page.goto("/events/ontario-demo/matches");
+  await expect(page.locator(".match-card-duty")).toHaveCount(1);
+});
+
+test("guide lists courts under their hall headings", async ({ page }) => {
+  await setup(page);
+  const court = (id: string, label: string, area: string | null) => ({
+    id,
+    label: area ? `${label} · ${area}` : label,
+    base_label: label,
+    area_label: area,
+  });
+  await page.route("**/v1/events/ontario-demo/guide", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          venues: [
+            {
+              id: "v1",
+              name: "Enercare Centre",
+              address: null,
+              accessible_entrance: null,
+              directions: null,
+              map_url: null,
+              courts: [
+                court("c1", "Court 1", "Hall A"),
+                court("c2", "Court 53", "Hall C"),
+                court("c3", "Court 2", "Hall A"),
+                court("c4", "Warm-up", null),
+              ],
+            },
+          ],
+          items: [],
+          partners: [],
+        },
+      },
+    }),
+  );
+  await page.goto("/events/ontario-demo/guide");
+  await expect(page.locator(".court-area-heading")).toHaveText([
+    "Hall A",
+    "Hall C",
+    "Other courts",
+  ]);
+  const hallA = page.getByRole("list", {
+    name: "Courts at Enercare Centre, Hall A",
+  });
+  await expect(hallA.getByRole("link")).toHaveCount(2);
+  await expect(
+    page.getByRole("link", { name: "Court 53 · Hall C: view matches" }),
+  ).toBeVisible();
+});
+
+for (const width of [320, 390]) {
+  test(`list rows reflow under 200% text at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await setup(page);
+    await page.route("**/v1/events/ontario-demo/teams?**", (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            {
+              id: "t1",
+              team_name: "Northern Lights Volleyball Club 16U Elite",
+              club_name: "Northern Lights",
+              division: { id: "d1", name: "16U Girls Division 1", code: "16U" },
+            },
+          ],
+          total: 1,
+        },
+      }),
+    );
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        document.documentElement.style.fontSize = "200%";
+      });
+    });
+    const fits = async (selector: string) => {
+      await expect(page.locator(selector).first()).toBeVisible();
+      const overflow = await page.evaluate(
+        (sel) =>
+          Math.max(
+            document.documentElement.scrollWidth,
+            ...[...document.querySelectorAll(sel)].map(
+              (el) => el.getBoundingClientRect().right,
+            ),
+          ),
+        selector,
+      );
+      expect(overflow).toBeLessThanOrEqual(width);
+    };
+    await page.goto("/events/ontario-demo/teams");
+    await page.locator(".team-picker summary").click();
+    await fits("li.team-picker-option");
+    await fits("li.team-picker-option a");
+    await page.goto("/events/ontario-demo/matches");
+    await fits(".match-card");
+  });
+}

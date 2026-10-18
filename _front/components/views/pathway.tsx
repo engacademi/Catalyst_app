@@ -57,7 +57,7 @@ export function PathwayView({ eventId }: { eventId: string }) {
           Match list
         </Link>
       </div>
-      {event.error || query.error ? (
+      {(event.error && !event.data) || (query.error && !query.data) ? (
         <ErrorState error={event.error || query.error} />
       ) : !division ? (
         <EmptyState title="No divisions published yet" />

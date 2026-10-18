@@ -17,6 +17,15 @@ if (
 }
 
 const nextConfig: NextConfig = {
+  async headers() {
+    // The offline service worker must update as soon as a deploy changes it.
+    return [
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+    ];
+  },
   async rewrites() {
     return [
       { source: "/api/backend/v1/:path*", destination: `${apiOrigin}/v1/:path*` },

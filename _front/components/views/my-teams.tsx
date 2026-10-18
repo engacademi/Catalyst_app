@@ -5,6 +5,7 @@ import { useFollows, useTeamLabel } from "@/lib/follows";
 import { useEntry, useEvent } from "@/lib/queries";
 import { Card, PageTitle, Loading, ErrorState } from "../ui";
 import { FollowButton } from "../follow-button";
+import { MyEventLinks } from "../my-day-links";
 export function MyTeamsView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
   const { directTeamIds, divisionIds, toggle } = useFollows(eventId);
@@ -15,6 +16,9 @@ export function MyTeamsView({ eventId }: { eventId: string }) {
       <PageTitle subtitle="One follow list for this event. Private labels stay on this device.">
         My teams
       </PageTitle>
+      {directTeamIds.length + divisionIds.length > 0 && (
+        <MyEventLinks eventId={eventId} current="my-teams" />
+      )}
       <Link
         href={`/events/${eventId}/teams`}
         className="mb-4 inline-flex min-h-11 items-center font-semibold text-brand underline"
@@ -64,7 +68,7 @@ function LabelEditor({ eventId, id }: { eventId: string; id: string }) {
     <Card>
       {entry.isPending ? (
         <Loading />
-      ) : entry.error ? (
+      ) : entry.error && !entry.data ? (
         <ErrorState error={entry.error} />
       ) : (
         <>

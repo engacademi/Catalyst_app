@@ -27,7 +27,21 @@
    They review at `/admin/roster-reviews`; staff then publish from **Rosters** with the consent-review reference.
 7. Grant officials with `--role official --event EVENT_SLUG`. Use **Assignments** for private management or **Imports → Private official assignments** for bulk imports.
 8. Configure court areas and notices in **Courts & clock**. Demo clock controls only appear for demo events.
-9. The synthetic seed includes `dev-admin`, `dev-official` and `dev-coach` for local development only. Existing seeded events can be reset with `seed --reset` **only when their synthetic data is disposable**; production Clerk role grants are separate.
+9. The synthetic seed includes `dev-admin`, `dev-official` and `dev-coach` for local development only. Synthetic events are rebuilt on every deploy (see Demo scenario below); their role grants are kept.
+
+## Demo scenario
+
+The demo event (`/events/demo-championships`) uses real dates. Every deploy runs `seed-testing`, which rebuilds it and the two test tournaments around the current time, and leaves real events alone. A rebuild keeps the event row, its role grants and its team ids, so staff access and device follows survive a redeploy. Times start from the current quarter hour, so a reset just before judging gives the best timing.
+
+Follow Lakeshore Thunder (label it "Maya's team") and Harbourfront Heat:
+
+- Step 2: My Day shows Maya's next match in about 45 minutes on "Court 3 · Hall C", a work duty refereeing Court 4 later, and an overlap later in the day.
+- Step 4: post a 20-minute delay on any Hall C court with "Apply to every court in this venue area". Maya's card shows the staff estimate, and My Day warns that it now overlaps Harbourfront Heat's next match.
+- Step 5: `python -m app.cli demo-playoffs` imports the simulated sources' playoff draw. It fills all six medal matches, so followers see "Next match set" in Updates. Running it again changes nothing.
+- Step 7: Harbourfront Heat's roster was imported from `_back/sample_data/demo_registration_export.csv` and waits as a draft with one photo withheld. `dev-coach` coaches that team locally; in production, grant a coach with the entry id that `demo-reset` prints. Lakeshore Thunder already has a published roster with approved photos and one withheld.
+- Step 9: `python -m app.cli demo-outage` makes "Simulated feed A" fail a real refresh. The schedule stays and the source shows as unavailable. `demo-outage --restore` brings it back.
+
+`python -m app.cli demo-reset` restores the whole scenario and prints the team ids. Run these commands in the API service shell (`railway ssh`).
 
 ## Assignment CSV
 

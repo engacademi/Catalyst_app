@@ -298,6 +298,7 @@ export function ContentPanel({ event }: { event: AdminEventData }) {
       <VenuesSection event={event} />
       <GuideSection event={event} />
       <PartnersSection event={event} />
+      <SponsorReportSection event={event} />
     </div>
   );
 }
@@ -701,6 +702,144 @@ function PartnersSection({ event }: { event: AdminEventData }) {
           </div>
         </form>
       </Card>
+    </section>
+  );
+}
+
+type SponsorReportRow = {
+  partner_id: string;
+  name: string;
+  logo_url: string | null;
+  active: boolean;
+  placements: Record<
+    "ribbon" | "guide" | "message",
+    { views: number; clicks: number }
+  >;
+  views: number;
+  clicks: number;
+  ctr: number | null;
+};
+
+function formatCtr(ctr: number | null) {
+  return ctr === null ? "–" : `${(ctr * 100).toFixed(1)}%`;
+}
+
+function SponsorReportSection({ event }: { event: AdminEventData }) {
+  const report = useAdminQuery<{ data: SponsorReportRow[] }>(
+    `/v1/admin/events/${event.id}/sponsor-report`,
+  );
+  const rows = report.data?.data ?? [];
+  const total = rows.reduce(
+    (sum, r) => ({ views: sum.views + r.views, clicks: sum.clicks + r.clicks }),
+    { views: 0, clicks: 0 },
+  );
+  return (
+    <section aria-label="Sponsor engagement">
+      <SectionTitle
+        action={
+          <SmallButton onClick={() => report.refetch()}>Refresh</SmallButton>
+        }
+      >
+        Sponsor engagement
+      </SectionTitle>
+      <p className="mb-2 text-xs text-muted">
+        Views count once per visitor session when a sponsor shows on screen in
+        the Discover ribbon, this event&apos;s venue page or a sponsor message.
+        Clicks count each visit to the sponsor&apos;s site. Counts are anonymous
+        totals; no personal data is collected.
+      </p>
+      {report.isPending ? (
+        <Loading label="Loading sponsor engagement" />
+      ) : report.error ? (
+        <ErrorState error={report.error} />
+      ) : rows.length === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">
+            No sponsor cards for this event yet. Add one above.
+          </p>
+        </Card>
+      ) : (
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-muted">
+              <tr>
+                <th scope="col" className="px-4 py-3">
+                  Sponsor
+                </th>
+                <th scope="col" className="px-3 py-3 text-right">
+                  Views
+                </th>
+                <th scope="col" className="px-3 py-3 text-right">
+                  Clicks
+                </th>
+                <th scope="col" className="px-3 py-3 text-right">
+                  CTR
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Ribbon · Venue · Message
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.partner_id} className="border-t border-border">
+                  <th scope="row" className="px-4 py-2 font-semibold">
+                    <span className="flex items-center gap-3">
+                      {r.logo_url && (
+                        <span className="sponsor-mark guide-sponsor-logo">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={r.logo_url} alt="" />
+                        </span>
+                      )}
+                      <span>
+                        {r.name}
+                        {!r.active && (
+                          <span className="ml-2 text-xs font-normal text-muted">
+                            hidden
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </th>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {r.views}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {r.clicks}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {formatCtr(r.ctr)}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-muted tabular-nums">
+                    {r.placements.ribbon.views}/{r.placements.ribbon.clicks} ·{" "}
+                    {r.placements.guide.views}/{r.placements.guide.clicks} ·{" "}
+                    {r.placements.message.views}/{r.placements.message.clicks}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-border font-semibold">
+                <th scope="row" className="px-4 py-3">
+                  All sponsors
+                </th>
+                <td className="px-3 py-3 text-right tabular-nums">
+                  {total.views}
+                </td>
+                <td className="px-3 py-3 text-right tabular-nums">
+                  {total.clicks}
+                </td>
+                <td className="px-3 py-3 text-right tabular-nums">
+                  {formatCtr(total.views ? total.clicks / total.views : null)}
+                </td>
+                <td className="px-4 py-3 text-xs font-normal text-muted">
+                  views/clicks
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </Card>
+      )}
     </section>
   );
 }

@@ -1,7 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Suspense, useEffect, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ConnectionBanner } from "@/components/connection-banner";
+import { OfflineShell } from "@/components/offline-shell";
+import { startOfflineCache } from "@/lib/offline-cache";
 
 let browserQueryClient: QueryClient | undefined;
 
@@ -27,5 +30,16 @@ function getQueryClient() {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={getQueryClient()}>{children}</QueryClientProvider>;
+  const client = getQueryClient();
+  // Restore after hydration so the first client render matches the server's loading state.
+  useEffect(() => startOfflineCache(client), [client]);
+  return (
+    <QueryClientProvider client={client}>
+      <Suspense fallback={null}>
+        <OfflineShell />
+        <ConnectionBanner />
+      </Suspense>
+      {children}
+    </QueryClientProvider>
+  );
 }

@@ -38,7 +38,7 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/api/public.py` | Public reads under `/v1` |
 | `app/api/admin.py` | Staff workspace under `/v1/admin` |
 | `app/api/me.py` | Signed-in user's own data (official assignments) |
-| `app/cli.py` | `seed`, `grant`, `aes-load`, `aes-discover`, `myteam-load`, `timu-load` and `geocode-venues` commands |
+| `app/cli.py` | `seed`, `seed-testing`, the `demo-*` demo transitions, `grant`, `aes-load`, `aes-discover`, `myteam-load`, `timu-load` and `geocode-venues` commands |
 | `sample_data/` | Example CSVs and the column reference |
 
 ## How data gets in
@@ -49,7 +49,7 @@ Rosters are published only with a consent review reference. Player photos appear
 
 AES JSON, TIMU HTML and MyTeam.click JSON adapters emit the same normalized rows as CSV imports and use the shared refresh/polling pipeline. Automatic polling requires both `authorized` and `auto_sync` in source configuration; `aes-load` performs an explicit refresh but does not enable automatic polling.
 
-To load a real event from AES, run `uv run python -m app.cli aes-load <event_key>` with the key from the AES event URL. It creates the event from AES (title, dates, venue from the event location, America/Toronto), adds an AES source with that `event_key`, syncs pool play into teams and matches. The event keeps AES's real dates and times. The AES key identifies subsequent refreshes even if the upstream title changes. A title/slug collision with another source is refused; connect the source explicitly through the staff workspace instead. Existing staff content and venue coordinates are preserved. Tests use the recorded Event 2 responses in `sample_data/aes_event2/` and never call AES.
+To load a real event from AES, run `uv run python -m app.cli aes-load <event_key>` with the key from the AES event URL. It creates the event from AES (title, dates, venue from the event location, America/Toronto), adds an AES source with that `event_key` and `auto_sync` on, syncs pool play into teams and matches. The event keeps AES's real dates and times. The AES key identifies subsequent refreshes even if the upstream title changes. A title/slug collision with another source is refused; connect the source explicitly through the staff workspace instead. Existing staff content and venue coordinates are preserved. Tests use the recorded Event 2 responses in `sample_data/aes_event2/` and never call AES.
 
 `uv run python -m app.cli aes-discover --year 2026` finds the events for you. It searches the public AES event listing for names containing "Ontario Championships", past and upcoming, and runs `aes-load` on each result's key. Re-running it refreshes the same events and adds any new ones AES has listed since. Without `--year` it loads every year AES lists. If one event fails to load, the command reports it, carries on with the rest, and exits non-zero. Tests use the recorded search in `sample_data/aes_search/`. Loading the four 2026 events from AES took about a minute.
 
@@ -70,12 +70,13 @@ Public, no token needed:
 - `GET /v1/events/{id}/changes?after=<cursor>` is the change feed that guests filter on their device
 - `GET /v1/events/{id}/announcements`, `GET /v1/events/{id}/guide`
 - `GET /v1/events/{id}/calendar.ics?entry_ids=`
+- `GET /v1/sponsors` lists sponsors for the Discover ribbon; `POST /v1/sponsor-engagement` counts anonymous sponsor views and clicks
 - `GET /v1/entries/{id}` returns the team, its approved roster and its matches
 - `GET /v1/matches/{id}` returns detail with change history
 
 Every schedule response carries a `sources` list with a freshness value. A CSV source always reports `imported_snapshot` and its import time, never "live".
 
-Staff, with a role grant: events, venues, sources, imports, announcements (draft, publish, archive), guide items, partner cards, roster publish and withdraw, audit log, and `simulate-change` for demo events.
+Staff, with a role grant: events, venues, sources, imports, announcements (draft, publish, archive), guide items, partner cards, sponsor engagement report, roster publish and withdraw, audit log, and `simulate-change` for demo events.
 
 Staff roles are granted only from the CLI:
 
@@ -86,7 +87,7 @@ uv run python -m app.cli grant --subject user_2xyz... --role staff --event demo-
 
 ## Compatibility with mobile flows (PRs 22 and 23)
 
-The `seed`, `seed-testing`, `grant` and `aes-load` commands coexist. Railway pre-deploy migrates through `0004` and seeds the two synthetic tournaments only; it does not fetch AES. Run `aes-load` explicitly for approved events. No additional migration or environment variable is required for AES.
+The `seed`, `seed-testing`, `grant` and `aes-load` commands coexist. Railway pre-deploy migrates and runs `seed-testing`, which rebuilds the synthetic demo event and the two test tournaments around the current time and adds the staff showcase once (see the demo scenario in `docs/implementation-workflows.md`); it never touches real events and does not fetch AES. Run `aes-load` explicitly for approved events. No additional migration or environment variable is required for AES.
 
 AES events use real dates and completed results, without a demo flag or replay clock. The April 2026 Championships therefore appears in Discover under Past or All dates, rather than Upcoming & ongoing. To include it in Nearby, use the staff venue editor to enter verified city/latitude/longitude. No coordinates are inferred from its name. PR 22's access controls also apply to AES events: local official-match edits return 409; update the schedule in AES and refresh. Staff can still edit venue, guide and sponsor content.
 

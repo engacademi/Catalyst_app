@@ -4,11 +4,13 @@ import { useHydrated } from "@/lib/hydration";
 import Link from "next/link";
 import { ArrowLeft, Clock, MapPin } from "lucide-react";
 import type { Change, Participant } from "@/lib/api";
+import { changeTitle, delayText, timeChangeText } from "@/lib/change-text";
 import { formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
 import { ScoreDispute } from "../score-dispute";
-import { FreshnessNote } from "../freshness";
-import { StatusBadge } from "../match-card";
+import { checkedLabel, FreshnessNote } from "../freshness";
+import { useFollows } from "@/lib/follows";
+import { StatusBadge, WorkDutyLabel, workDutyTeam } from "../match-card";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
 const LABELS: Record<string, string> = {
@@ -18,6 +20,8 @@ const LABELS: Record<string, string> = {
   result_posted: "Result posted",
   result_corrected: "Result corrected",
   participants_resolved: "Teams confirmed",
+  delay_notice: "Court delay notice",
+  delay_cleared: "Court delay cleared",
 };
 
 function describe(change: Change, timeZone: string): string {
@@ -26,7 +30,10 @@ function describe(change: Change, timeZone: string): string {
     case "court_changed":
       return `${d.court?.[0] ?? "No court"} → ${d.court?.[1] ?? "No court"}`;
     case "time_changed":
-      return `${formatTime(d.scheduled_start?.[0] as string | null, timeZone)} → ${formatTime(d.scheduled_start?.[1] as string | null, timeZone)}`;
+      return timeChangeText(change, timeZone);
+    case "delay_notice":
+    case "delay_cleared":
+      return delayText(change, timeZone);
     case "status_changed":
       return `${d.status?.[0]} → ${d.status?.[1]}`;
     default:
@@ -60,8 +67,9 @@ export function MatchView({
 }) {
   const hydrated = useHydrated();
   const query = useMatch(matchId);
+  const { ids } = useFollows(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading match" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const m = query.data.data;
 
   return (
@@ -86,6 +94,17 @@ export function MatchView({
           <ScoreDispute matchId={m.id} />
         )}
       </div>
+      {workDutyTeam(m, ids) ? (
+        <div className="mt-4">
+          <WorkDutyLabel team={workDutyTeam(m, ids)!} />
+        </div>
+      ) : (
+        m.work_team && (
+          <p className="mt-2 text-sm text-muted">
+            Work team (referee / scorekeeping): {m.work_team.team_name}
+          </p>
+        )
+      )}
 
       <Card className="mt-4 space-y-2">
         <p className="flex items-center gap-2">
@@ -188,7 +207,7 @@ export function MatchView({
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
               >
                 <span className="font-semibold">
-                  {LABELS[h.event_type] ?? h.event_type}
+                  {changeTitle(h) ?? LABELS[h.event_type] ?? h.event_type}
                 </span>
                 {h.simulated && (
                   <span className="text-muted"> (simulated)</span>
@@ -204,8 +223,11 @@ export function MatchView({
       )}
 
       <p className="mt-6 text-xs text-muted">
-        From {m.source.name}. Seen by Olley{" "}
-        {formatRelative(m.source.observed_at)}
+        From {m.source.name}.{" "}
+        {checkedLabel(
+          m.source.freshness,
+          m.source.last_checked_at ?? m.source.observed_at,
+        )}
         {m.source.source_updated_at
           ? `; source updated ${formatRelative(m.source.source_updated_at)}`
           : "; source update time unknown"}

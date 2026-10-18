@@ -689,3 +689,44 @@ test("delay cards link to full alerts and completed matches offer dispute report
   await page.getByRole("button",{name:"Close dispute dialog"}).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
+
+test("paused source warns attendees right away while the schedule stays visible", async ({
+  page,
+}) => {
+  await fixtures(page);
+  const paused = {
+    ...source,
+    id: "aes-1",
+    name: "AES",
+    mode: "aes",
+    status: "paused",
+    freshness: "paused",
+  };
+  await page.route(`**/v1/events/${eventId}`, (route) =>
+    route.fulfill({ json: { data: event, sources: [paused] } }),
+  );
+  await page.route(`**/v1/events/${eventId}/matches*`, (route) =>
+    route.fulfill({
+      json: {
+        data: [{ ...match, source: { ...match.source, freshness: "paused" } }],
+        next_cursor: null,
+        sources: [paused],
+      },
+    }),
+  );
+  await page.goto(`${base}/matches`);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Updates from AES are paused" }),
+  ).toBeVisible();
+  await expect(page.getByText(entries[0].team_name).first()).toBeVisible();
+  await page.route("**/v1/matches/m1", (route) =>
+    route.fulfill({
+      json: {
+        data: { ...match, source: { ...match.source, freshness: "paused" }, event, history: [] },
+        sources: [paused],
+      },
+    }),
+  );
+  await page.goto(`${base}/matches/m1`);
+  await expect(page.getByText(/Updates paused · last checked/).first()).toBeVisible();
+});

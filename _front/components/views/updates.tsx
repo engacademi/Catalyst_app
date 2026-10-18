@@ -6,10 +6,12 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { Megaphone, RefreshCw } from "lucide-react";
 import type { Change, Match } from "@/lib/api";
-import { useFollows, useLastSeen } from "@/lib/follows";
+import { changeTitle, delayText, timeChangeText } from "@/lib/change-text";
+import { useEventKey, useFollows, useLastSeen } from "@/lib/follows";
 import { formatRelative, formatTime } from "@/lib/format";
 import { useSearchParams } from "next/navigation";
 import { useMatch, useChanges } from "@/lib/queries";
+import { isRelevantChange } from "@/lib/relevance";
 import { LoadMore } from "../load-more";
 import { Badge, EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
@@ -22,7 +24,6 @@ const TITLES: Record<string, string> = {
   participants_resolved: "Next match set",
   details_changed: "Bracket details updated",
   work_assigned: "Work duty assigned",
-  delay_notice: "Court delay notice",
 };
 
 function matchLine(m: Match | undefined) {
@@ -33,14 +34,13 @@ function matchLine(m: Match | undefined) {
 function detail(c: Change, m: Match | undefined): string {
   const d = c.diff as Record<string, [unknown, unknown]>;
   const tz = m?.timezone ?? "America/Toronto";
-  if (c.event_type === "delay_notice")
-    return `Court delay: ${String(c.diff.minutes)} minutes. Official start remains unchanged.`;
+  if (c.event_type === "delay_notice" || c.event_type === "delay_cleared")
+    return delayText(c, tz);
   if (c.event_type === "participants_resolved")
     return `Next match set: ${m?.round_label ?? "Upcoming match"}, ${m?.court?.label ?? "court pending"}, ${formatTime(m?.scheduled_start ?? null, tz)}.`;
   if (c.event_type === "court_changed")
     return `Now on ${d.court?.[1] ?? "a court to be confirmed"} (was ${d.court?.[0] ?? "unassigned"}).`;
-  if (c.event_type === "time_changed")
-    return `Now ${formatTime(d.scheduled_start?.[1] as string | null, tz)} (was ${formatTime(d.scheduled_start?.[0] as string | null, tz)}).`;
+  if (c.event_type === "time_changed") return timeChangeText(c, tz);
   if (c.event_type === "status_changed")
     return `Status: ${String(d.status?.[1]).replace("_", " ")}.`;
   if (c.event_type.startsWith("result") && m?.sets_won)
@@ -55,6 +55,12 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   const query = useChanges(eventId);
   const { ids, divisionIds } = useFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
+  const eventKey = useEventKey(eventId);
+  const audience = {
+    savedEvent: saved.includes(eventKey),
+    entryIds: ids,
+    divisionIds,
+  };
   const latest = query.data?.latest_id ?? 0;
 
   // Mark everything as seen a moment after the page shows it.
@@ -65,18 +71,11 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   }, [latest, lastSeen, markSeen]);
 
   if (!hydrated || query.isPending) return <Loading label="Loading updates" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
 
   // Filtering happens here on the device, so the server never learns who follows what.
-  const relevant = query.data!.data.filter(
-    (c) =>
-      saved.includes(eventId) ||
-      (!c.division_id &&
-        c.entry_ids.length === 0 &&
-        c.entity_type === "announcement") ||
-      c.entry_ids.some((e) => ids.includes(e)) ||
-      (!!c.division_id && divisionIds.includes(c.division_id)) ||
-      divisionIds.includes(query.data!.divisions?.[c.entity_id]),
+  const relevant = query.data!.data.filter((c) =>
+    isRelevantChange(c, audience, query.data!.divisions),
   );
 
   return (
@@ -125,7 +124,9 @@ export function UpdatesView({ eventId }: { eventId: string }) {
                   >
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                       <RefreshCw aria-hidden className="h-4 w-4 text-warn" />{" "}
-                      {TITLES[c.event_type] ?? "Match updated"}
+                      {changeTitle(c) ??
+                        TITLES[c.event_type] ??
+                        "Match updated"}
                       {isNew && <Badge tone="brand">New</Badge>}
                       {c.simulated && <Badge tone="warn">Simulated</Badge>}
                     </p>
@@ -154,7 +155,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
 function DelayAlert({ matchId }: { matchId: string }) {
   const query = useMatch(matchId);
   if (query.isPending) return <Loading label="Loading alert" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const match = query.data.data;
   const delay = match.delay_notice;
   return (

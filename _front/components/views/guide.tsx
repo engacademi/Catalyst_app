@@ -1,6 +1,12 @@
 "use client";
 import Image from "next/image";
 import { useHydrated } from "@/lib/hydration";
+import { useRef } from "react";
+import type { Partner } from "@/lib/api";
+import {
+  trackSponsorClick,
+  useSponsorImpressions,
+} from "@/lib/sponsor-engagement";
 
 import {
   Accessibility,
@@ -33,7 +39,7 @@ export function GuideView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
   const query = useGuide(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading guide" />;
-  if (query.error) return <ErrorState error={query.error} />;
+  if (query.error && !query.data) return <ErrorState error={query.error} />;
   const { venues, items, partners } = query.data.data;
   const general = items.filter(
     (i) => i.kind !== "officials" && !i.kind.startsWith("media_"),
@@ -43,11 +49,12 @@ export function GuideView({ eventId }: { eventId: string }) {
   const sponsors = partners.filter((p) => p.kind === "sponsor");
 
   return (
-    <div>
+    // Long words break at 200% text instead of pushing cards past 320px.
+    <div className="[overflow-wrap:anywhere]">
       <PageTitle>Venue</PageTitle>
 
       <SectionTitle>Venues</SectionTitle>
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {venues.map((v) => (
           <Card key={v.id}>
             <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">
@@ -162,7 +169,7 @@ export function GuideView({ eventId }: { eventId: string }) {
       {offers.length > 0 && (
         <>
           <SectionTitle>Tickets, merchandise and the 50/50</SectionTitle>
-          <div className="grid gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {offers.map((p) => (
               <Card key={p.id}>
                 <div className="flex items-start gap-3">
@@ -240,43 +247,59 @@ export function GuideView({ eventId }: { eventId: string }) {
         </>
       )}
 
-      {sponsors.length > 0 && (
-        <>
-          <div id="event-partners">
-            <SectionTitle>Event partners</SectionTitle>
-          </div>
-          <div
-            className="partner-carousel"
-            role="region"
-            aria-label="Event partners"
-            tabIndex={0}
-          >
-            {sponsors.map((p) => (
-              <a
-                key={p.id}
-                className="partner-logo-card"
-                href={p.link_url || "#event-partners"}
-                aria-label={p.name}
-                target={p.link_url ? "_blank" : undefined}
-                rel="noopener noreferrer sponsored"
-              >
-                {p.logo_url ? (
-                  <Image
-                    src={p.logo_url}
-                    alt={p.name}
-                    width={160}
-                    height={80}
-                    unoptimized
-                  />
-                ) : (
-                  <strong>{p.name}</strong>
-                )}
-                {p.name.includes("Demo") && <small>Demo partner</small>}
-              </a>
-            ))}
-          </div>
-        </>
-      )}
+      <EventPartners sponsors={sponsors} />
     </div>
+  );
+}
+
+function EventPartners({ sponsors }: { sponsors: Partner[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useSponsorImpressions(
+    ref,
+    sponsors.map((p) => p.id),
+    "guide",
+  );
+  if (!sponsors.length) return null;
+  return (
+    <>
+      <div id="event-partners">
+        <SectionTitle>Event partners</SectionTitle>
+      </div>
+      <div
+        ref={ref}
+        className="partner-carousel"
+        role="region"
+        aria-label="Event partners"
+        tabIndex={0}
+      >
+        {sponsors.map((p) => (
+          <a
+            key={p.id}
+            data-sponsor-id={p.id}
+            className="partner-logo-card"
+            href={p.link_url || "#event-partners"}
+            aria-label={p.name}
+            target={p.link_url ? "_blank" : undefined}
+            rel="noopener noreferrer sponsored"
+            onClick={
+              p.link_url ? () => trackSponsorClick(p.id, "guide") : undefined
+            }
+          >
+            {p.logo_url ? (
+              <Image
+                src={p.logo_url}
+                alt={p.name}
+                width={160}
+                height={80}
+                unoptimized
+              />
+            ) : (
+              <strong>{p.name}</strong>
+            )}
+            {p.name.includes("Demo") && <small>Demo partner</small>}
+          </a>
+        ))}
+      </div>
+    </>
   );
 }
