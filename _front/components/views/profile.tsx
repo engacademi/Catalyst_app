@@ -1,4 +1,5 @@
 "use client";
+import { teamColor } from "@/lib/event-colors";
 import Link from "next/link";
 import {
   SignInButton,
@@ -41,7 +42,7 @@ function Account() {
                 {type === "player"
                   ? "Athlete"
                   : type === "officer"
-                    ? "Team Lead"
+                    ? "Lead"
                     : "Spectator"}
               </button>
             ))}
@@ -165,7 +166,7 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
             (teamQueries[i].data?.data ?? [])
               .filter((t) => selected.get(event.slug)?.includes(t.id))
               .map((team) => (
-                <li key={team.id}>
+                <li key={team.id} style={{ borderLeft: `4px solid ${teamColor(team.id)}` }}>
                   <Link href={`/events/${event.slug}/teams/${team.id}`}>
                     <strong>{team.team_name}</strong>
                     <small>{event.title}</small>
@@ -189,7 +190,7 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
         </p>
       </section>
       <Card className="mt-6">
-        <h2>Staff & Team Leads</h2>
+        <h2>Staff & Leads</h2>
         <p className="section-description">
           Manage event details, delays, announcements, imports, brackets,
           rosters and venue information. Access follows your OVA role.

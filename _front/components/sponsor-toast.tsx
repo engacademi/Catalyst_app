@@ -6,11 +6,11 @@ import { Heart, X } from "lucide-react";
 import type { Partner } from "@/lib/api";
 import { useGuide } from "@/lib/queries";
 
-const COOLDOWN = 5 * 60_000;
 export function SponsorToast({ eventId }: { eventId: string }) {
   const guide = useGuide(eventId);
   const partners = guide.data?.data.partners;
   const [sponsor, setSponsor] = useState<Partner | null>(null);
+  const visit = useRef<number | null>(null);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopTimer = () => {
     if (dismissTimer.current) clearTimeout(dismissTimer.current);
@@ -23,22 +23,19 @@ export function SponsorToast({ eventId }: { eventId: string }) {
     const eligible =
       partners?.filter((p) => p.kind === "sponsor" && p.active) ?? [];
     if (!eligible.length) return;
-    try {
-      const last = Number(
-        sessionStorage.getItem("olley:sponsor-last-shown") || 0,
-      );
-      if (Date.now() - last < COOLDOWN) return;
-    } catch {
-      return;
-    }
-    if (Math.random() > 0.35) return;
-    const chosen = eligible[Math.floor(Math.random() * eligible.length)];
-    const showTimer = setTimeout(() => {
+    if (visit.current === null) {
       try {
-        sessionStorage.setItem("olley:sponsor-last-shown", String(Date.now()));
+        const key = `olley:sponsor-visits:${eventId}`;
+        const previous = Number(sessionStorage.getItem(key) || 0);
+        visit.current = (Number.isFinite(previous) ? previous : 0) + 1;
+        sessionStorage.setItem(key, String(visit.current));
       } catch {
         return;
       }
+    }
+    if (visit.current % 2 !== 0) return;
+    const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+    const showTimer = setTimeout(() => {
       setSponsor(chosen);
       dismissTimer.current = setTimeout(() => setSponsor(null), 12_000);
     }, 1400);
@@ -46,7 +43,7 @@ export function SponsorToast({ eventId }: { eventId: string }) {
       clearTimeout(showTimer);
       if (dismissTimer.current) clearTimeout(dismissTimer.current);
     };
-  }, [partners]);
+  }, [partners, eventId]);
   if (!sponsor) return null;
   return createPortal(
     <aside

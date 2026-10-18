@@ -36,6 +36,23 @@ def seed_staff_showcase(db: Session) -> Event:
         if event
         else None
     )
+    if source and not db.scalar(
+        select(PartnerCard.id).where(
+            PartnerCard.event_id == event.id, PartnerCard.name == "Red Bull · Demo"
+        )
+    ):
+        db.add(
+            PartnerCard(
+                event_id=event.id,
+                kind="sponsor",
+                name="Red Bull · Demo",
+                body="A little energy for your next rally. Demo placement; no sponsorship affiliation.",
+                link_url="https://www.redbull.com/",
+                active=True,
+                sort=3,
+            )
+        )
+        db.commit()
     if source and (source.config or {}).get("showcase_ready"):
         seed_showcase_live_matches(db, event, source)
         return event
@@ -279,7 +296,7 @@ def seed_staff_showcase(db: Session) -> Event:
             ),
             (
                 "officials",
-                "Team Lead briefing",
+                "Lead briefing",
                 "Check in at the demo operations desk 30 minutes before your assignment.",
                 None,
             ),
@@ -363,6 +380,22 @@ def seed_staff_showcase(db: Session) -> Event:
             "posted_at": now.isoformat(),
             "expires_at": (now + timedelta(hours=3)).isoformat(),
         }
+    if not db.scalar(
+        select(PartnerCard.id).where(
+            PartnerCard.event_id == event.id, PartnerCard.name == "Red Bull · Demo"
+        )
+    ):
+        db.add(
+            PartnerCard(
+                event_id=event.id,
+                kind="sponsor",
+                name="Red Bull · Demo",
+                body="A little energy for your next rally. Demo placement; no sponsorship affiliation.",
+                link_url="https://www.redbull.com/",
+                active=True,
+                sort=3,
+            )
+        )
     ensure_dev_users(db, org, event)
     source.config = {**(source.config or {}), "showcase_ready": True}
     event.status = "published"

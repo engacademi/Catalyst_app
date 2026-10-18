@@ -282,7 +282,7 @@ const GUIDE_LABELS: Record<string, string> = {
   media_photo: "Media · Photo",
   media_video: "Media · Video",
   media_album: "Media · Album",
-  officials: "Team Lead resources",
+  officials: "Lead resources",
 };
 const PARTNER_KINDS = [
   "sponsor",

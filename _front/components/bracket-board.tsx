@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import type { Match, Participant } from "@/lib/api";
+import { teamColor } from "@/lib/event-colors";
 import { formatTime } from "@/lib/format";
 
 type Round = { label: string; matches: Match[] };
@@ -36,7 +37,9 @@ export function BracketBoard({
     setRound(value);
     scroll.current?.scrollTo({
       left: value * COLUMN,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
     });
   }
   const index = Math.min(roundIndex, Math.max(0, rounds.length - 1));
@@ -71,8 +74,7 @@ export function BracketBoard({
         ? championship.home
         : championship.away
       : null;
-  const totalWidth =
-    visible.length * COLUMN + (champion ? COLUMN : 0);
+  const totalWidth = visible.length * COLUMN + (champion ? COLUMN : 0);
   const links = visible.flatMap((round, column) =>
     round.matches.flatMap((match) =>
       [match.home, match.away].flatMap((side) => {
@@ -102,6 +104,11 @@ export function BracketBoard({
       <button
         type="button"
         className={`bracket-team ${winner ? "is-winner" : ""}`}
+        style={
+          side.entry_id && followed.includes(side.entry_id)
+            ? { borderLeft: `4px solid ${teamColor(side.entry_id)}` }
+            : undefined
+        }
         aria-pressed={!!side.entry_id && selected === side.entry_id}
         disabled={!side.entry_id}
         onClick={() => select(selected === side.entry_id ? "" : side.entry_id!)}
@@ -134,7 +141,7 @@ export function BracketBoard({
           <ChevronLeft aria-hidden size={20} />
         </button>
         <label>
-          Round
+          <span className="sr-only">Round</span>
           <select
             aria-label="Bracket round"
             value={index}
@@ -158,7 +165,7 @@ export function BracketBoard({
         </button>
       </div>
       <label className="bracket-team-filter">
-        Trace a team
+        <span className="sr-only">Trace a team</span>
         <select value={selected} onChange={(e) => select(e.target.value)}>
           <option value="">All teams</option>
           {[
@@ -209,7 +216,7 @@ export function BracketBoard({
               height: HEADER + boardHeight,
             }}
           >
-            {(
+            {
               <svg
                 className="bracket-connections"
                 width={totalWidth}
@@ -220,7 +227,7 @@ export function BracketBoard({
                   <path key={link.key} d={link.d} />
                 ))}
               </svg>
-            )}
+            }
             {visible.map((round, i) => (
               <section
                 className="bracket-round"

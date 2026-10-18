@@ -69,7 +69,7 @@ export function EventAccess({ event }: { event: AdminEventData }) {
             onChange={(e) => setForm({ ...form, role: e.target.value })}
           >
             <option value="staff">Staff</option>
-            <option value="team_lead">Team Lead</option>
+            <option value="team_lead">Lead</option>
           </select>
         </Field>
         {form.role === "team_lead" && (
@@ -101,7 +101,7 @@ export function EventAccess({ event }: { event: AdminEventData }) {
                 "Account"}{" "}
               ·{" "}
               {g.role === "coach" || g.role === "official"
-                ? "Team Lead"
+                ? "Lead"
                 : g.role}
               {g.entry_id &&
                 ` · ${event.entries.find((t) => t.id === g.entry_id)?.team_name}`}

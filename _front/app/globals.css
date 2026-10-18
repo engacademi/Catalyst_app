@@ -3706,3 +3706,118 @@ select[class] {
 .bracket-controls select {
   width: 100%;
 }
+
+/* Compact venue resources, partners and tournament artwork. */
+.platform-header .wordmark > .wordmark-ova {
+  margin-right: 3px;
+}
+.beach .event-tile-art {
+  background:
+    radial-gradient(circle at 84% 130%, #efd39c88 0 32%, transparent 33%),
+    linear-gradient(120deg, #356f63, #91b5a0);
+  color: #fff0c9;
+}
+.tournament-catalogue .event-tile-art {
+  padding-right: 66px;
+}
+.tournament-catalogue .event-tile-art > svg {
+  width: 34px;
+  height: 34px;
+}
+.venue-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.venue-quick-card {
+  padding: 16px;
+  min-width: 0;
+}
+.venue-quick-card > svg {
+  color: var(--brand);
+  margin-bottom: 8px;
+}
+.venue-quick-card h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+.venue-quick-card a {
+  display: inline-block;
+  color: var(--brand);
+  text-decoration: underline;
+  font-size: 12px;
+  padding: 7px 0;
+}
+.venue-quick-card details {
+  font-size: 12px;
+}
+.venue-quick-card details:not([open]) {
+  display: none;
+}
+.venue-quick-card details > div {
+  margin-top: 10px;
+}
+.partner-carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 12px;
+  padding: 4px 3px 20px;
+}
+.partner-carousel > * {
+  flex: 0 0 min(78vw, 300px);
+  scroll-snap-align: start;
+}
+.team-picker {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 14px;
+}
+.team-picker > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 5px;
+}
+.team-picker-options {
+  max-height: 360px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+.team-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.team-picker-option input {
+  accent-color: var(--brand);
+  width: 18px;
+  height: 18px;
+}
+.team-picker-option a {
+  color: var(--brand);
+  text-decoration: underline;
+  font-size: 13px;
+}
+.rankings-panel {
+  margin-top: 18px;
+  overflow-x: auto;
+}
+.rankings-panel table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+.rankings-panel th,
+.rankings-panel td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.bracket-controls { margin: 6px 0 8px; }
+.bracket-team-filter { margin: 0 0 10px; }
+.pathway-toolbar { margin-bottom: 8px; }

@@ -51,7 +51,7 @@ export function AdminHome() {
       </PageTitle>
       {isOfficial && (
         <p className="mb-4 text-sm">
-          Manage your Team Lead assignments.{" "}
+          Manage your Lead assignments.{" "}
           <Link
             href="/admin/assignments"
             className="font-semibold text-brand underline"
