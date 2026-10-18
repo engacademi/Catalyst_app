@@ -5,6 +5,8 @@ import type { EventSummary } from "@/lib/api";
 import { usePreference } from "@/lib/preferences";
 import { formatDateRange } from "@/lib/format";
 import { Badge } from "./ui";
+import { EventLogo } from "./ova-venue";
+import { eventSeries } from "@/lib/ova-venues";
 export type DiscoveryEvent = EventSummary & {
   venues: string[];
   venue_locations?: {
@@ -41,13 +43,18 @@ export function EventTile({
   event: DiscoveryEvent;
   distance?: number | null;
 }) {
+  const branded = eventSeries(e) != null;
   return (
     <article className={`event-tile ${e.kind}`}>
-      <div className="event-tile-art">
+      <div className={`event-tile-art ${branded ? "has-logo" : ""}`}>
         <span className="eyebrow">
           {e.kind === "beach" ? "SAND. SUN. SERVE." : "MEET YOU COURTSIDE."}
         </span>
-        <Volleyball size={66} strokeWidth={1} aria-hidden />
+        {branded ? (
+          <EventLogo event={e} className="event-tile-logo" size={96} />
+        ) : (
+          <Volleyball size={66} strokeWidth={1} aria-hidden />
+        )}
       </div>
       <SaveEventButton slug={e.slug} />
       <div className="event-tile-body">

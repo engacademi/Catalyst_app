@@ -1,7 +1,8 @@
 "use client";
 import Image from "next/image";
+import Link from "next/link";
 import { useHydrated } from "@/lib/hydration";
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import type { Partner } from "@/lib/api";
 import {
   trackSponsorClick,
@@ -22,7 +23,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { CourtOverview } from "../court-overview";
-import { useGuide } from "@/lib/queries";
+import { EventLogo, OvaVenueDetails } from "../ova-venue";
+import { venueProfile } from "@/lib/ova-venues";
+import { useEvent, useGuide } from "@/lib/queries";
 import { Card, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -38,6 +41,7 @@ const ICONS: Record<string, LucideIcon> = {
 export function GuideView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
   const query = useGuide(eventId);
+  const event = useEvent(eventId);
   if (!hydrated || query.isPending) return <Loading label="Loading guide" />;
   if (query.error && !query.data) return <ErrorState error={query.error} />;
   const { venues, items, partners } = query.data.data;
@@ -51,50 +55,78 @@ export function GuideView({ eventId }: { eventId: string }) {
   return (
     // Long words break at 200% text instead of pushing cards past 320px.
     <div className="[overflow-wrap:anywhere]">
-      <PageTitle>Venue</PageTitle>
+      <div className="guide-heading">
+        <PageTitle>Venue</PageTitle>
+        {event.data && (
+          <EventLogo
+            event={{
+              title: event.data.data.title,
+              venues: venues.map((v) => v.name),
+            }}
+            size={84}
+          />
+        )}
+      </div>
 
       <SectionTitle>Venues</SectionTitle>
       <div className="grid grid-cols-1 gap-4">
-        {venues.map((v) => (
-          <Card key={v.id}>
-            <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">
-              {v.name}
-            </h3>
-            {v.address && <p className="text-sm text-muted">{v.address}</p>}
-            {v.accessible_entrance && (
-              <p className="mt-2 flex gap-2 text-sm">
-                <Accessibility
-                  aria-hidden
-                  className="h-4 w-4 shrink-0 text-brand"
-                />
-                <span>
-                  <span className="font-medium">Accessible entrance: </span>
-                  {v.accessible_entrance}
-                </span>
-              </p>
-            )}
-            {v.directions && (
-              <p className="mt-2 flex gap-2 text-sm">
-                <MapPin aria-hidden className="h-4 w-4 shrink-0 text-brand" />
-                <span>{v.directions}</span>
-              </p>
-            )}
-            {v.courts.length > 0 && (
-              <CourtOverview venue={v} eventId={eventId} />
-            )}
-            {v.map_url && (
-              <a
-                href={v.map_url}
-                className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand underline"
-                rel="noopener"
-                target="_blank"
-              >
-                Open map <ExternalLink aria-hidden className="h-3.5 w-3.5" />
-                <span className="sr-only">(opens in a new tab)</span>
-              </a>
-            )}
-          </Card>
-        ))}
+        {venues.map((v) => {
+          const ova = venueProfile(v.name);
+          return (
+            <Fragment key={v.id}>
+              <Card>
+                <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">
+                  {v.name}
+                </h3>
+                {v.address && <p className="text-sm text-muted">{v.address}</p>}
+                {v.accessible_entrance && (
+                  <p className="mt-2 flex gap-2 text-sm">
+                    <Accessibility
+                      aria-hidden
+                      className="h-4 w-4 shrink-0 text-brand"
+                    />
+                    <span>
+                      <span className="font-medium">Accessible entrance: </span>
+                      {v.accessible_entrance}
+                    </span>
+                  </p>
+                )}
+                {v.directions && (
+                  <p className="mt-2 flex gap-2 text-sm">
+                    <MapPin
+                      aria-hidden
+                      className="h-4 w-4 shrink-0 text-brand"
+                    />
+                    <span>{v.directions}</span>
+                  </p>
+                )}
+                {v.courts.length > 0 && (
+                  <CourtOverview venue={v} eventId={eventId} />
+                )}
+                {v.map_url && (
+                  <a
+                    href={v.map_url}
+                    className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand underline"
+                    rel="noopener"
+                    target="_blank"
+                  >
+                    Open map{" "}
+                    <ExternalLink aria-hidden className="h-3.5 w-3.5" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                )}
+              </Card>
+              {ova && (
+                <Card>
+                  <OvaVenueDetails venue={ova} />
+                  <Link href="/venues" className="ova-all-venues">
+                    All OVA venues and major events →
+                  </Link>
+                </Card>
+              )}
+            </Fragment>
+          );
+        })}
       </div>
 
       <SectionTitle>Getting around</SectionTitle>
