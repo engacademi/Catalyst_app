@@ -15,3 +15,5 @@ The user confirmed that staff sign-in now works. Railway production HTTP logs al
 The supplied OVA trillium image is copied unchanged for background decorations and favicon. The generated transparent illustration is saved in _front/public/discover-volleyball.png, created with the built-in image tool from the two supplied editorial volleyball references, using forest green, sage, lime and ivory, an airborne athlete and ball, no text/logos, full-body composition and a transparent background.
 
 The schedule Visibility popover uses custom animated switches over native accessible checkboxes, stable event colour markers, visible/hidden status, bulk show/hide controls, keyboard Escape dismissal and a labelled close action.
+
+Discover artwork is a non-interactive background layer at 13% opacity, contained within the page with its original aspect ratio. Search, filters and cards stay above it, and the illustration reserves no vertical layout space.
