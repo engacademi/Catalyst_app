@@ -170,7 +170,7 @@ async def poll_sources():
             with get_sessionmaker()() as db:
                 rows = db.scalars(
                     select(Source).where(
-                        Source.mode.in_(["aes", "timu"]), Source.status != "paused"
+                        Source.mode.in_(["aes", "timu", "myteam"]), Source.status != "paused"
                     )
                 ).all()
                 ids = [

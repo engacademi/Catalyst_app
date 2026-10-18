@@ -4,6 +4,8 @@
     python -m app.cli grant --subject user_2abc --role admin
     python -m app.cli grant --subject user_2abc --role staff --event demo-championships
     python -m app.cli aes-load <event_key>
+    python -m app.cli aes-discover [--year 2026]
+    python -m app.cli myteam-load
     python -m app.cli timu-load [--tid 4190]
 
 Staff privileges are only ever granted here, never through a public endpoint.
@@ -19,8 +21,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from app.adapters.aes import aes_event_url
+from app.adapters.aes import aes_event_url, search_aes_championships
 from app.adapters.live import fetch_text
+from app.adapters.myteam import local_date, upcoming_events
 from app.adapters.timu import INDEX_URL, read_schedule, upcoming_tids
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
@@ -137,6 +140,77 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
         return event
 
 
+def aes_discover(year: int | None = None, get=fetch_text) -> list:
+    """Find Ontario Championships events on AES and load each; one failure skips only that event."""
+    results = []
+    for found in search_aes_championships(get):
+        if year and not found["startDate"].startswith(str(year)):
+            continue
+        try:
+            results.append((found["name"], aes_load(found["eventSchedulerKey"], get)))
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 - report, keep going
+            results.append((found["name"], exc))
+    return results
+
+
+def myteam_load(today: date, get=fetch_text) -> list[Event]:
+    """Create or refresh every upcoming OVA beach event on MyTeam.click."""
+    from app.modules.sync import sync_source
+
+    loaded = []
+    for data in upcoming_events(today, get):
+        day = local_date(data["date"])
+        title = data["name"].strip()
+        slug = re.sub(r"[^a-z0-9]+", "-", f"{title} {day}".lower()).strip("-")[:100]
+        with get_sessionmaker()() as db:
+            # The MyTeam.click event id is the identity; titles repeat across the season.
+            sources = db.scalars(select(Source).where(Source.mode == "myteam"))
+            source = next(
+                (s for s in sources if s.config.get("event_id") == data["_id"]), None
+            )
+            event = db.get(Event, source.event_id) if source else None
+            if event is None and db.scalar(select(Event.id).where(Event.slug == slug)):
+                raise ValueError(f"Event slug {slug} already belongs to another source")
+            if event is None:
+                org = db.scalar(select(Organization).limit(1))
+                if org is None:
+                    org = Organization(name="Ontario Volleyball Association")
+                    db.add(org)
+                    db.flush()
+                event = Event(
+                    organization_id=org.id,
+                    slug=slug,
+                    kind="beach",
+                    timezone=TZ,
+                    status="published",
+                )
+                db.add(event)
+            event.title, event.start_date, event.end_date = title, day, day
+            db.flush()
+            if source is None:
+                for loc in data["locList"]:
+                    db.add(Venue(event_id=event.id, name=loc["name"]))
+                source = Source(
+                    event_id=event.id,
+                    name="MyTeam.click",
+                    mode="myteam",
+                    # Polling picks up the draw once MyTeam.click publishes it.
+                    config={
+                        "authorized": True,
+                        "auto_sync": True,
+                        "event_id": data["_id"],
+                    },
+                )
+                db.add(source)
+            db.commit()
+            result = sync_source(source.id)
+            if not result["ok"]:
+                sys.exit(result["message"])
+            db.refresh(event)
+            loaded.append(event)
+    return loaded
+
+
 def timu_load(tid=None, get=fetch_text, today=None) -> list[Event]:
     """Create or refresh one event per upcoming OVA tournament on TIMU, or one tid."""
     from app.modules.sync import sync_source
@@ -239,6 +313,14 @@ def main() -> None:
     )
     aes_cmd = sub.add_parser("aes-load", help="Create or refresh an event from AES")
     aes_cmd.add_argument("event_key", help="The key in the AES event URL")
+    discover_cmd = sub.add_parser(
+        "aes-discover", help="Find Ontario Championships on AES and load each"
+    )
+    discover_cmd.add_argument("--year", type=int, help="Only events starting this year")
+    sub.add_parser(
+        "myteam-load",
+        help="Create or refresh upcoming OVA beach events from MyTeam.click",
+    )
     timu_cmd = sub.add_parser(
         "timu-load", help="Create or refresh upcoming OVA tournaments from TIMU"
     )
@@ -262,6 +344,18 @@ def main() -> None:
     elif args.command == "aes-load":
         event = aes_load(args.event_key)
         print(f"AES event ready: /events/{event.slug}")
+    elif args.command == "aes-discover":
+        results = aes_discover(args.year)
+        for name, result in results:
+            if isinstance(result, Event):
+                print(f"AES event ready: /events/{result.slug}")
+            else:
+                print(f"AES event failed: {name}: {result}")
+        if any(not isinstance(r, Event) for _, r in results):
+            sys.exit(1)
+    elif args.command == "myteam-load":
+        for event in myteam_load(datetime.now(ZoneInfo(TZ)).date()):
+            print(f"MyTeam.click event ready: /events/{event.slug}")
     elif args.command == "timu-load":
         for event in timu_load(args.tid):
             print(f"TIMU event ready: /events/{event.slug} ({event.start_date})")

@@ -38,7 +38,7 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/api/public.py` | Public reads under `/v1` |
 | `app/api/admin.py` | Staff workspace under `/v1/admin` |
 | `app/api/me.py` | Signed-in user's own data (official assignments) |
-| `app/cli.py` | `seed`, `grant`, `aes-load` and `timu-load` commands |
+| `app/cli.py` | `seed`, `grant`, `aes-load`, `aes-discover`, `myteam-load` and `timu-load` commands |
 | `sample_data/` | Example CSVs and the column reference |
 
 ## How data gets in
@@ -47,11 +47,15 @@ Staff upload a CSV for a source (entries, then matches, then rosters). The API c
 
 Rosters are published only with a consent review reference. Player photos appear only when the row marks them approved; otherwise the importer drops the URL before it reaches the database.
 
-AES JSON and TIMU HTML adapters emit the same normalized rows as CSV imports and use the shared refresh/polling pipeline. MyTeam.click still requires a converted CSV export. Automatic polling requires both `authorized` and `auto_sync` in source configuration; `aes-load` performs an explicit refresh but does not enable automatic polling.
+AES JSON, TIMU HTML and MyTeam.click JSON adapters emit the same normalized rows as CSV imports and use the shared refresh/polling pipeline. Automatic polling requires both `authorized` and `auto_sync` in source configuration; `aes-load` performs an explicit refresh but does not enable automatic polling.
 
 To load a real event from AES, run `uv run python -m app.cli aes-load <event_key>` with the key from the AES event URL. It creates the event from AES (title, dates, venue from the event location, America/Toronto), adds an AES source with that `event_key`, syncs pool play into teams and matches. The event keeps AES's real dates and times. The AES key identifies subsequent refreshes even if the upstream title changes. A title/slug collision with another source is refused; connect the source explicitly through the staff workspace instead. Existing staff content and venue coordinates are preserved. Tests use the recorded Event 2 responses in `sample_data/aes_event2/` and never call AES.
 
-To load upcoming OVA indoor tournaments from TIMU, run `uv run python -m app.cli timu-load`. It reads the tournament list at timu.ca/ova and, for each tournament dated today or later, creates or refreshes one event (title, date, venue and address, America/Toronto) with a TIMU source keyed by its tournament id, then syncs teams and matches. Pass `--tid 4190` to load one tournament. Running it again changes nothing unless TIMU changed. A match takes its start time from the schedule grid; TIMU shows only the first wave's time before the day and `**` for later rounds, so those matches stay "awaiting schedule" until TIMU publishes a time. Playoff slots such as `W7` stay placeholders. Tests use the trimmed pages in `sample_data/timu/` and never call TIMU.
+`uv run python -m app.cli aes-discover --year 2026` finds the events for you. It searches the public AES event listing for names containing "Ontario Championships", past and upcoming, and runs `aes-load` on each result's key. Re-running it refreshes the same events and adds any new ones AES has listed since. Without `--year` it loads every year AES lists. If one event fails to load, the command reports it, carries on with the rest, and exits non-zero. Tests use the recorded search in `sample_data/aes_search/`. Loading the four 2026 events from AES took about a minute.
+
+To load OVA's upcoming beach events, run `uv run python -m app.cli myteam-load`. It reads the active OVA season from MyTeam.click's public JSON and creates or refreshes one beach event, in America/Toronto with its real date and venue, for each event dated today or later. It skips cancelled events. Each event gets a MyTeam.click source keyed by the event id, with `auto_sync` on. Until the draw is published, an event shows only its divisions and accepted teams. After that, polling brings in matches with courts, teams, scores and work teams. MyTeam.click doesn't publish clock times for OVA matches, so those matches have no scheduled start. Running the command again updates the same events. Tests use the recorded responses in `sample_data/myteam/` and never call MyTeam.click.
+
+To load upcoming OVA indoor tournaments from TIMU, run `uv run python -m app.cli timu-load`. It reads the tournament list at timu.ca/ova and, for each tournament dated today or later, creates or refreshes one event (title, date, venue and address, America/Toronto) with a TIMU source keyed by its tournament id and `auto_sync` on, then syncs teams and matches. Pass `--tid 4190` to load one tournament. Running it again changes nothing unless TIMU changed. A match takes its start time from the schedule grid; TIMU shows only the first wave's time before the day and `**` for later rounds, so those matches stay "awaiting schedule" until TIMU publishes a time. Playoff slots such as `W7` stay placeholders. Tests use the trimmed pages in `sample_data/timu/` and never call TIMU.
 
 ## Main endpoints
 
