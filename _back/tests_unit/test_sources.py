@@ -299,3 +299,27 @@ def test_interchange_rejects_sets_without_a_published_side(value):
 
     with pytest.raises(ValueError):
         parse_sets(value)
+
+
+def test_paused_or_failed_live_source_reports_at_once():
+    from datetime import datetime, timezone
+
+    from app.models import Source
+    from app.modules.projections import source_freshness
+
+    now = datetime.now(timezone.utc)
+    live = Source(
+        mode="aes",
+        status="active",
+        config={"last_sync_success": True},
+        expected_check_interval_minutes=15,
+        last_successful_check_at=now,
+    )
+    assert source_freshness(live, now) == "current"
+    live.status = "paused"
+    assert source_freshness(live, now) == "paused"
+    live.status = "unavailable"
+    assert source_freshness(live, now) == "unavailable"
+    snapshot = Source(mode="manual_import", status="paused", config={})
+    snapshot.last_import_at = now
+    assert source_freshness(snapshot, now) == "imported_snapshot"

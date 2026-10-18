@@ -74,13 +74,16 @@ def iso(value: datetime | None) -> str | None:
 
 
 def source_freshness(source: Source, now: datetime | None = None) -> str:
-    """current | stale | unavailable | imported_snapshot | no_data | unknown.
+    """current | stale | paused | unavailable | imported_snapshot | no_data | unknown.
 
     A CSV snapshot is never "current": polling the page faster can't make it newer.
+    A paused or failed live source reports so at once, not after the stale threshold.
     """
     now = now or datetime.now(timezone.utc)
     if source.status == "unavailable":
         return "unavailable"
+    if source.status == "paused" and source.mode not in SNAPSHOT_MODES:
+        return "paused"
     if source.mode in SNAPSHOT_MODES or not source.config.get("last_sync_success"):
         return "imported_snapshot" if source.last_import_at else "no_data"
     if not source.last_successful_check_at:
@@ -102,6 +105,9 @@ def source_public(source: Source) -> dict[str, Any]:
         "last_import_at": iso(source.last_import_at),
         "upstream_updated_at": iso(source.upstream_updated_at),
         "freshness": source_freshness(source),
+        # The scheduler checks upstream at most once per interval, not on every page poll.
+        "auto_sync": bool(source.config.get("auto_sync")),
+        "check_interval_minutes": source.expected_check_interval_minutes,
     }
 
 
@@ -226,6 +232,8 @@ def match_public(
             "name": match.source.name,
             "mode": match.source.mode,
             "observed_at": iso(match.observed_at),
+            # Unchanged checks don't touch the record, so show the source's own check time.
+            "last_checked_at": iso(match.source.last_successful_check_at),
             "source_updated_at": iso(match.source_updated_at),
             "freshness": source_freshness(match.source),
         },

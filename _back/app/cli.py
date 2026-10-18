@@ -134,6 +134,8 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
                 config={"authorized": True, "event_key": event_key},
             )
             db.add(source)
+        # Polling keeps scores and court changes current, as TIMU and MyTeam.click do.
+        source.config = {**source.config, "auto_sync": True}
         db.commit()
         result = sync_source(source.id)
         if not result["ok"]:

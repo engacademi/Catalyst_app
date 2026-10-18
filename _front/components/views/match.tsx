@@ -8,7 +8,7 @@ import { changeTitle, delayText, timeChangeText } from "@/lib/change-text";
 import { formatDay, formatRelative, formatTime } from "@/lib/format";
 import { useMatch } from "@/lib/queries";
 import { ScoreDispute } from "../score-dispute";
-import { FreshnessNote } from "../freshness";
+import { checkedLabel, FreshnessNote } from "../freshness";
 import { StatusBadge } from "../match-card";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
@@ -210,8 +210,11 @@ export function MatchView({
       )}
 
       <p className="mt-6 text-xs text-muted">
-        From {m.source.name}. Seen by Olley{" "}
-        {formatRelative(m.source.observed_at)}
+        From {m.source.name}.{" "}
+        {checkedLabel(
+          m.source.freshness,
+          m.source.last_checked_at ?? m.source.observed_at,
+        )}
         {m.source.source_updated_at
           ? `; source updated ${formatRelative(m.source.source_updated_at)}`
           : "; source update time unknown"}

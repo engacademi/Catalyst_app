@@ -16,6 +16,14 @@ import { LoadMore } from "../load-more";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 import type { AdminEventData } from "./admin-event";
 
+const LIVE_MODES = ["aes", "timu", "myteam"];
+const SOURCE_LABELS: Record<string, string> = {
+  aes: "AES",
+  timu: "TIMU",
+  myteam: "MyTeam.click",
+};
+const INTERVALS = [5, 10, 15, 30, 60];
+
 export function ConnectionsPanel({ event }: { event: AdminEventData }) {
   const create = useAdminMutation(
     "POST",
@@ -172,6 +180,9 @@ function Connection({
       };
     }
   >("POST", `/v1/admin/sources/${s.id}/refresh`);
+  const live = LIVE_MODES.includes(s.mode);
+  const interval = s.check_interval_minutes ?? 15;
+  const upstream = SOURCE_LABELS[s.mode] ?? s.name;
   return (
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -208,6 +219,53 @@ function Connection({
           )}
         </div>
       </div>
+      {live && (
+        <div className="mt-3 rounded-lg border border-border p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex min-h-11 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!s.auto_sync}
+                disabled={patch.isPending}
+                onChange={(e) => patch.mutate({ auto_sync: e.target.checked })}
+              />
+              Check {upstream} automatically
+            </label>
+            <label className="flex min-h-11 items-center gap-2">
+              Every
+              <select
+                aria-label="Automatic check interval"
+                className="min-h-11 rounded-lg border border-border bg-surface px-2"
+                value={interval}
+                disabled={patch.isPending}
+                onChange={(e) =>
+                  patch.mutate({
+                    expected_check_interval_minutes: Number(e.target.value),
+                  })
+                }
+              >
+                {[...new Set([...INTERVALS, interval])]
+                  .sort((a, b) => a - b)
+                  .map((n) => (
+                    <option key={n} value={n}>
+                      {n} min
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            {s.status === "paused"
+              ? `Paused: the server is not contacting ${upstream}, and attendees see a paused warning.`
+              : s.auto_sync
+                ? `The server checks ${upstream} about every ${interval} minutes.`
+                : `Automatic checks are off. ${upstream} is only checked when you press Check now.`}{" "}
+            Attendee screens reload from the companion every 30 seconds; that
+            does not contact {upstream}. Attendees see a stale warning after{" "}
+            {interval * 2} minutes without a successful check.
+          </p>
+        </div>
+      )}
       {s.last_error && (
         <p
           className="mt-3 rounded-lg bg-warn-soft p-3 text-sm text-warn"

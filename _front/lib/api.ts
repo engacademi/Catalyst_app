@@ -5,6 +5,7 @@ export const API_BASE = "/api/backend";
 export type Freshness =
   | "current"
   | "stale"
+  | "paused"
   | "unavailable"
   | "imported_snapshot"
   | "no_data"
@@ -20,6 +21,8 @@ export type SourceInfo = {
   last_import_at: string | null;
   upstream_updated_at: string | null;
   freshness: Freshness;
+  auto_sync?: boolean;
+  check_interval_minutes?: number;
 };
 
 export type Division = { id: string; name: string; code: string | null };
@@ -126,6 +129,8 @@ export type Match = {
     name: string;
     mode: string;
     observed_at: string;
+    /** The source's last successful check; unchanged checks don't touch observed_at. */
+    last_checked_at?: string | null;
     source_updated_at: string | null;
     freshness: Freshness;
   };

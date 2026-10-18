@@ -9,6 +9,7 @@ import { useEvents } from "@/lib/queries";
 import { useEventSelections, usePreference } from "@/lib/preferences";
 import { useHydrated } from "@/lib/hydration";
 import { MatchCard } from "../match-card";
+import { SourceWarning } from "../freshness";
 import { ErrorState, Loading, EmptyState } from "../ui";
 import { TimeGrid } from "../time-grid";
 import { eventColor } from "@/lib/event-colors";
@@ -343,6 +344,15 @@ export function ScheduleView() {
               </div>
             </details>
           </div>
+          {queries.map((q, i) =>
+            !hidden.includes(selected[i].slug) ? (
+              <SourceWarning
+                key={selected[i].id}
+                sources={q.data?.sources}
+                label={selected.length > 1 ? selected[i].title : undefined}
+              />
+            ) : null,
+          )}
           {queries.some(
             (q, i) => !hidden.includes(selected[i].slug) && q.isPending,
           ) && <Loading label="Loading your matches" />}

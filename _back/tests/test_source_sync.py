@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
-from app.models import Source
+from app.models import Source, utcnow
 from tests.conftest import ADMIN
 
 
@@ -47,6 +47,49 @@ def test_paused_source_does_not_request_upstream(client, db, demo, monkeypatch):
     )
 
 
+def test_pausing_live_source_warns_attendees_at_once(client, db, demo):
+    source = db.scalar(select(Source).where(Source.event_id == demo.id))
+    source.mode = "aes"
+    source.config = {"authorized": True, "event_key": "key", "last_sync_success": True}
+    source.last_successful_check_at = utcnow()
+    db.commit()
+
+    def freshness():
+        detail = client.get("/v1/events/demo-championships").json()
+        return next(s for s in detail["sources"] if s["id"] == str(source.id))
+
+    assert freshness()["freshness"] == "current"
+    response = client.patch(
+        f"/v1/admin/sources/{source.id}", json={"status": "paused"}, headers=ADMIN
+    )
+    assert response.status_code == 200
+    assert freshness()["freshness"] == "paused"
+    # Retained schedule stays visible, and cards carry the source's last check.
+    match = client.get("/v1/events/demo-championships/matches").json()["data"][0]
+    assert match["source"]["freshness"] == "paused"
+    assert match["source"]["last_checked_at"] == freshness()["last_checked_at"]
+
+
+def test_auto_sync_toggle_keeps_source_config(client, db, demo):
+    source = db.scalar(select(Source).where(Source.event_id == demo.id))
+    source.mode = "aes"
+    source.config = {"authorized": True, "event_key": "key"}
+    db.commit()
+    response = client.patch(
+        f"/v1/admin/sources/{source.id}",
+        json={"auto_sync": True, "expected_check_interval_minutes": 5},
+        headers=ADMIN,
+    )
+    data = response.json()["data"]
+    assert (data["auto_sync"], data["check_interval_minutes"]) == (True, 5)
+    db.expire_all()
+    assert db.get(Source, source.id).config == {
+        "authorized": True,
+        "event_key": "key",
+        "auto_sync": True,
+    }
+
+
 def test_aes_load_builds_event_from_recordings_and_is_idempotent(
     client, db, monkeypatch
 ):
@@ -60,6 +103,8 @@ def test_aes_load_builds_event_from_recordings_and_is_idempotent(
         sync, "fetch_snapshot", lambda mode, config: read_aes(config, get=recorded())
     )
     event = aes_load(AES_KEY, get=recorded())
+    loaded = db.scalar(select(Source).where(Source.event_id == event.id))
+    assert loaded.config["auto_sync"] is True
     listed = next(
         e for e in client.get("/v1/events").json()["data"] if e["slug"] == event.slug
     )
