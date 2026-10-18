@@ -4,6 +4,8 @@ A mobile-first companion for Ontario Volleyball Association events. Fans, famili
 
 The case study and requirements are in `docs/requirements/`. `OVA_MVP_Technical_Implementation.md` sets the scope and stack for this first release.
 
+
+
 | Folder | What it is | Hosted on |
 | ------ | ---------- | --------- |
 | `_back/` | FastAPI + PostgreSQL API ([README](_back/README.md)) | Railway |
