@@ -8,6 +8,7 @@ import { WelcomeBanner } from "../brand";
 import { MatchCard } from "../match-card";
 import { FreshnessNote } from "../freshness";
 import { MyEventLinks } from "../my-day-links";
+import { WorkDutyChecklist } from "../ova-rules";
 import {
   Card,
   EmptyState,
@@ -120,6 +121,9 @@ export function MyDayView({ eventId }: { eventId: string }) {
                     Your team is assigned to officiate these matches by the
                     competition source.
                   </p>
+                  {event.data && (
+                    <WorkDutyChecklist kind={event.data.data.kind} />
+                  )}
                   <ul className="match-list">
                     {day.work_duties.map((m) => (
                       <li key={m.id}>

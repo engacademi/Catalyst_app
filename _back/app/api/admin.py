@@ -264,6 +264,9 @@ class VenueIn(BaseModel):
     accessible_entrance: str | None = None
     directions: str | None = None
     map_url: HttpUrl | None = None
+    # A bundled path such as /venues/enercare-centre.jpg or a full image URL.
+    photo_url: str | None = Field(None, max_length=500)
+    photo_credit: str | None = Field(None, max_length=300)
     sort: int = 0
 
 

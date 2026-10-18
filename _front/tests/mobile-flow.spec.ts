@@ -381,7 +381,7 @@ test("overview uses compact attendance and label actions without redundant tabs 
   await expect(nav.getByRole("link", { name: "My event day" })).toHaveCount(0);
   await expect(nav.getByRole("link", { name: "My teams" })).toHaveCount(0);
   await expect(
-    page.getByRole("link", { name: "Manage team labels" }),
+    page.getByRole("link", { name: "My teams and kids’ names" }),
   ).toHaveAttribute("href", "/events/ontario-demo/my-teams");
   const attended = page.getByRole("button", { name: "Attended", exact: true });
   await attended.click();
@@ -555,7 +555,7 @@ test("compact saved picks, sponsor ribbon and profile saved-team lists", async (
   expect(small!.x + small!.width - heart!.x - heart!.width).toBeLessThan(12);
   expect(heart!.y - small!.y).toBeLessThan(12);
   const full = await nearby.locator(".event-tile").first().boundingBox();
-  expect(small!.height).toBeLessThan(full!.height * 0.65);
+  expect(Math.abs(small!.height - full!.height)).toBeLessThanOrEqual(2);
   const sponsor = page.getByRole("region", { name: "Our sponsors" });
   await expect(sponsor).toBeVisible();
   expect((await sponsor.boundingBox())!.y).toBeGreaterThan(
@@ -1020,13 +1020,67 @@ test("discovery cards share the compact tournament card artwork", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
+  await page.route("**/v1/events", (route) => route.fulfill({ json: { data: [{
+    ...event,
+    venue_locations: [{ city: "Toronto", latitude: 43.65, longitude: -79.38,
+      photo_url: "/venues/exhibition-place.jpg", photo_credit: "Venue photo credit" }],
+  }] } }));
   await page.goto("/");
   const art = page.locator(".event-tile-art").first();
   await expect(art).toBeVisible();
-  expect((await art.boundingBox())!.height).toBe(62);
+  expect((await art.boundingBox())!.height).toBeCloseTo(62, 1);
+  await expect(art.locator("img.event-tile-photo")).toBeVisible();
+  await expect.poll(() => art.locator("img").evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   const discoveryWidth = (await page.locator(".event-tile").first().boundingBox())!.width;
   await page.goto("/tournaments");
   await expect(art).toBeVisible();
-  expect((await art.boundingBox())!.height).toBe(62);
+  expect((await art.boundingBox())!.height).toBeCloseTo(62, 1);
   expect(Math.abs((await page.locator(".event-tile").first().boundingBox())!.width - discoveryWidth)).toBeLessThanOrEqual(2);
+});
+
+test("guide shows OVA match-day rules for the event's kind", async ({
+  page,
+}) => {
+  await setup(page);
+  const guide = { venues: [], items: [], partners: [] };
+  await page.route("**/v1/events/ontario-demo/guide", (route) =>
+    route.fulfill({ json: { data: guide } }),
+  );
+  await page.goto("/events/ontario-demo/guide");
+  const rules = page.getByRole("region", { name: "Match-day rules" });
+  await expect(rules.getByText(/uses 8-4-4/)).toBeVisible();
+  await expect(
+    rules.getByRole("link", { name: /Youth Competitions Manual 2026-27 §6\.5/ }),
+  ).toHaveAttribute("href", /YCM_2026-2027/);
+  await expect(rules.getByText("Check-in")).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "Official OVA documents" })
+      .getByRole("link", { name: /Roster Verification Process/ }),
+  ).toBeVisible();
+  await expect(page.locator('a[href="tel:647-467-5514"]')).toHaveCount(1);
+
+  await page.route("**/v1/events/ontario-demo", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          ...event,
+          kind: "beach",
+          venues: [],
+          divisions: [],
+          counts: { entries: 20, matches: 3 },
+        },
+        sources: [source],
+      },
+    }),
+  );
+  await page.reload();
+  await expect(rules.getByText(/both partners check in together/)).toBeVisible();
+  await expect(rules.getByText(/uses 8-4-4/)).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "Official OVA documents" })
+      .getByRole("link", { name: /Beach Tour Handbook 2026/ }),
+  ).toBeVisible();
+  await expect(page.locator('a[href="tel:647-467-5514"]')).toHaveCount(0);
 });

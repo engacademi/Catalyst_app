@@ -13,6 +13,8 @@ export function VenueEditor({ venue }: { venue: Venue }) {
     accessible_entrance: venue.accessible_entrance ?? "",
     directions: venue.directions ?? "",
     map_url: venue.map_url ?? "",
+    photo_url: venue.photo_url ?? "",
+    photo_credit: venue.photo_credit ?? "",
   });
   const update = useAdminMutation("PATCH", `/v1/admin/venues/${venue.id}`);
   return (
@@ -29,6 +31,8 @@ export function VenueEditor({ venue }: { venue: Venue }) {
             latitude: form.latitude === "" ? null : Number(form.latitude),
             longitude: form.longitude === "" ? null : Number(form.longitude),
             map_url: form.map_url || null,
+            photo_url: form.photo_url || null,
+            photo_credit: form.photo_credit || null,
           });
         }}
       >
@@ -65,7 +69,9 @@ export function VenueEditor({ venue }: { venue: Venue }) {
           </Field>
         ))}
         <p className="text-xs text-muted">
-          Add both coordinates to include this venue in nearby discovery.
+          Add both coordinates to include this venue in nearby discovery. The
+          photo shows on the event tile and venue guide; credit the
+          photographer when the licence asks for it.
         </p>
         <FormError error={update.error} />
         {update.isSuccess && <p role="status">Venue updated.</p>}

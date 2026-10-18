@@ -1500,6 +1500,41 @@ caption {
   max-width: 110px;
   line-height: 1.9;
 }
+/* A venue photo replaces the volleyball art; the shade keeps the eyebrow legible. */
+.event-tile-art.has-photo {
+  overflow: hidden;
+  background: var(--brand);
+  color: white;
+}
+.event-tile-photo {
+  object-fit: cover;
+}
+.event-tile-art.has-photo::after {
+  inset: 0;
+  height: auto;
+  transform: none;
+  background: linear-gradient(180deg, #000000a6, #00000000 60%);
+}
+.event-tile-art.has-photo .eyebrow {
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+}
+.venue-photo {
+  margin: -8px -8px 16px;
+}
+.venue-photo img {
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 16px;
+}
+.venue-photo figcaption {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .save-event {
   display: flex;
   align-items: center;

@@ -22,6 +22,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import event as sa_event
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -110,12 +111,23 @@ class Venue(UUIDPk, Base):
     accessible_entrance: Mapped[str | None] = mapped_column(Text)
     directions: Mapped[str | None] = mapped_column(Text)
     map_url: Mapped[str | None] = mapped_column(String(500))
+    photo_url: Mapped[str | None] = mapped_column(String(500))
+    photo_credit: Mapped[str | None] = mapped_column(String(300))
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
     event: Mapped[Event] = relationship(back_populates="venues")
     courts: Mapped[list["Court"]] = relationship(back_populates="venue", order_by="Court.label")
 
     __table_args__ = (UniqueConstraint("event_id", "name"),)
+
+
+@sa_event.listens_for(Venue, "before_insert")
+def _known_venue_photo(mapper, connection, venue: Venue) -> None:
+    # Every creation path (connectors, seeds, staff) gets the photo for a known venue.
+    from app.modules.venue_photos import VENUE_PHOTOS
+
+    if venue.photo_url is None and venue.name in VENUE_PHOTOS:
+        venue.photo_url, venue.photo_credit = VENUE_PHOTOS[venue.name]
 
 
 class Court(UUIDPk, Base):

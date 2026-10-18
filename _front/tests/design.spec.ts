@@ -501,7 +501,7 @@ test("merged division follows, private labels, pathway and staff estimates remai
     .check();
   await page.goto(`${base}/my-teams`);
   await page
-    .getByRole("textbox", { name: "Private label" })
+    .getByRole("textbox", { name: "Kids’ names / private label" })
     .fill("Maya's team");
   await page.goto(`${base}/my-day`);
   await expect(
@@ -538,7 +538,8 @@ test("merged division follows, private labels, pathway and staff estimates remai
   );
   await page.goto(`${base}/matches/m1`);
   await expect(page.getByText(/Court running ~20 minutes late/)).toBeVisible();
-  await expect(page.getByText(/Official time remains unchanged/)).toBeVisible();
+  await expect(page.getByText(/^Official .*Est\. ~/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "See alerts" })).toHaveAttribute("href", `${base}/updates?match=m1#match-m1`);
   await expect(page.getByText(/Expected to start soon/)).toBeVisible();
 });
 
@@ -729,4 +730,38 @@ test("paused source warns attendees right away while the schedule stays visible"
   );
   await page.goto(`${base}/matches/m1`);
   await expect(page.getByText(/Updates paused · last checked/).first()).toBeVisible();
+});
+
+test("My Day work duties list what the team must do", async ({ page }) => {
+  await fixtures(page);
+  await page.addInitScript(
+    ({ eventId }) =>
+      localStorage.setItem(`courtside:follows:${eventId}`, '["t1"]'),
+    { eventId },
+  );
+  await page.route(`**/v1/events/${eventId}/my-day*`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          next_match_id: null,
+          next_by_entry: {},
+          upcoming_ids: [],
+          awaiting_schedule_ids: [],
+          completed_ids: [],
+          conflicts: [],
+          assumed_match_minutes: 60,
+          entries,
+          matches: {},
+          work_duties: [match],
+        },
+        sources: [source],
+      },
+    }),
+  );
+  await page.goto(`${base}/my-day`);
+  await expect(page.getByText("What your team must do")).toBeVisible();
+  await expect(page.getByText(/one athlete line judge per match/)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Youth Competitions Manual 2026-27 §6\.21/ }),
+  ).toBeVisible();
 });

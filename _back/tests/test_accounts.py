@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.models import EventEntry, Match
+from app.modules.sponsors import OVA_SPONSORS, SPEER
 from app.seed import seed_testing
 from tests.conftest import ADMIN, OFFICIAL
 
@@ -24,8 +25,16 @@ def test_search_and_testing_tournaments(client, db, demo):
         results = client.get("/v1/search", params={"q": term}).json()["data"]
         assert any(result["kind"] == kind for result in results)
     assert client.get("/v1/search?q=%25").json()["data"] == []
-    # OVA's nine real sponsors plus the showcase's "Red Bull · Demo" placement.
-    assert len(client.get("/v1/sponsors").json()["data"]) == 10
+    # Platform sponsor first, then OVA sponsors and the showcase placement, each once.
+    sponsors = client.get("/v1/sponsors").json()["data"]
+    names = [s["name"] for s in sponsors]
+    assert names[0] == SPEER.name
+    assert len(names) == len(set(names))
+    assert set(names) == {
+        SPEER.name,
+        "Red Bull · Demo",
+        *[s.name for s in OVA_SPONSORS],
+    }
 
 
 def test_account_type_cannot_escalate_and_following_is_scoped(client, db, demo):

@@ -22,7 +22,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { CourtOverview } from "../court-overview";
-import { useGuide } from "@/lib/queries";
+import { useEvent, useGuide } from "@/lib/queries";
+import { CANT_ATTEND } from "@/lib/ova-rules";
+import { MatchDayRules, OfficialDocuments } from "../ova-rules";
 import { Card, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -38,6 +40,7 @@ const ICONS: Record<string, LucideIcon> = {
 export function GuideView({ eventId }: { eventId: string }) {
   const hydrated = useHydrated();
   const query = useGuide(eventId);
+  const kind = useEvent(eventId).data?.data.kind;
   if (!hydrated || query.isPending) return <Loading label="Loading guide" />;
   if (query.error && !query.data) return <ErrorState error={query.error} />;
   const { venues, items, partners } = query.data.data;
@@ -57,6 +60,19 @@ export function GuideView({ eventId }: { eventId: string }) {
       <div className="grid grid-cols-1 gap-4">
         {venues.map((v) => (
           <Card key={v.id}>
+            {v.photo_url && (
+              <figure className="venue-photo">
+                <Image
+                  src={v.photo_url}
+                  alt={`Outside ${v.name}`}
+                  width={1200}
+                  height={800}
+                  sizes="(max-width: 640px) 100vw, 640px"
+                  unoptimized
+                />
+                {v.photo_credit && <figcaption>{v.photo_credit}</figcaption>}
+              </figure>
+            )}
             <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">
               {v.name}
             </h3>
@@ -160,11 +176,22 @@ export function GuideView({ eventId }: { eventId: string }) {
                 ) : (
                   <p>Ask the venue welcome desk for details.</p>
                 )}
+                {kinds[0] === "help" && kind === "indoor" && (
+                  <div>
+                    <strong>Team can&apos;t make it?</strong>
+                    <p>{CANT_ATTEND.body}</p>
+                    <a href={`tel:${CANT_ATTEND.phone}`}>
+                      Call {CANT_ATTEND.phone}
+                    </a>
+                  </div>
+                )}
               </details>
             </Card>
           );
         })}
       </div>
+
+      {kind && <MatchDayRules kind={kind} />}
 
       {offers.length > 0 && (
         <>
@@ -246,6 +273,8 @@ export function GuideView({ eventId }: { eventId: string }) {
           </p>
         </>
       )}
+
+      {kind && <OfficialDocuments kind={kind} />}
 
       <EventPartners sponsors={sponsors} />
     </div>
