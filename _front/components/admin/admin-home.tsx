@@ -21,6 +21,8 @@ type Me = {
 };
 
 export function AdminHome() {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
   const me = useAdminQuery<Me>("/v1/admin/me");
   const events = useAdminQuery<{ data: EventSummary[] }>("/v1/admin/events");
   if (me.isPending || events.isPending) return <Loading />;
@@ -29,19 +31,27 @@ export function AdminHome() {
   const isAdmin = me.data.grants.some((g) => g.role === "admin");
   const isOfficial = me.data.grants.some((g) => g.role === "official");
 
+  const filtered = events.data.data.filter(
+    (e) =>
+      (status === "all" || e.status === status) &&
+      e.title.toLowerCase().includes(search.toLowerCase()),
+  );
   return (
     <div>
-      <p className="mb-4 text-sm">
-        <Link className="text-brand underline" href="/admin/roster-reviews">
-          Review my team’s imported roster →
+      <div className="staff-dashboard-tools">
+        <Link className="secondary-link" href="/admin/roster-reviews">
+          Roster reviews
         </Link>
-      </p>
+        <Link className="secondary-link" href="/admin/assignments">
+          My assignments
+        </Link>
+      </div>
       <PageTitle subtitle="Publish announcements, import schedules and rosters, and keep event content current.">
-        Events
+        Your event dashboard
       </PageTitle>
       {isOfficial && (
         <p className="mb-4 text-sm">
-          You have an official&apos;s role.{" "}
+          Manage your Team Lead assignments.{" "}
           <Link
             href="/admin/assignments"
             className="font-semibold text-brand underline"
@@ -51,30 +61,80 @@ export function AdminHome() {
           .
         </p>
       )}
-      {events.data.data.length === 0 ? (
-        <EmptyState title="No events you can manage">
-          Ask an OVA administrator to grant you staff access for an event.
+      <div className="staff-dashboard-tools">
+        <input
+          className={inputClass}
+          aria-label="Search manageable events"
+          placeholder="Search your events"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          aria-label="Event publication status"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="all">All events ({events.data.data.length})</option>
+          <option value="published">Published</option>
+          <option value="draft">Drafts</option>
+        </select>
+      </div>
+      {events.data.data.length > 0 && (
+        <p className="text-sm text-muted mb-3" role="status">
+          {filtered.length} events
+        </p>
+      )}
+      {filtered.length === 0 ? (
+        <EmptyState
+          title={
+            events.data.data.length
+              ? "No matching events"
+              : "No events you can manage"
+          }
+        >
+          {events.data.data.length
+            ? "Try another search or status."
+            : "Ask an OVA administrator to grant you access for an event."}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2">
-          {events.data.data.map((e) => (
+          {filtered.map((e) => (
             <li key={e.id}>
-              <Link
-                href={`/admin/events/${e.id}`}
-                className="ui-card block border border-border bg-surface p-6 hover:border-brand"
-              >
-                <p className="font-semibold">{e.title}</p>
-                <p className="text-sm text-muted">
-                  {e.start_date} to {e.end_date}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <Badge tone={e.status === "published" ? "brand" : "neutral"}>
-                    {e.status}
-                  </Badge>
-                  <Badge>{e.kind}</Badge>
-                  {e.is_demo && <Badge tone="warn">demo</Badge>}
-                </div>
-              </Link>
+              <Card className="staff-event-card">
+                <Link href={`/admin/events/${e.id}`} className="block min-h-11">
+                  <p className="font-semibold">{e.title}</p>
+                  <p className="text-sm text-muted">
+                    {e.start_date} to {e.end_date}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <Badge
+                      tone={e.status === "published" ? "brand" : "neutral"}
+                    >
+                      {e.status}
+                    </Badge>
+                    <Badge>{e.kind}</Badge>
+                    {e.is_demo && <Badge tone="warn">demo</Badge>}
+                  </div>
+                </Link>
+                <nav
+                  className="staff-event-links"
+                  aria-label={`${e.title} editing tools`}
+                >
+                  {[
+                    ["Matches & brackets", "Matches & brackets"],
+                    ["Announcements", "Announcements"],
+                    ["Courts & clock", "Court delays"],
+                    ["Content", "Venue & Media"],
+                  ].map(([tool, label]) => (
+                    <Link
+                      key={tool}
+                      href={`/admin/events/${e.id}?tool=${encodeURIComponent(tool)}`}
+                    >
+                      {label}
+                    </Link>
+                  ))}
+                </nav>
+              </Card>
             </li>
           ))}
         </ul>

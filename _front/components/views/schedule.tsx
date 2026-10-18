@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
 import { formatDateRange, formatDay, formatTime } from "@/lib/format";
@@ -11,6 +11,7 @@ import { useHydrated } from "@/lib/hydration";
 import { MatchCard } from "../match-card";
 import { ErrorState, Loading, EmptyState } from "../ui";
 import { TimeGrid } from "../time-grid";
+import { eventColor } from "@/lib/event-colors";
 
 export function dateKey(iso: string, timeZone = "America/Toronto") {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone });
@@ -222,31 +223,112 @@ export function ScheduleView() {
               <ChevronRight size={18} aria-hidden />
             </button>
             <button onClick={() => setStart(today)}>Today</button>
-            <details className="schedule-visibility">
+            <details
+              className="schedule-visibility"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.currentTarget.open = false;
+                  e.currentTarget.querySelector("summary")?.focus();
+                }
+              }}
+              onBlur={(e) => {
+                if (
+                  e.relatedTarget &&
+                  !e.currentTarget.contains(e.relatedTarget)
+                )
+                  e.currentTarget.open = false;
+              }}
+            >
               <summary title="Visibility">
                 <Eye size={18} aria-hidden />
                 <span className="sr-only">Visibility</span>
               </summary>
-              <div className="visibility-panel">
-                <p className="visibility-panel-heading">
-                  Visibility · {visible.length} shown
-                </p>
-                {selected.map((e) => (
-                  <label key={e.id}>
-                    <input
-                      type="checkbox"
-                      checked={!hidden.includes(e.slug)}
-                      onChange={() =>
-                        setHidden(
-                          hidden.includes(e.slug)
-                            ? hidden.filter((id) => id !== e.slug)
-                            : [...hidden, e.slug],
-                        )
+              <div
+                className="visibility-panel"
+                role="region"
+                aria-label="Calendar visibility"
+              >
+                <div className="visibility-panel-header">
+                  <div>
+                    <p className="visibility-panel-heading">
+                      <Eye size={16} aria-hidden /> Visibility
+                    </p>
+                    <p className="visibility-caption">
+                      {visible.length} of {selected.length} events shown
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="visibility-close"
+                    aria-label="Close visibility"
+                    onClick={(e) => {
+                      const details = e.currentTarget.closest("details");
+                      if (details) {
+                        details.open = false;
+                        details.querySelector("summary")?.focus();
                       }
-                    />
-                    {e.title}
-                  </label>
-                ))}
+                    }}
+                  >
+                    <X size={17} aria-hidden />
+                  </button>
+                </div>
+                <div className="visibility-options">
+                  {selected.map((e) => (
+                    <label className="visibility-option" key={e.id}>
+                      <input
+                        type="checkbox"
+                        aria-label={e.title}
+                        checked={!hidden.includes(e.slug)}
+                        onChange={() =>
+                          setHidden(
+                            hidden.includes(e.slug)
+                              ? hidden.filter((id) => id !== e.slug)
+                              : [...hidden, e.slug],
+                          )
+                        }
+                      />
+                      <span
+                        className={`event-colour event-colour-${eventColor(e.id)}`}
+                        aria-hidden
+                      />
+                      <span className="visibility-option-text">
+                        <strong>{e.title}</strong>
+                        <small>
+                          {hidden.includes(e.slug)
+                            ? "Hidden from calendar"
+                            : "Visible on calendar"}
+                        </small>
+                      </span>
+                      <span className="visibility-switch" aria-hidden>
+                        <span />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="visibility-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHidden(
+                        hidden.filter(
+                          (id) => !selected.some((e) => e.slug === id),
+                        ),
+                      )
+                    }
+                  >
+                    Show all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHidden([
+                        ...new Set([...hidden, ...selected.map((e) => e.slug)]),
+                      ])
+                    }
+                  >
+                    Hide all
+                  </button>
+                </div>
               </div>
             </details>
           </div>

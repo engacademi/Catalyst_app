@@ -1,4 +1,5 @@
 from sqlalchemy import select
+
 from app.models import Match, Source, Venue
 from tests.conftest import ADMIN, OFFICIAL
 
@@ -104,4 +105,54 @@ def test_match_search_and_event_date_validation(client, demo):
             json={"start_date": "2027-02-02", "end_date": "2027-01-01"},
         ).status_code
         == 422
+    )
+
+
+def test_event_media_uses_scoped_content_crud(client, demo):
+    path = f"/v1/admin/events/{demo.id}/guide-items"
+    media = {
+        "kind": "media_photo",
+        "title": "Event highlights",
+        "body": "Approved event photo",
+        "link_url": "https://example.org/highlights.jpg",
+    }
+    assert client.post(path, json=media).status_code == 401
+    assert (
+        client.post(path, json=media, headers={"X-Dev-User": "unassigned"}).status_code
+        == 403
+    )
+    assert (
+        client.post(path, json={**media, "link_url": None}, headers=ADMIN).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            path,
+            json={**media, "link_url": "http://example.org/photo.jpg"},
+            headers=ADMIN,
+        ).status_code
+        == 422
+    )
+    created = client.post(path, json=media, headers=OFFICIAL)
+    assert created.status_code == 201
+    item = created.json()["data"]
+    public = client.get(f"/v1/events/{demo.slug}/guide").json()["data"]["items"]
+    assert any(
+        row["id"] == item["id"] and row["kind"] == "media_photo" for row in public
+    )
+    edited = client.put(
+        f"/v1/admin/guide-items/{item['id']}",
+        headers=OFFICIAL,
+        json={
+            **media,
+            "title": "Updated highlights",
+            "expected_revision": item["revision"],
+        },
+    )
+    assert edited.status_code == 200
+    assert (
+        client.delete(
+            f"/v1/admin/guide-items/{item['id']}", headers=OFFICIAL
+        ).status_code
+        == 204
     )

@@ -14,6 +14,7 @@ import {
   Whistle,
   type LucideIcon,
 } from "lucide-react";
+import { CourtOverview } from "../court-overview";
 import { useGuide } from "@/lib/queries";
 import {
   Badge,
@@ -40,16 +41,16 @@ export function GuideView({ eventId }: { eventId: string }) {
   if (!hydrated || query.isPending) return <Loading label="Loading guide" />;
   if (query.error) return <ErrorState error={query.error} />;
   const { venues, items, partners } = query.data.data;
-  const general = items.filter((i) => i.kind !== "officials");
+  const general = items.filter(
+    (i) => i.kind !== "officials" && !i.kind.startsWith("media_"),
+  );
   const officials = items.filter((i) => i.kind === "officials");
   const offers = partners.filter((p) => p.kind !== "sponsor");
   const sponsors = partners.filter((p) => p.kind === "sponsor");
 
   return (
     <div>
-      <PageTitle subtitle="Find your court, grab a bite, and feel at home at the venue.">
-        Around the venue
-      </PageTitle>
+      <PageTitle>Venue Guide</PageTitle>
 
       <SectionTitle>Venues</SectionTitle>
       <div className="grid gap-4">
@@ -78,9 +79,7 @@ export function GuideView({ eventId }: { eventId: string }) {
               </p>
             )}
             {v.courts.length > 0 && (
-              <p className="mt-2 text-sm text-muted">
-                Courts: {v.courts.map((c) => c.label).join(", ")}
-              </p>
+              <CourtOverview venue={v} eventId={eventId} />
             )}
             {v.map_url && (
               <a
@@ -170,8 +169,8 @@ export function GuideView({ eventId }: { eventId: string }) {
         <>
           <SectionTitle>
             <span className="flex items-center gap-2">
-              <Whistle aria-hidden className="h-4 w-4 text-brand" /> Referees
-              and scorekeepers
+              <Whistle aria-hidden className="h-4 w-4 text-brand" /> Team Lead
+              resources
             </span>
           </SectionTitle>
           {officials.map((i) => (
@@ -192,12 +191,12 @@ export function GuideView({ eventId }: { eventId: string }) {
             </Card>
           ))}
           <p className="text-sm">
-            Officials can sign in to see their own court assignments in the{" "}
+            Team Leads can sign in to see their own court assignments in the{" "}
             <a
               href="/admin/assignments"
               className="font-semibold text-brand underline"
             >
-              officials area
+              Team Lead workspace
             </a>
             .
           </p>

@@ -3,6 +3,14 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEvent } from "@/lib/queries";
+import {
+  House,
+  MapPinned,
+  CalendarDays,
+  Users,
+  GitBranch,
+  Images,
+} from "lucide-react";
 import { useNow } from "@/lib/now";
 
 export function EventShell({
@@ -16,11 +24,12 @@ export function EventShell({
   const event = useEvent(eventId).data?.data;
   const base = `/events/${eventId}`;
   const links = [
-    ["", "Overview"],
-    ["matches", "Matches"],
-    ["teams", "Teams"],
-    ["pathway", "Brackets"],
-    ["guide", "Venue guide"],
+    { href: "", label: "Overview", icon: House },
+    { href: "guide", label: "Venue Guide", icon: MapPinned },
+    { href: "matches", label: "Matches", icon: CalendarDays },
+    { href: "teams", label: "Teams", icon: Users },
+    { href: "pathway", label: "Brackets", icon: GitBranch },
+    { href: "media", label: "Media", icon: Images },
   ];
   return (
     <div className="tournament-shell">
@@ -35,11 +44,13 @@ export function EventShell({
         />
       )}
       <nav className="tournament-tabs" aria-label="Tournament sections">
-        {links.map(([href, label]) => {
+        {links.map(({ href, label, icon: Icon }) => {
           const target = href ? `${base}/${href}` : base;
           return (
             <Link
               key={href}
+              aria-label={label}
+              title={label}
               href={target}
               aria-current={
                 path === target ||
@@ -48,7 +59,8 @@ export function EventShell({
                   : undefined
               }
             >
-              {label}
+              <Icon size={21} aria-hidden />
+              <span>{label}</span>
             </Link>
           );
         })}

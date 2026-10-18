@@ -274,7 +274,16 @@ const GUIDE_KINDS = [
   "services",
   "help",
   "officials",
+  "media_photo",
+  "media_video",
+  "media_album",
 ];
+const GUIDE_LABELS: Record<string, string> = {
+  media_photo: "Media · Photo",
+  media_video: "Media · Video",
+  media_album: "Media · Album",
+  officials: "Team Lead resources",
+};
 const PARTNER_KINDS = [
   "sponsor",
   "merchandise",
@@ -404,7 +413,7 @@ function GuideSection({ event }: { event: AdminEventData }) {
   });
   return (
     <section>
-      <SectionTitle>Guide: parking, food, accessibility, help</SectionTitle>
+      <SectionTitle>Venue Guide & Media</SectionTitle>
 
       <ul className="mb-3 space-y-2">
         {guide.data?.data.items.map((i) => (
@@ -427,7 +436,12 @@ function GuideSection({ event }: { event: AdminEventData }) {
                     expected_revision: i.revision,
                   }}
                   fields={[
-                    { name: "kind", label: "Type", options: GUIDE_KINDS },
+                    {
+                      name: "kind",
+                      label: "Type",
+                      options: GUIDE_KINDS,
+                      optionLabels: GUIDE_LABELS,
+                    },
                     {
                       name: "title",
                       label: "Title",
@@ -478,7 +492,7 @@ function GuideSection({ event }: { event: AdminEventData }) {
             >
               {GUIDE_KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {k}
+                  {GUIDE_LABELS[k] ?? k}
                 </option>
               ))}
             </select>
@@ -501,9 +515,13 @@ function GuideSection({ event }: { event: AdminEventData }) {
               />
             </Field>
           </div>
-          <Field label="Link (optional)">
+          <Field label="Link (required for Media)">
             <input
               type="url"
+              required={form.kind.startsWith("media_")}
+              pattern={
+                form.kind.startsWith("media_") ? "https://.*" : undefined
+              }
               value={form.link_url}
               onChange={(e) => setForm({ ...form, link_url: e.target.value })}
               className={inputClass}

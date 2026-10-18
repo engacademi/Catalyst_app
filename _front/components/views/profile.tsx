@@ -12,7 +12,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useEventSelections } from "@/lib/preferences";
 import { usePreference } from "@/lib/preferences";
 import { allEventTeams, useEvents } from "@/lib/queries";
-import { useNotificationCounts } from "../platform-shell";
+import { AccountRole } from "../account-dashboard";
 import { Card } from "../ui";
 import { formatDateRange } from "@/lib/format";
 
@@ -20,7 +20,6 @@ function Account() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { openUserProfile, signOut } = useClerk();
   const [intent, setIntent] = usePreference("signup-intent", "spectator");
-  const [officer, setOfficer] = usePreference("signup-officer", "coach");
   if (!isLoaded) return <p>Loading account…</p>;
   if (!isSignedIn)
     return (
@@ -39,22 +38,14 @@ function Account() {
                 aria-pressed={intent === type}
                 onClick={() => setIntent(type)}
               >
-                {type.charAt(0).toUpperCase() + type.slice(1)}
+                {type === "player"
+                  ? "Athlete"
+                  : type === "officer"
+                    ? "Team Lead"
+                    : "Spectator"}
               </button>
             ))}
           </div>
-          {intent === "officer" && (
-            <label className="grid gap-1 mt-3">
-              Officer role
-              <select
-                value={officer}
-                onChange={(e) => setOfficer(e.target.value)}
-              >
-                <option value="coach">Coach</option>
-                <option value="referee">Referee</option>
-              </select>
-            </label>
-          )}
         </fieldset>
         <div className="flex flex-wrap gap-3">
           <SignInButton mode="modal">
@@ -73,7 +64,7 @@ function Account() {
         <h2>{user.firstName ? `Hi, ${user.firstName}.` : "Your account"}</h2>
       </div>
       <p className="mt-2 text-sm text-muted">
-        {user.primaryEmailAddress?.emailAddress}
+        {user.primaryEmailAddress?.emailAddress} <AccountRole />
       </p>
       <div className="mt-4 flex flex-wrap gap-3">
         <button className="secondary-link" onClick={() => openUserProfile()}>
@@ -91,7 +82,6 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
   const [saved] = usePreference<string[]>("saved-events", []);
   const [attended] = usePreference<string[]>("attended", []);
   const events = useEvents();
-  const notifications = useNotificationCounts();
   const selected = useEventSelections(events.data?.data ?? []);
   const teamEvents = (events.data?.data ?? []).filter((e) =>
     (selected.get(e.slug) ?? []).some((id) => !id.startsWith("division:")),
@@ -149,28 +139,6 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
         </div>
       </section>
       <section>
-        <h2>Notifications</h2>
-        <p className="section-description">
-          Unread changes for saved tournaments and followed teams. Open an event
-          feed to read or mark them as seen.
-        </p>
-        <ul className="profile-links">
-          {notifications.map(({ event, count }) => (
-            <li key={event.id}>
-              <Link href={`/events/${event.slug}/updates`}>
-                <span>{event.title}</span>
-                <span>{count} unread →</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-        {!notifications.length && (
-          <p className="empty-inline">
-            Save a tournament or follow a team to get relevant updates.
-          </p>
-        )}
-      </section>
-      <section>
         <h2>Saved tournaments</h2>
         <ul className="profile-list">
           {events.data?.data
@@ -221,7 +189,7 @@ export function ProfileView({ clerkEnabled }: { clerkEnabled: boolean }) {
         </p>
       </section>
       <Card className="mt-6">
-        <h2>Staff & officials</h2>
+        <h2>Staff & Team Leads</h2>
         <p className="section-description">
           Manage event details, delays, announcements, imports, brackets,
           rosters and venue information. Access follows your OVA role.

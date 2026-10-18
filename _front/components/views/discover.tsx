@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
 import { formatDay, formatTime } from "@/lib/format";
 import Link from "next/link";
+import Image from "next/image";
 import { MapPin, Search } from "lucide-react";
 import { useEvents } from "@/lib/queries";
 import {
@@ -232,15 +233,27 @@ export function DiscoverView({
   const popular = filtered
     .filter((e) => !isPast(e))
     .sort((a, b) => (b.team_count ?? 0) - (a.team_count ?? 0));
+  const illustration = !catalogue ? (
+    <span className="discover-illustration" aria-hidden="true">
+      <Image
+        src="/discover-volleyball.png"
+        alt=""
+        width={1536}
+        height={1024}
+        sizes="(max-width: 700px) 60vw, 420px"
+        priority
+      />
+    </span>
+  ) : null;
   return (
     <main id="main" className="platform-main discovery-page">
       <div className="discovery-heading">
         {catalogue ? (
           <h1>Tournaments</h1>
         ) : personalized ? (
-          <DiscoveryGreeting />
+          <DiscoveryGreeting illustration={illustration} />
         ) : (
-          <h1>Find your next game.</h1>
+          <h1>Find your next game.{illustration}</h1>
         )}
       </div>
       <div

@@ -7,7 +7,7 @@ import { useState } from "react";
 import { apiGet, type Match, type SourceInfo } from "@/lib/api";
 import { useEvent } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
-import { MatchCard } from "../match-card";
+import { BracketBoard } from "../bracket-board";
 import { FreshnessNote } from "../freshness";
 import { EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
@@ -33,9 +33,7 @@ export function PathwayView({ eventId }: { eventId: string }) {
   if (!hydrated) return <Loading />;
   return (
     <div>
-      <PageTitle subtitle="Follow the official pool and playoff path, including positions still to be decided.">
-        Competition path
-      </PageTitle>
+      <PageTitle>Brackets</PageTitle>
       <Link
         href={`/events/${eventId}/matches`}
         className="text-sm font-semibold text-brand underline"
@@ -78,49 +76,24 @@ export function PathwayView({ eventId }: { eventId: string }) {
             <p className="my-4 rounded-xl border border-border bg-surface p-3 text-xs text-muted">
               {query.data.note}
             </p>
-            <div className="space-y-6">
-              {query.data.data.map((round, i) => {
-                const matches = round.matches.filter(
-                  (m) =>
-                    !mine ||
-                    ids.includes(m.home.entry_id ?? "") ||
-                    ids.includes(m.away.entry_id ?? "") ||
-                    !m.home.entry_id ||
-                    !m.away.entry_id,
-                );
-                return matches.length ? (
-                  <section key={round.label} aria-label={round.label}>
-                    <h2 className="mb-3 flex items-center gap-2 font-semibold">
-                      <span
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-xs text-white"
-                        aria-hidden
-                      >
-                        {i + 1}
-                      </span>
-                      {round.label}
-                    </h2>
-                    <ul className="grid gap-3 md:grid-cols-2">
-                      {matches.map((m) => (
-                        <li key={m.id}>
-                          <MatchCard
-                            match={m}
-                            eventId={eventId}
-                            followed={ids}
-                            showDay
-                          />
-                          <p className="mt-1 px-2 text-xs text-muted">
-                            Source match {m.source_match_id}
-                            {m.home.placeholder || m.away.placeholder
-                              ? ` · ${m.home.placeholder ?? m.home.team_name} vs ${m.away.placeholder ?? m.away.team_name}`
-                              : ""}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null;
-              })}
-            </div>
+            <BracketBoard
+              key={division}
+              eventId={eventId}
+              followed={ids}
+              rounds={query.data.data
+                .map((round) => ({
+                  ...round,
+                  matches: round.matches.filter(
+                    (m) =>
+                      !mine ||
+                      ids.includes(m.home.entry_id ?? "") ||
+                      ids.includes(m.away.entry_id ?? "") ||
+                      !m.home.entry_id ||
+                      !m.away.entry_id,
+                  ),
+                }))
+                .filter((round) => round.matches.length)}
+            />
             {query.data.data.length === 0 && (
               <EmptyState title="The source has not published this division's path" />
             )}

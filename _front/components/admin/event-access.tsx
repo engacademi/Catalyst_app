@@ -36,7 +36,14 @@ export function EventAccess({ event }: { event: AdminEventData }) {
           e.preventDefault();
           save.mutate({
             ...form,
-            entry_id: form.role === "coach" ? form.entry_id : null,
+            role:
+              form.role === "staff"
+                ? "staff"
+                : form.entry_id
+                  ? "coach"
+                  : "official",
+            entry_id:
+              form.role !== "staff" && form.entry_id ? form.entry_id : null,
           });
         }}
       >
@@ -62,19 +69,17 @@ export function EventAccess({ event }: { event: AdminEventData }) {
             onChange={(e) => setForm({ ...form, role: e.target.value })}
           >
             <option value="staff">Staff</option>
-            <option value="coach">Coach</option>
-            <option value="official">Referee</option>
+            <option value="team_lead">Team Lead</option>
           </select>
         </Field>
-        {form.role === "coach" && (
-          <Field label="Team">
+        {form.role === "team_lead" && (
+          <Field label="Team for roster reviews (optional)">
             <select
-              required
               className={inputClass}
               value={form.entry_id}
               onChange={(e) => setForm({ ...form, entry_id: e.target.value })}
             >
-              <option value="">Choose team</option>
+              <option value="">Event operations only</option>
               {event.entries.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.team_name}
@@ -94,7 +99,10 @@ export function EventAccess({ event }: { event: AdminEventData }) {
             <span>
               {data.data.users.find((u) => u.id === g.user_id)?.display_name ??
                 "Account"}{" "}
-              · {g.role}
+              ·{" "}
+              {g.role === "coach" || g.role === "official"
+                ? "Team Lead"
+                : g.role}
               {g.entry_id &&
                 ` · ${event.entries.find((t) => t.id === g.entry_id)?.team_name}`}
             </span>

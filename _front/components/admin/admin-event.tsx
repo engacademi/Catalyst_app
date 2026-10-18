@@ -2,9 +2,9 @@
 
 import { EventAccess } from "./event-access";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { MatchEditorPanel } from "./match-editor";
 import { EventDetailsPanel } from "./event-details";
-import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import type { Division, EventSummary, SourceInfo, Venue } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
@@ -49,7 +49,13 @@ const TABS = [
 type Tab = (typeof TABS)[number];
 
 export function AdminEvent({ eventId }: { eventId: string }) {
-  const [tab, setTab] = useState<Tab>("Announcements");
+  const params = useSearchParams();
+  const router = useRouter();
+  const chosen = params.get("tool") as Tab | null;
+  const requestedTab =
+    chosen && TABS.includes(chosen) ? chosen : "Announcements";
+  const setTab = (next: Tab) =>
+    router.replace(`?tool=${encodeURIComponent(next)}`, { scroll: false });
   const query = useAdminQuery<{ data: AdminEventData }>(
     `/v1/admin/events/${eventId}`,
   );
@@ -72,6 +78,7 @@ export function AdminEvent({ eventId }: { eventId: string }) {
       (t !== "Event access" || me.data?.grants.some((g) => g.role === "admin")),
   );
 
+  const tab = tabs.includes(requestedTab) ? requestedTab : "Announcements";
   return (
     <div>
       <Link href="/admin" className="text-sm text-muted">

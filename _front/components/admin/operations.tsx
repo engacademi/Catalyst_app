@@ -507,7 +507,7 @@ const FIELDS = [
   ["jersey", "Jersey number"],
   ["display_name", "Approved public display name"],
   ["position", "Position"],
-  ["photo_url", "Player photo URL"],
+  ["photo_url", "Athlete photo URL"],
   ["photo_approved", "Photo approval (yes/no)"],
   ["team_photo_url", "Team photo URL"],
   ["team_photo_approved", "Team photo approval (yes/no)"],
@@ -636,7 +636,7 @@ export function AssignmentPanel({ event }: { event: AdminEventData }) {
       </Card>
       <LoadMore query={matches} label="matches for assignment" />
       {matches.error && <ErrorState error={matches.error} />}
-      <SectionTitle>Assigned officials</SectionTitle>
+      <SectionTitle>Assigned Team Leads</SectionTitle>
       {list.isPending ? (
         <Loading />
       ) : list.error ? (
