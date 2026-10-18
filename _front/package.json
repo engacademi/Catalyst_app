@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
+    "test:unit": "node --test unit-tests/*.test.mjs",
     "typecheck": "next typegen && tsc --noEmit",
     "test:ui": "playwright test --config playwright.ui.config.ts",
     "test:transport": "playwright test --config playwright.transport.config.ts"
