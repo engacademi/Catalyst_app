@@ -40,6 +40,7 @@ from app.models import (
     utcnow,
 )
 from app.modules import projections as P
+from app.modules.announcements import deliver_due
 from app.modules.imports import commit_import, stage_import
 from app.modules.matches import (
     MATCH_STATUSES,
@@ -584,20 +585,13 @@ def publish_announcement(
     if a.state == "published":
         return {"data": P.announcement_admin(a)}
     old = a.revision
+    event = db.get(Event, a.event_id)
     a.state = "published"
-    a.publish_at = a.publish_at or P.event_now(db.get(Event, a.event_id))
+    a.publish_at = a.publish_at or P.event_now(event)
     a.revision += 1
-    db.add(
-        ChangeEvent(
-            event_id=a.event_id,
-            entity_type="announcement",
-            entity_id=a.id,
-            entity_revision=a.revision,
-            event_type="announcement_published",
-            diff={"title": a.title, "category": a.category},
-            entry_ids=[str(a.entry_id)] if a.entry_id else [],
-        )
-    )
+    db.flush()
+    # A scheduled notice enters the change feed when its time comes, not now.
+    deliver_due(db, event)
     audit(
         db, request, principal, "announcement.publish", a.event_id, a, old, a.revision
     )
@@ -1256,7 +1250,7 @@ def court_notice(
                     entity_type="match",
                     entity_id=m.id,
                     entity_revision=m.revision,
-                    event_type="delay_notice",
+                    event_type="delay_notice" if body.delay_minutes else "delay_cleared",
                     entry_ids=[str(p.entry_id) for p in m.participants if p.entry_id],
                     diff={
                         "minutes": body.delay_minutes,

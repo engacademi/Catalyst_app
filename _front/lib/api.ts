@@ -88,6 +88,8 @@ export type Change = {
   entry_ids: string[];
   simulated: boolean;
   occurred_at: string;
+  /** Change feed only: whether a court delay notice still applies. */
+  notice?: "active" | "expired" | "cleared" | "superseded";
 };
 
 export type Match = {
@@ -137,6 +139,8 @@ export type Announcement = {
   body: string;
   entry_id: string | null;
   division_id: string | null;
+  /** Teams the notice reaches; a division notice lists every team in it. */
+  entry_ids?: string[];
   publish_at: string | null;
   expire_at: string | null;
   revision: number;

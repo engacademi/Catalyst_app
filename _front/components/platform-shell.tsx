@@ -10,6 +10,7 @@ import { Wordmark } from "./brand";
 import { useEvents } from "@/lib/queries";
 import { apiGet, type Change } from "@/lib/api";
 import { usePreference } from "@/lib/preferences";
+import { audienceFrom, isRelevantChange } from "@/lib/relevance";
 import { useSyncExternalStore } from "react";
 
 function subscribe(cb: () => void) {
@@ -80,17 +81,14 @@ export function useNotificationCounts() {
   return selected.map((event, i) => {
     const state = local.get(event.slug);
     const page = queries[i].data;
+    const audience = audienceFrom(
+      state?.follows ?? [],
+      saved.includes(event.slug),
+    );
     const count = (page?.data ?? []).filter(
       (c) =>
         c.id > (state?.seen ?? 0) &&
-        (saved.includes(event.slug) ||
-          (!c.entry_ids.length &&
-            !c.division_id &&
-            c.entity_type === "announcement") ||
-          c.entry_ids.some((id) => state?.follows.includes(id)) ||
-          state?.follows.includes(
-            `division:${c.division_id ?? page?.divisions[c.entity_id]}`,
-          )),
+        isRelevantChange(c, audience, page?.divisions),
     ).length;
     return { event, count, more: false, error: queries[i].error };
   });

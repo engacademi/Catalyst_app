@@ -25,6 +25,7 @@ from app.models import (
     Venue,
 )
 from app.modules import projections as P
+from app.modules.announcements import audiences, deliver_due, is_visible
 from app.modules.calendar import build_ics
 from app.modules.matches import (
     STATUS_GROUPS,
@@ -416,6 +417,20 @@ def my_day(
     return json_response(request, payload)
 
 
+def delay_state(change: ChangeEvent, now: datetime, match: Match | None) -> str:
+    """Whether a court delay notice in the feed still applies: active, expired,
+    cleared, or superseded by a later notice on the match's court."""
+    if change.event_type == "delay_cleared" or not change.diff.get("minutes"):
+        return "cleared"
+    expires = change.diff.get("expires_at")
+    if not expires or datetime.fromisoformat(expires) <= now:
+        return "expired"
+    current = (match.court.delay or {}) if match and match.court else {}
+    if current.get("expires_at") != expires:
+        return "superseded"
+    return "active"
+
+
 @router.get("/events/{event_ref}/changes")
 def change_feed(
     event_ref: str,
@@ -427,6 +442,8 @@ def change_feed(
 ) -> Response:
     """Public change feed. Guests filter it on the device by their followed entries."""
     event = load_event(db, event_ref)
+    if deliver_due(db, event):
+        db.commit()
     rows = list(
         db.scalars(
             select(ChangeEvent)
@@ -442,7 +459,6 @@ def change_feed(
     has_more = len(rows) > limit
     rows = rows[:limit]
     next_before = rows[-1].id if has_more and rows else None
-    latest_id = rows[0].id if rows else after
     match_ids = [r.entity_id for r in rows if r.entity_type == "match"]
     matches = (
         list(
@@ -455,6 +471,7 @@ def change_feed(
         if match_ids
         else []
     )
+    by_id = {m.id: m for m in matches}
     announcement_ids = [r.entity_id for r in rows if r.entity_type == "announcement"]
     now = P.event_now(event)
     notices = (
@@ -466,16 +483,14 @@ def change_feed(
         if announcement_ids
         else []
     )
-    visible = {
-        a.id: a
-        for a in notices
-        if a.state == "published"
-        and (not a.publish_at or a.publish_at <= now)
-        and (not a.expire_at or a.expire_at > now)
-    }
+    visible = {a.id: a for a in notices if is_visible(a, now)}
+    audience = audiences(db, list(visible.values()))
     rows = [
         r for r in rows if r.entity_type != "announcement" or r.entity_id in visible
     ]
+    # The cursor only moves past what a guest can see now, so nothing hidden is ever
+    # marked as read.
+    latest_id = max((r.id for r in rows), default=after)
     payload = {
         "data": [
             {
@@ -483,6 +498,16 @@ def change_feed(
                 "division_id": str(visible[r.entity_id].division_id)
                 if r.entity_id in visible and visible[r.entity_id].division_id
                 else None,
+                **(
+                    {"entry_ids": audience[r.entity_id]}
+                    if r.entity_id in visible
+                    else {}
+                ),
+                **(
+                    {"notice": delay_state(r, now, by_id.get(r.entity_id))}
+                    if r.event_type in ("delay_notice", "delay_cleared")
+                    else {}
+                ),
             }
             for r in rows
         ],
@@ -512,7 +537,16 @@ def announcements(event_ref: str, request: Request, db: DB) -> Response:
         )
         .order_by(Announcement.publish_at.desc().nulls_last())
     )
-    return json_response(request, {"data": [P.announcement_public(a) for a in rows]})
+    rows = list(rows)
+    audience = audiences(db, rows)
+    return json_response(
+        request,
+        {
+            "data": [
+                {**P.announcement_public(a), "entry_ids": audience[a.id]} for a in rows
+            ]
+        },
+    )
 
 
 @router.get("/events/{event_ref}/guide")
