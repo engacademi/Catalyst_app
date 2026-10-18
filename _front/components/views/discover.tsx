@@ -6,7 +6,11 @@ import { formatDay, formatTime } from "@/lib/format";
 import Link from "next/link";
 import { MapPin, Search } from "lucide-react";
 import { useEvents } from "@/lib/queries";
-import { usePreference, useLocalFollows } from "@/lib/preferences";
+import {
+  usePreference,
+  useLocalFollows,
+  useEventSelections,
+} from "@/lib/preferences";
 import { EventTile, type DiscoveryEvent } from "../event-tile";
 import { EmptyState, ErrorState, Loading } from "../ui";
 import { SponsorRibbon } from "../sponsor-ribbon";
@@ -31,9 +35,8 @@ function nearest(e: DiscoveryEvent, location: typeof TORONTO) {
 }
 function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
   const follows = useLocalFollows(event.slug);
-  const [saved] = usePreference<string[]>("saved-events", []);
   const params = new URLSearchParams({ status: "upcoming", limit: "5" });
-  if (!saved.includes(event.slug)) {
+  if (follows.length) {
     params.set(
       "entry_ids",
       follows.filter((id) => !id.startsWith("division:")).join(","),
@@ -126,6 +129,9 @@ export function DiscoverView({
   const [saved] = usePreference<string[]>("saved-events", []);
   const [interests] = usePreference<string[]>("interests", []);
   const [attended] = usePreference<string[]>("attended", []);
+  const follows = useEventSelections(events.data?.data ?? []);
+  const isPick = (e: DiscoveryEvent) =>
+    saved.includes(e.slug) || (follows.get(e.slug)?.length ?? 0) > 0;
   const requestLocation = () => {
     if (!navigator.geolocation) {
       setMessage("Location is unavailable. Showing Toronto instead.");
@@ -314,12 +320,12 @@ export function DiscoverView({
         <>
           {!catalogue && (
             <>
-              {filtered.some((e) => saved.includes(e.slug)) && (
+              {filtered.some(isPick) && (
                 <section className="saved-discovery reveal-section">
                   <h2>Your courtside picks</h2>
                   <ul className="event-carousel">
                     {filtered
-                      .filter((e) => saved.includes(e.slug))
+                      .filter(isPick)
                       .map((e) => (
                         <li key={e.id}>
                           <SavedEventPreview event={e} />
