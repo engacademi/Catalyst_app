@@ -46,7 +46,7 @@ test("division follows persist; labels stay private and divisions stay below own
     .check();
   await page.goto(base + "/my-teams");
   await page
-    .getByRole("textbox", { name: "Private label" })
+    .getByRole("textbox", { name: "Kids’ names / private label" })
     .fill("Maya's team");
   await page.goto(base + "/my-day");
   await expect(

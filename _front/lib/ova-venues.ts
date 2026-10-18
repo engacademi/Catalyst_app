@@ -859,9 +859,16 @@ export function venueProfile(name: string): OvaVenue | null {
   );
 }
 
-type AppEvent = EventLike & { start_date: string; end_date: string };
+type AppEvent = EventLike & {
+  start_date: string;
+  end_date: string;
+  is_demo?: boolean;
+};
 
-/** The app event for a major OVA event: the next one still running, else the latest. */
+/**
+ * The app event for a major OVA event: the next one still running, else the latest.
+ * Demo events never stand in for the real one.
+ */
 export function appEventFor<T extends AppEvent>(
   event: OvaMajorEvent,
   events: T[],
@@ -870,6 +877,7 @@ export function appEventFor<T extends AppEvent>(
   const matches = events
     .filter(
       (e) =>
+        !e.is_demo &&
         eventSeries(e)?.id === event.series.id &&
         (!event.appTitle || event.appTitle.test(e.title)),
     )

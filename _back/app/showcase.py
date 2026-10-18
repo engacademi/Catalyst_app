@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.demo_operations import seed_demo_operations
 from app.models import (
     Announcement,
     ChangeEvent,
@@ -68,7 +69,7 @@ def seed_staff_showcase(db: Session) -> Event:
         event = Event(
             organization_id=org.id,
             slug=SLUG,
-            title="Staff Showcase · Demo Tournament",
+            title="Provincial Champions 2026 · Staff Demo",
             kind="indoor",
             timezone=TZ,
             start_date=now.date(),
@@ -443,6 +444,9 @@ def seed_showcase_live_matches(db: Session, event: Event, source: Source) -> Non
 
 
 def ensure_showcase_presentation(db: Session, event: Event) -> None:
+    if event.title == "Staff Showcase · Demo Tournament":
+        event.title = "Provincial Champions 2026 · Staff Demo"
+    seed_demo_operations(db, event, court_label="Court 1")
     logos = {
         "Rally Athletics · Example": "rally",
         "Courtside Hydration · Example": "courtside",

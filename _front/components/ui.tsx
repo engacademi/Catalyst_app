@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/api";
 import type { ReactNode } from "react";
-import { AlertTriangle, Loader2, Volleyball } from "lucide-react";
+import { AlertTriangle, Volleyball } from "lucide-react";
 
 export function Card({
   children,
@@ -61,16 +61,7 @@ export function Badge({
   );
 }
 
-export function Loading({ label = "Loading" }: { label?: string }) {
-  return (
-    <p
-      role="status"
-      className="loading-state flex items-center gap-3 text-sm text-muted"
-    >
-      <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> {label}…
-    </p>
-  );
-}
+export { Loading } from "./loading";
 
 export function ErrorState({ error }: { error: unknown }) {
   const message =

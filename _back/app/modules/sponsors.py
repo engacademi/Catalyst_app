@@ -1,4 +1,4 @@
-"""OVA's real 2026 Ontario Championships sponsors and their engagement counters.
+"""The user-requested Speer placement, OVA sponsors and engagement counters.
 
 The list comes from https://www.ontariovolleyball.org/ocs-sponsorship (names, links and
 logos as OVA publishes them). Logos are copied into the web app under /sponsors/ so the
@@ -10,7 +10,7 @@ identity, device id or IP address is stored.
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,11 @@ class Sponsor:
     logo: str
     body: str
 
+
+# User-requested platform partner; separate from OVA's published sponsor roster.
+SPEER = Sponsor(
+    "Speer", "https://speer.io/", "speer.png", "AI product and software development."
+)
 
 OVA_SPONSORS = [
     Sponsor(
@@ -94,8 +99,20 @@ PLACEMENTS = ("ribbon", "guide", "message")
 ACTIONS = ("view", "click")
 
 
+def speer_card(event: Event) -> PartnerCard:
+    return PartnerCard(
+        event_id=event.id,
+        kind="sponsor",
+        name=SPEER.name,
+        body=SPEER.body,
+        link_url=SPEER.link_url,
+        logo_url=f"/sponsors/{SPEER.logo}",
+        sort=-10000,
+    )
+
+
 def sponsor_cards(event: Event, start_sort: int = 10) -> list[PartnerCard]:
-    return [
+    return [speer_card(event)] + [
         PartnerCard(
             event_id=event.id,
             kind="sponsor",
@@ -110,19 +127,17 @@ def sponsor_cards(event: Event, start_sort: int = 10) -> list[PartnerCard]:
 
 
 def sync_ova_sponsors(db: Session) -> int:
-    """Give demo events and Ontario Championships the real sponsor cards.
+    """Add Speer to all events, plus OVA sponsors to demo/Championships events.
 
     Idempotent and safe to run on every deploy: it removes the fictional placeholder
     sponsors, adds any real sponsor an event is missing, and fills a missing logo or link
     on an existing card. Staff edits to names, copy, order and visibility are kept.
     """
-    events = db.scalars(
-        select(Event).where(
-            or_(Event.is_demo.is_(True), Event.title.ilike("%Ontario Championships%"))
-        )
-    ).all()
+    # Speer appears on every event; OVA sponsors remain scoped to their existing events.
+    events = db.scalars(select(Event)).all()
     added = 0
     for event in events:
+        ova_event = event.is_demo or "ontario championships" in event.title.lower()
         cards = db.scalars(
             select(PartnerCard).where(
                 PartnerCard.event_id == event.id, PartnerCard.kind == "sponsor"
@@ -130,11 +145,11 @@ def sync_ova_sponsors(db: Session) -> int:
         ).all()
         by_name = {}
         for card in cards:
-            if card.name in FICTIONAL_SPONSORS:
+            if ova_event and card.name in FICTIONAL_SPONSORS:
                 db.delete(card)
             else:
                 by_name[card.name] = card
-        for card in sponsor_cards(event):
+        for card in sponsor_cards(event) if ova_event else [speer_card(event)]:
             existing = by_name.get(card.name)
             if existing is None:
                 db.add(card)
@@ -148,9 +163,7 @@ def sync_ova_sponsors(db: Session) -> int:
     return added
 
 
-def record_engagement(
-    db: Session, items: list[tuple[PartnerCard, str, str]]
-) -> None:
+def record_engagement(db: Session, items: list[tuple[PartnerCard, str, str]]) -> None:
     """Add one view or click per item to its card's placement counter."""
     for card, placement, action in items:
         views, clicks = (1, 0) if action == "view" else (0, 1)

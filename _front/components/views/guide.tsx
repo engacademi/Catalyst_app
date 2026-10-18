@@ -2,7 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useHydrated } from "@/lib/hydration";
-import { Fragment, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import type { Partner } from "@/lib/api";
 import {
   trackSponsorClick,
@@ -26,8 +26,9 @@ import { CourtOverview } from "../court-overview";
 import { EventLogo, OvaVenueDetails } from "../ova-venue";
 import { venueProfile } from "@/lib/ova-venues";
 import { useEvent, useGuide } from "@/lib/queries";
+import { defaultMerchandise } from "@/lib/merchandise";
 import { CANT_ATTEND } from "@/lib/ova-rules";
-import { MatchDayRules, OfficialDocuments } from "../ova-rules";
+import { OfficialDocuments } from "../ova-rules";
 import { Card, ErrorState, Loading, PageTitle, SectionTitle } from "../ui";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -45,6 +46,10 @@ export function GuideView({ eventId }: { eventId: string }) {
   const query = useGuide(eventId);
   const event = useEvent(eventId);
   const kind = event.data?.data.kind;
+  useEffect(() => {
+    if (query.data && window.location.hash === "#merchandise")
+      document.getElementById("merchandise")?.scrollIntoView();
+  }, [query.data]);
   if (!hydrated || query.isPending) return <Loading label="Loading guide" />;
   if (query.error && !query.data) return <ErrorState error={query.error} />;
   const { venues, items, partners } = query.data.data;
@@ -52,7 +57,13 @@ export function GuideView({ eventId }: { eventId: string }) {
     (i) => i.kind !== "officials" && !i.kind.startsWith("media_"),
   );
   const officials = items.filter((i) => i.kind === "officials");
-  const offers = partners.filter((p) => p.kind !== "sponsor");
+  const offers = partners.filter(
+    (p) => p.kind !== "sponsor" && p.kind !== "merchandise",
+  );
+  const listedMerchandise = partners.filter((p) => p.kind === "merchandise");
+  const merchandise = listedMerchandise.length
+    ? listedMerchandise
+    : [defaultMerchandise(event.data?.data.title ?? eventId)];
   const sponsors = partners.filter((p) => p.kind === "sponsor");
 
   return (
@@ -82,7 +93,7 @@ export function GuideView({ eventId }: { eventId: string }) {
                   <figure className="venue-photo">
                     <Image
                       src={v.photo_url}
-                      alt={`Outside ${v.name}`}
+                      alt={`Venue and event information for ${v.name}`}
                       width={1200}
                       height={800}
                       sizes="(max-width: 640px) 100vw, 640px"
@@ -121,6 +132,28 @@ export function GuideView({ eventId }: { eventId: string }) {
                 {v.courts.length > 0 && (
                   <CourtOverview venue={v} eventId={eventId} />
                 )}
+                {v.map_url &&
+                  /\.(png|jpe?g|webp)(?:[?#]|$)/i.test(v.map_url) && (
+                    <details className="mt-3">
+                      <summary className="min-h-11 cursor-pointer text-sm font-semibold text-brand">
+                        View venue map
+                      </summary>
+                      <a
+                        href={v.map_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Image
+                          src={v.map_url}
+                          alt={`Official venue map for ${v.name}`}
+                          width={1200}
+                          height={800}
+                          unoptimized
+                          className="h-auto w-full rounded-xl"
+                        />
+                      </a>
+                    </details>
+                  )}
                 {v.map_url && (
                   <a
                     href={v.map_url}
@@ -225,20 +258,65 @@ export function GuideView({ eventId }: { eventId: string }) {
         })}
       </div>
 
-      {kind && <MatchDayRules kind={kind} />}
+      <section
+        id="merchandise"
+        aria-label="Merchandise"
+        className="scroll-mt-24"
+      >
+        <SectionTitle>Merchandise</SectionTitle>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {merchandise.map((p) => (
+            <Card key={p.id}>
+              <div className="flex items-start gap-3">
+                {p.logo_url ? (
+                  <Image
+                    src={p.logo_url}
+                    alt={p.name}
+                    width={80}
+                    height={80}
+                    unoptimized
+                    className="h-20 w-20 shrink-0 rounded-xl object-contain"
+                  />
+                ) : (
+                  <Shirt
+                    size={24}
+                    aria-hidden
+                    className="shrink-0 text-brand"
+                  />
+                )}
+                <div className="min-w-0">
+                  <h3 className="font-semibold">{p.name}</h3>
+                  <p className="mt-1 text-sm text-muted">{p.body}</p>
+                </div>
+              </div>
+              {p.booth_location && (
+                <p className="mt-2 text-sm">Find it: {p.booth_location}</p>
+              )}
+              <a
+                href={p.link_url || defaultMerchandise(eventId).link_url!}
+                target="_blank"
+                rel="noopener noreferrer sponsored"
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-brand px-4 text-sm font-semibold text-brand"
+              >
+                Shop merchandise <ExternalLink size={14} aria-hidden />
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+              {p.seller_note && (
+                <p className="mt-2 text-xs text-muted">{p.seller_note}</p>
+              )}
+            </Card>
+          ))}
+        </div>
+      </section>
 
       {offers.length > 0 && (
         <>
-          <SectionTitle>Tickets, merchandise and the 50/50</SectionTitle>
+          <SectionTitle>Tickets and the 50/50</SectionTitle>
           <div className="grid grid-cols-1 gap-4">
             {offers.map((p) => (
               <Card key={p.id}>
                 <div className="flex items-start gap-3">
-                  {p.kind === "merchandise" ? (
-                    <Shirt aria-hidden className="h-5 w-5 text-brand" />
-                  ) : (
-                    <Ticket aria-hidden className="h-5 w-5 text-brand" />
-                  )}
+                  <Ticket aria-hidden className="h-5 w-5 text-brand" />
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{p.name}</p>
                     <p className="text-sm">{p.body}</p>
@@ -278,23 +356,40 @@ export function GuideView({ eventId }: { eventId: string }) {
               resources
             </span>
           </SectionTitle>
-          {officials.map((i) => (
-            <Card key={i.id} className="mb-2">
-              <p className="font-semibold">{i.title}</p>
-              <p className="mt-1 whitespace-pre-line text-sm">{i.body}</p>
-              {i.link_url && (
+          <div className="venue-quick-grid">
+            {officials.map((i) => (
+              <Card key={i.id} className="venue-quick-card">
+                <Whistle size={20} aria-hidden />
+                <h3>{i.title}</h3>
                 <a
-                  href={i.link_url}
-                  target="_blank"
-                  rel="noopener"
-                  className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline"
+                  href={`#lead-resource-${i.id}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const panel = document.getElementById(
+                      `lead-resource-${i.id}`,
+                    ) as HTMLDetailsElement | null;
+                    if (panel) panel.open = !panel.open;
+                  }}
                 >
-                  Open official resource
-                  <span className="sr-only"> (opens in a new tab)</span>
+                  View details<span className="sr-only"> for {i.title}</span>
                 </a>
-              )}
-            </Card>
-          ))}
+                <details id={`lead-resource-${i.id}`}>
+                  <summary>Resource information</summary>
+                  <p className="mt-2 whitespace-pre-line">{i.body}</p>
+                  {i.link_url && (
+                    <a
+                      href={i.link_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open official resource
+                      <span className="sr-only"> (opens in a new tab)</span>
+                    </a>
+                  )}
+                </details>
+              </Card>
+            ))}
+          </div>
           <p className="text-sm">
             Leads can sign in to see their own court assignments in the{" "}
             <a

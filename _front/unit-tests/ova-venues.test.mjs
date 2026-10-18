@@ -87,6 +87,14 @@ test("major events link to the next matching app event, never a club exhibition"
     end_date: "2026-10-18",
   };
   assert.equal(appEventFor(fallClassic, [strikers], "2026-10-18"), undefined);
+  const demo = {
+    title: "Fall Classic Championship 2026 · Demo",
+    venues: ["Cohere Centre"],
+    start_date: "2026-11-06",
+    end_date: "2026-11-08",
+    is_demo: true,
+  };
+  assert.equal(appEventFor(fallClassic, [demo], "2026-10-18"), undefined);
 
   const wbt = OVA_VENUES.find((v) => v.id === "downsview").events[0];
   const day = (d) => ({
