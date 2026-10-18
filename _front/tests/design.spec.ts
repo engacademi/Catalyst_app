@@ -2,6 +2,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test.use({ serviceWorkers: "block" });
+
 const eventId = "demo-championships";
 const base = `/events/${eventId}`;
 const now = new Date().toISOString();
