@@ -90,7 +90,7 @@ export function TeamView({
                   #
                 </th>
                 <th scope="col" className="px-4 py-2">
-                  Player
+                  Athlete
                 </th>
                 <th scope="col" className="px-4 py-2">
                   Position

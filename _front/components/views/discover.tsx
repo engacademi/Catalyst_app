@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet, type Match } from "@/lib/api";
 import { formatDay, formatTime } from "@/lib/format";
 import Link from "next/link";
+import Image from "next/image";
 import { MapPin, Search } from "lucide-react";
 import { useEvents } from "@/lib/queries";
 import {
@@ -243,6 +244,18 @@ export function DiscoverView({
           <h1>Find your next game.</h1>
         )}
       </div>
+      {!catalogue && (
+        <div className="discover-illustration" aria-hidden="true">
+          <Image
+            src="/discover-volleyball.png"
+            alt=""
+            width={1536}
+            height={1024}
+            sizes="(max-width: 700px) 100vw, 900px"
+            priority
+          />
+        </div>
+      )}
       <div
         className="discovery-search"
         onBlur={(e) => {

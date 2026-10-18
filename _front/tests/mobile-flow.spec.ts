@@ -276,23 +276,26 @@ test("new public pages pass axe AA checks", async ({ page }) => {
   }
 });
 
-test("profile badge clears after reading saved tournament updates", async ({
-  page,
-}) => {
+test("only the Discover bell shows unread notifications", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
   await page.addInitScript(() =>
     localStorage.setItem("courtside:saved-events", '["ontario-demo"]'),
   );
-  await page.goto("/profile");
-  await expect(page.locator(".platform-dock .unread-count")).toHaveText(
-    "1 unread notifications",
-  );
+  await page.goto("/");
+  await expect(page.locator(".platform-header .unread-count")).toHaveText("1");
+  await expect(page.locator(".platform-dock .unread-count")).toHaveCount(0);
+  await page.getByRole("link", { name: "Updates, 1 unread" }).click();
   await page.locator(".profile-links a").first().click();
   await expect(
     page.getByRole("heading", { name: "Updates", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".platform-dock .unread-count")).toHaveCount(0);
+  await page.goto("/profile");
+  await expect(
+    page.getByRole("heading", { name: "Notifications", exact: true }),
+  ).toHaveCount(0);
+  await page.goto("/");
+  await expect(page.locator(".platform-header .unread-count")).toHaveCount(0);
 });
 
 for (const width of [320, 390, 768]) {
@@ -589,4 +592,70 @@ test("schedule list removes source and tournament-label clutter", async ({
     path: "test-results/calendar-list-mobile.png",
     fullPage: true,
   });
+});
+
+test("discovery carousel cards keep equal bounded heights", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await setup(page);
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "courtside:saved-events",
+      '["ontario-demo","beach-demo"]',
+    ),
+  );
+  await page.goto("/");
+  await expect(page.locator(".event-tile").first()).toBeVisible();
+  for (const list of await page.locator(".event-carousel").all()) {
+    const sizes = await list
+      .locator(".event-tile")
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+    if (sizes.length) {
+      expect(Math.max(...sizes)).toBeLessThan(480);
+      expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThan(2);
+    }
+  }
+  await page.screenshot({
+    path: "test-results/discover-final-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+});
+
+test("visibility popover has compact switches and working bulk controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await setup(page);
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "courtside:saved-events",
+      '["ontario-demo","beach-demo"]',
+    ),
+  );
+  await page.goto("/schedule");
+  await page.locator(".schedule-visibility summary").click();
+  const panel = page.getByRole("region", { name: "Calendar visibility" });
+  await expect(panel.getByRole("checkbox")).toHaveCount(2);
+  await expect(panel.locator(".visibility-switch").first()).toHaveCSS(
+    "width",
+    "36px",
+  );
+  const bounds = await panel.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
+  await panel.getByRole("button", { name: "Hide all", exact: true }).click();
+  await expect(page.getByText("All tournaments are hidden")).toBeVisible();
+  await panel.getByRole("button", { name: "Show all", exact: true }).click();
+  await expect(panel.getByText("2 of 2 events shown")).toBeVisible();
+  await page.screenshot({
+    path: "test-results/visibility-final-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await panel.getByRole("button", { name: "Close visibility" }).click();
+  await expect(panel).not.toBeVisible();
 });

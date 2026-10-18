@@ -18,6 +18,7 @@ const headingFont = Manrope({
 
 export const metadata: Metadata = {
   title: { default: "Olley Catalyst", template: "%s · Olley Catalyst" },
+  icons: { icon: "/ova-trillium.png", apple: "/ova-trillium.png" },
   description: "Your teams, your next match, your event, in one place.",
 };
 

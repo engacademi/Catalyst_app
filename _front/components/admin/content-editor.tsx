@@ -7,6 +7,7 @@ type EditorField = {
   name: string;
   label: string;
   options?: string[];
+  optionLabels?: Record<string, string>;
   multiline?: boolean;
   type?: "url" | "number" | "datetime-local";
   required?: boolean;
@@ -58,7 +59,7 @@ export function ContentEditor({
               >
                 {f.options.map((v) => (
                   <option key={v} value={v}>
-                    {v}
+                    {f.optionLabels?.[v] ?? v}
                   </option>
                 ))}
               </select>

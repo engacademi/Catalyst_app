@@ -304,7 +304,9 @@ for (const width of [390, 768, 1440]) {
       animations: "disabled",
     });
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Find your next game." })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Find your next game." }),
+    ).toBeVisible();
     await page.screenshot({
       path: `test-results/home-${width}.png`,
       fullPage: true,
@@ -513,17 +515,17 @@ test("merged division follows, private labels, pathway and staff estimates remai
     .getByRole("textbox", { name: "Private label" })
     .fill("Maya's team");
   await page.goto(`${base}/my-day`);
-  await expect(page.getByText("Maya's team", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("Maya's team", { exact: true }).first(),
+  ).toBeVisible();
   await expect(page.getByText("Divisions you follow")).toBeVisible();
   await page.locator("summary").click();
   await expect(
     page.getByText("Division schedule", { exact: true }),
   ).toBeVisible();
   await page.goto(`${base}/pathway`);
-  await expect(
-    page.getByRole("heading", { name: "Competition path" }),
-  ).toBeVisible();
-  await expect(page.locator(".match-card")).toHaveCount(2);
+  await expect(page.getByRole("heading", { name: "Brackets" })).toBeVisible();
+  await expect(page.locator(".bracket-match")).toHaveCount(2);
   await page.route("**/v1/matches/m1", (route) =>
     route.fulfill({
       json: {
@@ -549,4 +551,109 @@ test("merged division follows, private labels, pathway and staff estimates remai
   await expect(page.getByText(/Court running ~20 minutes late/)).toBeVisible();
   await expect(page.getByText(/Official time remains unchanged/)).toBeVisible();
   await expect(page.getByText(/Expected to start soon/)).toBeVisible();
+});
+
+test("event icons fit 320px, court diagrams and media are reachable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await fixtures(page);
+  await page.goto(base);
+  const tabs = page.getByRole("navigation", { name: "Tournament sections" });
+  await expect(tabs.getByRole("link")).toHaveCount(6);
+  await expect(tabs.getByRole("link").nth(1)).toHaveAccessibleName(
+    "Venue Guide",
+  );
+  for (const box of await tabs.getByRole("link").evaluateAll((links) =>
+    links.map((link) => {
+      const r = link.getBoundingClientRect();
+      return { left: r.left, right: r.right };
+    }),
+  )) {
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(320);
+  }
+  await expect(page.locator(".court-map svg")).toHaveCount(1);
+  await expect(page.locator(".court-map a")).toHaveAttribute(
+    "href",
+    /court_id=c1/,
+  );
+  await expect(page.locator(".announcements-carousel")).toHaveCSS(
+    "overflow-x",
+    "auto",
+  );
+  await tabs.getByRole("link", { name: "Media", exact: true }).click();
+  await expect(page.getByText("No media published yet")).toBeVisible();
+  await expect(page.locator(".platform-dock .unread-count")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/event-media-mobile.png",
+    fullPage: true,
+  });
+});
+
+test("bracket traces teams and connects only published feeder slots", async ({
+  page,
+}) => {
+  await fixtures(page);
+  await page.route("**/v1/events/demo-championships/pathway?**", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            label: "Semifinals",
+            matches: [{ ...result, source_match_id: "7" }],
+          },
+          {
+            label: "Final",
+            matches: [
+              {
+                ...match,
+                id: "final",
+                source_match_id: "9",
+                home: {
+                  ...match.home,
+                  entry_id: null,
+                  team_name: null,
+                  placeholder: "W7",
+                },
+              },
+            ],
+          },
+        ],
+        sources: [source],
+        note: "Published source progression",
+      },
+    }),
+  );
+  await page.goto(`${base}/pathway`);
+  await page.getByRole("button", { name: "Full bracket", exact: true }).click();
+  await expect(page.locator(".bracket-connections path")).toHaveCount(1);
+  await page.getByLabel("Trace a team").selectOption("t1");
+  await expect(page.locator(".bracket-match.is-traced")).toHaveCount(1);
+  await page.getByRole("button", { name: "One round", exact: true }).click();
+  await page.getByRole("button", { name: "Next round", exact: true }).click();
+  await expect(page.locator(".bracket-round h2")).toHaveText("Final");
+  await page
+    .getByRole("button", { name: "Previous round", exact: true })
+    .click();
+  await expect(page.locator(".bracket-round h2")).toHaveText("Semifinals");
+});
+
+test("staff dashboard filters events and opens editing shortcuts with URL persistence", async ({
+  page,
+}) => {
+  await fixtures(page);
+  await page.goto("/admin");
+  await page.getByLabel("Search manageable events").fill("no such tournament");
+  await expect(page.getByText("No matching events")).toBeVisible();
+  await page.getByLabel("Search manageable events").fill("Ontario");
+  await page.getByRole("link", { name: "Venue & Media", exact: true }).click();
+  await expect(
+    page.getByRole("tab", { name: "Content", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/tool=Content/);
+  await page.reload();
+  await expect(
+    page.getByRole("tab", { name: "Content", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
 });

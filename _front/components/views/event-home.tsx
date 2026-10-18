@@ -3,15 +3,7 @@
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
-import {
-  ArrowRight,
-  Info,
-  ListOrdered,
-  Megaphone,
-  Users,
-  Tags,
-  Check,
-} from "lucide-react";
+import { Info, Megaphone, Tags, Check } from "lucide-react";
 import { useAnnouncements, useEvent, useMatches } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
 import { formatDateRange, formatRelative } from "@/lib/format";
@@ -19,6 +11,7 @@ import { FreshnessNote } from "../freshness";
 import { SaveEventButton } from "../event-tile";
 import { MatchCard } from "../match-card";
 import { usePreference } from "@/lib/preferences";
+import { CourtOverview } from "../court-overview";
 import { Card, ErrorState, Loading, SectionTitle } from "../ui";
 
 export function EventHomeView({ eventId }: { eventId: string }) {
@@ -150,47 +143,16 @@ export function EventHomeView({ eventId }: { eventId: string }) {
       ) : (
         <p className="empty-inline">No upcoming matches published yet.</p>
       )}
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        {[
-          {
-            href: "teams",
-            icon: Users,
-            title: "Find your team",
-            text: `${e.counts.entries} teams · ${e.divisions.length} divisions`,
-          },
-          {
-            href: "matches",
-            icon: ListOrdered,
-            title: "Match centre",
-            text: `${e.counts.matches} published matches`,
-          },
-          {
-            href: "guide",
-            icon: Info,
-            title: "Make yourself at home",
-            text: "Parking, food & venue help",
-          },
-        ].map(({ href, icon: Icon, title, text }) => (
-          <Link
-            key={href}
-            href={`/events/${eventId}/${href}`}
-            className="ui-card border border-border bg-surface p-5 hover:border-brand"
-          >
-            <Icon size={21} aria-hidden className="mb-4 text-brand" />
-            <p className="font-display text-sm font-bold">{title}</p>
-            <p className="mt-1 text-xs text-muted">{text}</p>
-            <ArrowRight size={16} aria-hidden className="mt-4 text-brand" />
-          </Link>
-        ))}
-      </div>
-
       <SectionTitle>
         <span className="flex items-center gap-2">
           <Megaphone aria-hidden className="h-4 w-4 text-brand" /> Announcements
         </span>
       </SectionTitle>
       {notices.length ? (
-        <ul className="space-y-2">
+        <ul
+          className="event-carousel announcements-carousel"
+          aria-label="Event announcements"
+        >
           {notices.map((a) => (
             <li key={a.id}>
               <Card
@@ -216,9 +178,7 @@ export function EventHomeView({ eventId }: { eventId: string }) {
             <p className="font-semibold">{v.name}</p>
             {v.address && <p className="text-sm text-muted">{v.address}</p>}
             {v.courts.length > 0 && (
-              <p className="mt-1 text-sm">
-                {v.courts.map((c) => c.label).join(", ")}
-              </p>
+              <CourtOverview venue={v} eventId={eventId} />
             )}
           </Card>
         ))}

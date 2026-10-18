@@ -1,15 +1,9 @@
 "use client";
 import { type ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import {
-  Bell,
-  CalendarDays,
-  Compass,
-  Trophy,
-  UserRound,
-  Volleyball,
-} from "lucide-react";
+import { Bell, CalendarDays, Compass, Trophy, UserRound } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { Wordmark } from "./brand";
 import { useEvents } from "@/lib/queries";
@@ -118,12 +112,6 @@ export function PlatformShell({ children }: { children: ReactNode }) {
       <Link key={href} href={href} aria-current={active ? "page" : undefined}>
         <Icon size={21} aria-hidden />
         <span>{label}</span>
-        {href === "/profile" && unread > 0 && (
-          <span className="unread-count">
-            {unread > 99 ? "99+" : unread}
-            <span className="sr-only"> unread notifications</span>
-          </span>
-        )}
       </Link>
     );
   });
@@ -131,11 +119,15 @@ export function PlatformShell({ children }: { children: ReactNode }) {
   return (
     <div className="platform-app">
       <div className="volleyball-background" aria-hidden="true">
-        <Volleyball strokeWidth={1} />
-        <Volleyball strokeWidth={1} />
-        <Volleyball strokeWidth={1} />
-        <Volleyball strokeWidth={1} />
-        <Volleyball strokeWidth={1} />
+        {Array.from({ length: 5 }, (_, i) => (
+          <Image
+            key={i}
+            src="/ova-trillium.png"
+            alt=""
+            width={552}
+            height={556}
+          />
+        ))}
       </div>
       <header className="platform-header">
         <Link
@@ -201,20 +193,7 @@ export function PlatformShell({ children }: { children: ReactNode }) {
           >
             TikTok
           </a>
-          <a
-            href="https://www.threads.net/@ova_updates"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Threads
-          </a>
-          <a
-            href="https://www.snapchat.com/add/ova_updates"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Snapchat
-          </a>
+          <a href="mailto:info@ontariovolleyball.org">Contact</a>
         </nav>
       </footer>
       <nav className="platform-dock" aria-label="Main navigation">

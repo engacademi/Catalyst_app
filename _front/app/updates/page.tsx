@@ -2,7 +2,9 @@
 import Link from "next/link";
 import { useNotificationCounts } from "@/components/platform-shell";
 export default function Updates() {
-  const notifications = useNotificationCounts();
+  const notifications = useNotificationCounts().filter(
+    ({ count, error }) => count > 0 || error,
+  );
   return (
     <main id="main" className="platform-main">
       <div className="discovery-heading">
@@ -18,9 +20,7 @@ export default function Updates() {
           </li>
         ))}
       </ul>
-      {!notifications.length && (
-        <p>Save a tournament to bring its updates here.</p>
-      )}
+      {!notifications.length && <p>You’re all caught up.</p>}
       <Link href="/" className="secondary-link mt-5">
         Back to Discover
       </Link>

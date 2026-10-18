@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { eventColor } from "@/lib/event-colors";
 import type { Match } from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import type { DiscoveryEvent } from "./event-tile";
@@ -115,11 +116,13 @@ export function TimeGrid({
   const columns = dayLayouts
     .map(
       (items) =>
-        `minmax(${Math.max(dates.length === 7 ? 112 : 60, Math.max(1, ...items.map((item) => item.lanes)) * 52)}px, 1fr)`,
+        `minmax(${Math.max(dates.length === 7 ? 112 : 60, Math.max(1, ...items.map((item) => item.lanes)) * 86)}px, 1fr)`,
     )
     .join(" ");
   const today = localDay(new Date().toISOString());
-  const eventIds = [...new Set(rows.map((row) => row.event.id))];
+  const events = [
+    ...new Map(rows.map(({ event }) => [event.id, event])).values(),
+  ];
   return (
     <div
       className="calendar-scroll time-calendar-scroll"
@@ -130,6 +133,17 @@ export function TimeGrid({
         Calendar blocks use one-hour display slots, not confirmed match
         durations. Full match names are available when opening a match.
       </p>
+      <ul className="calendar-legend" aria-label="Event colours">
+        {events.map((event) => (
+          <li key={event.id}>
+            <span
+              className={`event-colour event-colour-${eventColor(event.id)}`}
+              aria-hidden
+            />
+            {event.title}
+          </li>
+        ))}
+      </ul>
       <div
         className={`calendar-grid time-calendar ${dates.length === 7 ? "full-week" : ""}`}
         style={{
@@ -198,7 +212,7 @@ export function TimeGrid({
                     <Link
                       key={`${event.id}-${match.id}`}
                       href={`/events/${event.slug}/matches/${match.id}`}
-                      className={`time-block time-block-${eventIds.indexOf(event.id) % 4}`}
+                      className={`time-block time-block-${eventColor(event.id)}`}
                       data-start-minutes={start}
                       data-dense={lanes > 1}
                       aria-label={label}

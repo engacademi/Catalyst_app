@@ -22,7 +22,7 @@ export function AccountDashboard() {
   const { user } = useUser();
   const client = useQueryClient();
   const [intent] = usePreference("signup-intent", "spectator");
-  const [officer] = usePreference("signup-officer", "coach");
+
   const auth = async (): Promise<Record<string, string>> => {
     const token = await getToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -34,13 +34,12 @@ export function AccountDashboard() {
   });
   if (!isSignedIn) return null;
   if (profile.error) return <ErrorState error={profile.error} />;
-  if (!profile.data) return <p>Loading player dashboard…</p>;
+  if (!profile.data) return <p>Loading account dashboard…</p>;
   return (
     <AccountForm
       key={`${userId}-${JSON.stringify(profile.data.data)}`}
       profile={profile.data.data}
       intent={intent}
-      officer={officer}
       defaultName={user?.username || user?.fullName || ""}
       auth={auth}
       onSave={() => client.invalidateQueries({ queryKey: ["account", userId] })}
@@ -53,10 +52,8 @@ function AccountForm({
   auth,
   onSave,
   intent,
-  officer,
 }: {
   intent: string;
-  officer: string;
   profile: Profile;
   defaultName: string;
   auth: () => Promise<Record<string, string>>;
@@ -72,8 +69,7 @@ function AccountForm({
       (["spectator", "player", "officer"].includes(intent)
         ? (intent as "spectator" | "player" | "officer")
         : "spectator"),
-    officer_type:
-      profile.officer_type ?? (officer === "referee" ? "referee" : "coach"),
+    officer_type: profile.officer_type ?? "coach",
     team_entry_id: profile.team_entry_id ?? "",
     discoverable: profile.discoverable,
   });
@@ -155,28 +151,17 @@ function AccountForm({
                 aria-pressed={form.account_type === type}
                 onClick={() => setForm({ ...form, account_type: type })}
               >
-                {type.charAt(0).toUpperCase() + type.slice(1)}
+                {type === "player"
+                  ? "Athlete"
+                  : type === "officer"
+                    ? "Team Lead"
+                    : "Spectator"}
               </button>
             ))}
           </div>
         </fieldset>
         {form.account_type === "officer" && (
           <>
-            <label className="grid gap-1">
-              Officer role
-              <select
-                value={form.officer_type}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    officer_type: e.target.value as "coach" | "referee",
-                  })
-                }
-              >
-                <option value="coach">Coach</option>
-                <option value="referee">Referee</option>
-              </select>
-            </label>
             <p className="text-sm text-muted">
               OVA must grant access to your tournaments before you can edit them
               in the staff portal.
@@ -262,11 +247,11 @@ function AccountForm({
         </div>
       )}
       <div className="mt-6">
-        <h3>Find players</h3>
+        <h3>Find athletes</h3>
         <input
           className="account-input mt-3"
-          aria-label="Find players by display name"
-          placeholder="Search players"
+          aria-label="Find athletes by display name"
+          placeholder="Search athletes"
           value={search}
           maxLength={100}
           onChange={(e) => setSearch(e.target.value)}
@@ -293,11 +278,37 @@ function AccountForm({
         </ul>
         {players.data?.data.length === 0 && (
           <p className="text-sm text-muted mt-3">
-            No players have shared a profile matching your search.
+            No athletes have shared a profile matching your search.
           </p>
         )}
         {follow.error && <ErrorState error={follow.error} />}
       </div>
     </section>
   );
+}
+
+export function AccountRole() {
+  const { userId, getToken, isSignedIn } = useAuth();
+  const profile = useQuery({
+    queryKey: ["account", userId],
+    queryFn: () =>
+      apiAuthGet<{ data: Profile }>(
+        async (): Promise<Record<string, string>> => {
+          const token = await getToken();
+          return token ? { Authorization: `Bearer ${token}` } : {};
+        },
+        "/v1/me/profile",
+      ),
+    enabled: !!isSignedIn,
+  });
+  const type = profile.data?.data.account_type;
+  return type ? (
+    <span className="account-role">
+      {type === "player"
+        ? "Athlete"
+        : type === "officer"
+          ? "Team Lead"
+          : "Spectator"}
+    </span>
+  ) : null;
 }

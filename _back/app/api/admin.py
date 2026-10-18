@@ -633,6 +633,9 @@ class GuideItemIn(BaseModel):
         "services",
         "help",
         "officials",
+        "media_photo",
+        "media_video",
+        "media_album",
     ]
     title: str = Field(min_length=2, max_length=200)
     body: str = Field("", max_length=4000)
@@ -664,6 +667,10 @@ class PartnerIn(BaseModel):
 
 
 def _guide_data(body: GuideItemIn) -> dict:
+    if body.kind.startswith("media_") and (
+        not body.link_url or body.link_url.scheme != "https"
+    ):
+        raise HTTPException(422, "Media requires an https photo, video or album link")
     data = body.model_dump(exclude={"expected_revision"})
     data["link_url"] = str(body.link_url) if body.link_url else None
     return data
