@@ -1066,7 +1066,7 @@ test.describe("courtside picks", () => {
       "courtside:follows:ontario-demo": JSON.stringify(["t1"]),
     });
     const next = picks.locator(".saved-next");
-    await expect(next).toContainText("Northern Lights: playing here");
+    await expect(next).toContainText("Northern Lights are playing here");
     await expect(next).toContainText("vs Lakeshore");
     await expect(next).toContainText("Court 1");
   });
@@ -1077,7 +1077,7 @@ test.describe("courtside picks", () => {
       "courtside:label:ontario-demo:t2": "Maya's team",
     });
     const next = picks.locator(".saved-next");
-    await expect(next).toContainText("Maya's team: playing here");
+    await expect(next).toContainText("Maya's team is playing here");
     await expect(next).toContainText("vs Northern Lights");
   });
 });

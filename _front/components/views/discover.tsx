@@ -35,17 +35,25 @@ function nearest(e: DiscoveryEvent, location: typeof TORONTO) {
     );
   return distances.length ? Math.min(...distances) : null;
 }
-function TeamName({
+// Team names read as plural ("Sharks are"); a label or fallback reads as one team.
+function TeamPlaying({
   eventSlug,
   entryId,
   name,
+  when,
 }: {
   eventSlug: string;
   entryId: string;
-  name: string;
+  name: string | null;
+  when: string;
 }) {
   const { label } = useTeamLabel(eventSlug, entryId);
-  return <>{label || name}</>;
+  const subject = label || name || "Your team";
+  return (
+    <>
+      {subject} {label || !name ? "is" : "are"} playing here {when}
+    </>
+  );
 }
 // A saved event alone shows just the event. Following a team adds that team's next
 // match; following only a division adds the division's next match.
@@ -89,12 +97,12 @@ function SavedEventPreview({ event }: { event: DiscoveryEvent }) {
           {ours?.entry_id ? (
             <>
               <strong>
-                <TeamName
+                <TeamPlaying
                   eventSlug={event.slug}
                   entryId={ours.entry_id}
-                  name={ours.team_name ?? "Your team"}
+                  name={ours.team_name}
+                  when={when}
                 />
-                : playing here {when}
               </strong>
               <span>vs {other?.team_name ?? other?.placeholder ?? "TBD"}</span>
             </>
