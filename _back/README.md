@@ -70,12 +70,13 @@ Public, no token needed:
 - `GET /v1/events/{id}/changes?after=<cursor>` is the change feed that guests filter on their device
 - `GET /v1/events/{id}/announcements`, `GET /v1/events/{id}/guide`
 - `GET /v1/events/{id}/calendar.ics?entry_ids=`
+- `GET /v1/sponsors` lists sponsors for the Discover ribbon; `POST /v1/sponsor-engagement` counts anonymous sponsor views and clicks
 - `GET /v1/entries/{id}` returns the team, its approved roster and its matches
 - `GET /v1/matches/{id}` returns detail with change history
 
 Every schedule response carries a `sources` list with a freshness value. A CSV source always reports `imported_snapshot` and its import time, never "live".
 
-Staff, with a role grant: events, venues, sources, imports, announcements (draft, publish, archive), guide items, partner cards, roster publish and withdraw, audit log, and `simulate-change` for demo events.
+Staff, with a role grant: events, venues, sources, imports, announcements (draft, publish, archive), guide items, partner cards, sponsor engagement report, roster publish and withdraw, audit log, and `simulate-change` for demo events.
 
 Staff roles are granted only from the CLI:
 

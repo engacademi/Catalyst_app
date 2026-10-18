@@ -308,7 +308,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser(
         "seed-testing",
-        help="Add varied testing tournaments and a complete staff showcase without resetting data",
+        help="Add varied testing tournaments and a complete staff showcase, and sync OVA sponsor cards, without resetting data",
     )
     seed_cmd = sub.add_parser("seed", help="Load the synthetic demo event")
     seed_cmd.add_argument(

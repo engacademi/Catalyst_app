@@ -305,6 +305,19 @@ class PartnerCard(UUIDPk, Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
 
 
+class PartnerEngagement(Base):
+    """Aggregate views and clicks for one partner card in one placement. No visitor data."""
+
+    __tablename__ = "partner_engagement"
+
+    partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("partner_cards.id", ondelete="CASCADE"), primary_key=True)
+    placement: Mapped[str] = mapped_column(String(20), primary_key=True)  # ribbon | guide | message
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    views: Mapped[int] = mapped_column(BigInteger, default=0)
+    clicks: Mapped[int] = mapped_column(BigInteger, default=0)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+
 class RosterPublication(UUIDPk, Base):
     """An approved public projection of a roster. Never holds birthdates, contacts or consent originals."""
 

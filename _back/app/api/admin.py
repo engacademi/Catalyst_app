@@ -41,6 +41,7 @@ from app.models import (
 )
 from app.modules import projections as P
 from app.modules.imports import commit_import, stage_import
+from app.modules.sponsors import engagement_report
 from app.modules.matches import (
     MATCH_STATUSES,
     apply_match_state,
@@ -744,6 +745,13 @@ def admin_partners(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
         .order_by(PartnerCard.sort)
     )
     return {"data": [P.partner_public(p) for p in rows]}
+
+
+@router.get("/events/{event_id}/sponsor-report")
+def sponsor_report(event_id: str, db: DB, principal: CurrentPrincipal) -> dict:
+    """Views, clicks and click-through rate per sponsor card, split by placement."""
+    event = staff_event(db, principal, event_id)
+    return {"data": engagement_report(db, event)}
 
 
 @router.post("/events/{event_id}/partners", status_code=201)
