@@ -211,6 +211,13 @@ def match_public(
         "scheduled_start": iso(match.scheduled_start),
         **match_timing(match, event),
         "work_entry_id": str(match.work_entry_id) if match.work_entry_id else None,
+        # The team the source assigns to referee and keep score for this match.
+        "work_team": {
+            "entry_id": str(match.work_entry.id),
+            "team_name": match.work_entry.team_name,
+        }
+        if match.work_entry
+        else None,
         "timezone": event.timezone,
         "court": court_public(match.court),
         "home": participant_public(match, "home"),

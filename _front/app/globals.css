@@ -472,6 +472,25 @@ caption {
   box-shadow: 0 10px 30px -16px #164c3b45;
   transform: translateY(-2px);
 }
+.match-card-duty {
+  border-color: #245677;
+  border-left-width: 6px;
+  background: var(--info-soft);
+}
+.match-duty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--info);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.match-duty .match-duty-team {
+  display: block;
+  font-size: 0.75rem;
+}
 .match-card-cancelled {
   border-color: #a12d244d;
   opacity: 0.8;
@@ -1850,6 +1869,15 @@ caption {
   color: var(--muted);
   margin: -5px 0;
 }
+.calendar-duty {
+  align-self: flex-start;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--info-soft);
+  color: var(--info);
+  font-size: 10px;
+  font-weight: 700;
+}
 .calendar-match-status {
   font-size: 10px;
   text-transform: capitalize;
@@ -2269,6 +2297,15 @@ button[aria-pressed="true"] svg,
   font-size: 9px;
   color: #405744;
 }
+.time-block-duty {
+  border-left: 4px solid var(--info);
+}
+.time-block-duty-label {
+  font-size: 9px;
+  font-weight: 750;
+  color: var(--info);
+  text-transform: uppercase;
+}
 .time-block-official {
   font-size: 8px;
 }
@@ -2616,6 +2653,9 @@ select:focus-visible {
   background: linear-gradient(125deg, white, #f2f7f4);
   border-radius: 20px;
 }
+.schedule-list .match-card.match-card-duty {
+  background: var(--info-soft);
+}
 .footer-socials {
   display: flex;
   flex-wrap: wrap;
@@ -2921,6 +2961,16 @@ select[class] {
 }
 .court-overview {
   margin-top: 14px;
+}
+.court-area + .court-area {
+  margin-top: 14px;
+}
+.court-area-heading {
+  margin-top: 9px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--brand);
+  overflow-wrap: anywhere;
 }
 .court-map {
   display: grid;
@@ -3787,10 +3837,24 @@ select[class] {
 }
 .team-picker-option {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 12px 4px;
   border-bottom: 1px solid var(--border);
+}
+/* Name and details link share a row until larger text needs the space,
+   then the link wraps below instead of overflowing the viewport. */
+.team-picker-option > label,
+.team-picker-option > label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.team-picker-option > label {
+  flex: 1 1 10rem;
+}
+.team-picker-option > a {
+  flex-shrink: 0;
 }
 .team-picker-option input {
   accent-color: var(--brand);

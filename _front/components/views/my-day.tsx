@@ -121,12 +121,12 @@ export function MyDayView({ eventId }: { eventId: string }) {
                   <ul className="match-list">
                     {day.work_duties.map((m) => (
                       <li key={m.id}>
-                        <Card className="border-info/30">
-                          <p className="mb-2 text-sm font-semibold text-info">
-                            Work duty · referee / scorekeeping
-                          </p>
-                          <MatchCard match={m} eventId={eventId} showDay />
-                        </Card>
+                        <MatchCard
+                          match={m}
+                          eventId={eventId}
+                          followed={directTeamIds}
+                          showDay
+                        />
                       </li>
                     ))}
                   </ul>

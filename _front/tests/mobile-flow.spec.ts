@@ -659,3 +659,135 @@ test("visibility popover has compact switches and working bulk controls", async 
   await panel.getByRole("button", { name: "Close visibility" }).click();
   await expect(panel).not.toBeVisible();
 });
+
+test("work duties are labelled on the schedule, matches and calendar", async ({
+  page,
+}) => {
+  await setup(page);
+  const duty = {
+    ...match,
+    id: "m2",
+    work_entry_id: "t9",
+    work_team: { entry_id: "t9", team_name: "Forest Hill Spikers" },
+  };
+  await page.route("**/v1/events/ontario-demo/matches?**", (route) =>
+    route.fulfill({
+      json: { data: [match, duty], sources: [source], next_cursor: null },
+    }),
+  );
+  await page.addInitScript(() =>
+    localStorage.setItem("courtside:follows:ontario-demo", '["t9"]'),
+  );
+  await page.goto("/schedule");
+  await expect(
+    page.getByRole("link", { name: /^Work duty for Forest Hill Spikers/ }),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "List", exact: true }).click();
+  const cards = page.locator(".schedule-list .match-card");
+  await expect(cards).toHaveCount(2);
+  await expect(page.locator(".match-card-duty")).toHaveCount(1);
+  await expect(page.locator(".match-card-duty")).toContainText(
+    "Work duty: referee / scorekeeping",
+  );
+  await expect(page.locator(".match-card-duty")).toContainText(
+    "Forest Hill Spikers officiates this match",
+  );
+  await page.goto("/events/ontario-demo/matches");
+  await expect(page.locator(".match-card-duty")).toHaveCount(1);
+});
+
+test("guide lists courts under their hall headings", async ({ page }) => {
+  await setup(page);
+  const court = (id: string, label: string, area: string | null) => ({
+    id,
+    label: area ? `${label} · ${area}` : label,
+    base_label: label,
+    area_label: area,
+  });
+  await page.route("**/v1/events/ontario-demo/guide", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          venues: [
+            {
+              id: "v1",
+              name: "Enercare Centre",
+              address: null,
+              accessible_entrance: null,
+              directions: null,
+              map_url: null,
+              courts: [
+                court("c1", "Court 1", "Hall A"),
+                court("c2", "Court 53", "Hall C"),
+                court("c3", "Court 2", "Hall A"),
+                court("c4", "Warm-up", null),
+              ],
+            },
+          ],
+          items: [],
+          partners: [],
+        },
+      },
+    }),
+  );
+  await page.goto("/events/ontario-demo/guide");
+  await expect(page.locator(".court-area-heading")).toHaveText([
+    "Hall A",
+    "Hall C",
+    "Other courts",
+  ]);
+  const hallA = page.getByRole("list", {
+    name: "Courts at Enercare Centre, Hall A",
+  });
+  await expect(hallA.getByRole("link")).toHaveCount(2);
+  await expect(
+    page.getByRole("link", { name: "Court 53 · Hall C: view matches" }),
+  ).toBeVisible();
+});
+
+for (const width of [320, 390]) {
+  test(`list rows reflow under 200% text at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await setup(page);
+    await page.route("**/v1/events/ontario-demo/teams?**", (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            {
+              id: "t1",
+              team_name: "Northern Lights Volleyball Club 16U Elite",
+              club_name: "Northern Lights",
+              division: { id: "d1", name: "16U Girls Division 1", code: "16U" },
+            },
+          ],
+          total: 1,
+        },
+      }),
+    );
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        document.documentElement.style.fontSize = "200%";
+      });
+    });
+    const fits = async (selector: string) => {
+      await expect(page.locator(selector).first()).toBeVisible();
+      const overflow = await page.evaluate(
+        (sel) =>
+          Math.max(
+            document.documentElement.scrollWidth,
+            ...[...document.querySelectorAll(sel)].map(
+              (el) => el.getBoundingClientRect().right,
+            ),
+          ),
+        selector,
+      );
+      expect(overflow).toBeLessThanOrEqual(width);
+    };
+    await page.goto("/events/ontario-demo/teams");
+    await page.locator(".team-picker summary").click();
+    await fits("li.team-picker-option");
+    await fits("li.team-picker-option a");
+    await page.goto("/events/ontario-demo/matches");
+    await fits(".match-card");
+  });
+}

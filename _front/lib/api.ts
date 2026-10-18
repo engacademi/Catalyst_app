@@ -108,6 +108,9 @@ export type Match = {
     expires_at: string;
   } | null;
   expected_start_soon?: boolean;
+  /** The team the source assigns to referee and keep score, if any. */
+  work_entry_id?: string | null;
+  work_team?: { entry_id: string; team_name: string } | null;
   timezone: string;
   court: {
     id: string;

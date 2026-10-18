@@ -43,11 +43,12 @@ export function GuideView({ eventId }: { eventId: string }) {
   const sponsors = partners.filter((p) => p.kind === "sponsor");
 
   return (
-    <div>
+    // Long words break at 200% text instead of pushing cards past 320px.
+    <div className="[overflow-wrap:anywhere]">
       <PageTitle>Venue</PageTitle>
 
       <SectionTitle>Venues</SectionTitle>
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {venues.map((v) => (
           <Card key={v.id}>
             <h3 id={`venue-${v.id}`} className="scroll-mt-24 font-semibold">
@@ -162,7 +163,7 @@ export function GuideView({ eventId }: { eventId: string }) {
       {offers.length > 0 && (
         <>
           <SectionTitle>Tickets, merchandise and the 50/50</SectionTitle>
-          <div className="grid gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {offers.map((p) => (
               <Card key={p.id}>
                 <div className="flex items-start gap-3">
