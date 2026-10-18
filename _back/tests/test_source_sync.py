@@ -169,3 +169,56 @@ def test_aes_loader_refuses_title_collision_with_unrelated_event(db, demo):
     with pytest.raises(ValueError, match="Event slug already belongs"):
         aes_load(AES_KEY, get=lambda _: json.dumps(metadata))
     assert db.scalar(select(func.count()).select_from(Event)) == 1
+
+
+def test_timu_load_builds_upcoming_events_from_recordings_and_is_idempotent(
+    client, db, monkeypatch
+):
+    from datetime import date
+
+    from app.adapters.timu import read_timu
+    from app.cli import timu_load
+    from app.models import ChangeEvent, Event, Venue
+    from app.modules import sync
+    from tests_unit.test_sources import timu_recorded
+
+    monkeypatch.setattr(
+        sync, "fetch_snapshot", lambda mode, config: read_timu(config, get=timu_recorded)
+    )
+    [event] = timu_load(get=timu_recorded, today=date(2026, 10, 19))
+    listed = next(
+        e for e in client.get("/v1/events").json()["data"] if e["slug"] == event.slug
+    )
+    assert listed["title"] == "15U Girls Spook & Spike Showdown - Exhibition"
+    assert (listed["start_date"], listed["end_date"]) == ("2026-10-24", "2026-10-24")
+    assert listed["venues"] == ["North London Optimist Community"]
+    assert listed["kind"] == "indoor" and listed["demo_now"] is None
+    venue = db.scalar(select(Venue).where(Venue.event_id == event.id))
+    assert venue.address == "1345 Cheapside St, London, ON N5V 3N9"
+    assert client.get(f"/v1/events/{event.slug}/teams").json()["total"] == 9
+    matches = {
+        m["source_match_id"]: m
+        for m in client.get(
+            f"/v1/events/{event.slug}/matches", params={"limit": 200}
+        ).json()["data"]
+    }
+    assert len(matches) == 21
+    first = matches["1000"]
+    assert first["court"]["label"] == "Court 1"
+    assert (first["home"]["team_name"], first["away"]["team_name"]) == (
+        "Jr Gryphons Guardians",
+        "Humana Embers",
+    )
+    start = datetime.fromisoformat(first["scheduled_start"])
+    assert start.astimezone(ZoneInfo("America/Toronto")).isoformat() == (
+        "2026-10-24T08:45:00-04:00"
+    )
+    assert matches["1003"]["scheduled_start"] is None
+
+    changes = db.scalar(select(func.count()).select_from(ChangeEvent))
+    timu_load(get=timu_recorded, today=date(2026, 10, 19))
+    timu_load("4190", get=timu_recorded)
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(Event)) == 1
+    assert db.scalar(select(func.count()).select_from(Source)) == 1
+    assert db.scalar(select(func.count()).select_from(ChangeEvent)) == changes

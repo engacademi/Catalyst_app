@@ -38,7 +38,7 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/api/public.py` | Public reads under `/v1` |
 | `app/api/admin.py` | Staff workspace under `/v1/admin` |
 | `app/api/me.py` | Signed-in user's own data (official assignments) |
-| `app/cli.py` | `seed`, `grant` and `aes-load` commands |
+| `app/cli.py` | `seed`, `grant`, `aes-load` and `timu-load` commands |
 | `sample_data/` | Example CSVs and the column reference |
 
 ## How data gets in
@@ -50,6 +50,8 @@ Rosters are published only with a consent review reference. Player photos appear
 AES JSON and TIMU HTML adapters emit the same normalized rows as CSV imports and use the shared refresh/polling pipeline. MyTeam.click still requires a converted CSV export. Automatic polling requires both `authorized` and `auto_sync` in source configuration; `aes-load` performs an explicit refresh but does not enable automatic polling.
 
 To load a real event from AES, run `uv run python -m app.cli aes-load <event_key>` with the key from the AES event URL. It creates the event from AES (title, dates, venue from the event location, America/Toronto), adds an AES source with that `event_key`, syncs pool play into teams and matches. The event keeps AES's real dates and times. The AES key identifies subsequent refreshes even if the upstream title changes. A title/slug collision with another source is refused; connect the source explicitly through the staff workspace instead. Existing staff content and venue coordinates are preserved. Tests use the recorded Event 2 responses in `sample_data/aes_event2/` and never call AES.
+
+To load upcoming OVA indoor tournaments from TIMU, run `uv run python -m app.cli timu-load`. It reads the tournament list at timu.ca/ova and, for each tournament dated today or later, creates or refreshes one event (title, date, venue and address, America/Toronto) with a TIMU source keyed by its tournament id, then syncs teams and matches. Pass `--tid 4190` to load one tournament. Running it again changes nothing unless TIMU changed. A match takes its start time from the schedule grid; TIMU shows only the first wave's time before the day and `**` for later rounds, so those matches stay "awaiting schedule" until TIMU publishes a time. Playoff slots such as `W7` stay placeholders. Tests use the trimmed pages in `sample_data/timu/` and never call TIMU.
 
 ## Main endpoints
 

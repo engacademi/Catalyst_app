@@ -41,7 +41,7 @@ def fetch_text(url: str) -> str:
     return b"".join(chunks).decode("utf-8-sig")
 
 
-def parse_timu(html: str, config: dict) -> Snapshot:
+def parse_timu(html: str, config: dict, times: dict | None = None) -> Snapshot:
     soup = BeautifulSoup(html, "html.parser")
     wrappers = soup.select("div.wrapper[id]")
     if not wrappers:
@@ -63,14 +63,17 @@ def parse_timu(html: str, config: dict) -> Snapshot:
         slots = re.search(r"\((.*?)\s+vs\s+(.*?)\)", label)
         round_name = label[: label.index("(")].strip()
         court = re.search(r"Court:\s*(\S+)", card.get_text(" ", strip=True))
-        # Results publish the date, not a reliable match start time. Never invent one.
+        # The start is the schedule grid's published clock time, if any. Never invent one.
+        start = (times or {}).get(
+            (court and court.group(1), f"{slots.group(1)} vs {slots.group(2)}")
+        )
         row = {
             "external_match_id": str(card["id"]),
             "division": division,
             "venue": venue,
             "court": f"Court {court.group(1)}" if court else "Court to be confirmed",
             "round": round_name,
-            "scheduled_start": "",
+            "scheduled_start": start or "",
             "status": "scheduled",
             "set_scores": "",
         }
@@ -85,7 +88,7 @@ def parse_timu(html: str, config: dict) -> Snapshot:
             name = name_node.get_text(" ", strip=True)
             # A full exact vendor name is its explicit published identity, scoped to this event.
             ext = name
-            if name and not re.fullmatch(r"[WL]\d+|[ABC]\d+|TBD", name, re.I):
+            if name and not re.fullmatch(r"[A-Z]\d+|TBD", name, re.I):
                 teams[ext] = {
                     "external_entry_id": ext,
                     "team_name": name,
@@ -181,12 +184,9 @@ def fetch_snapshot(mode: str, config: dict) -> Snapshot:
     if not config.get("authorized"):
         raise ValueError("Confirm source access before connecting")
     if mode == "timu":
-        tid = str(config.get("tournament_id", ""))
-        if not tid.isdigit():
-            raise ValueError("TIMU tournament id must contain digits")
-        return parse_timu(
-            fetch_text(f"https://www.timu.ca/scoreboards/results.php?tid={tid}"), config
-        )
+        from app.adapters.timu import read_timu
+
+        return read_timu(config)
     if mode == "aes":
         from app.adapters.aes import read_aes
 

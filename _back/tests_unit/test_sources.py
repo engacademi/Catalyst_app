@@ -151,3 +151,68 @@ def test_aes_partial_scores_do_not_assert_live_status_and_work_teams_survive():
     assert match["status"] == "scheduled"
     assert match["set_scores"]
     assert match["work_entry_id"] == match["home_entry_id"]
+
+
+TIMU = Path(__file__).parent.parent / "sample_data" / "timu"
+
+
+def timu_recorded(url):
+    """Serve the recorded TIMU pages by URL; tests never call TIMU live."""
+    if url == "https://www.timu.ca/ova/index.php":
+        return (TIMU / "index.html").read_text()
+    page, tid = url.rsplit("/", 1)[1].split(".php?tid=")
+    return (TIMU / f"{page}_{tid}.html").read_text()
+
+
+def test_timu_lists_tournaments_dated_today_or_later():
+    from datetime import date
+
+    from app.adapters.timu import upcoming_tids
+
+    html = timu_recorded("https://www.timu.ca/ova/index.php")
+    assert upcoming_tids(html, date(2026, 10, 17)) == ["4190", "4191", "4196"]
+    assert upcoming_tids(html, date(2026, 10, 18)) == ["4190", "4191"]
+
+
+def test_timu_reads_teams_courts_venue_and_real_start_times():
+    from app.adapters.timu import read_timu
+
+    snap = read_timu({"tournament_id": "4190"}, get=timu_recorded)
+    assert snap.divisions == [{"name": "15U Girls", "external_id": "4190"}]
+    assert len(snap.entries) == 9 and len(snap.matches) == 21
+    first = next(m for m in snap.matches if m["external_match_id"] == "1000")
+    assert (first["home_entry_id"], first["away_entry_id"]) == (
+        "Jr Gryphons Guardians",
+        "Humana Embers",
+    )
+    assert (first["venue"], first["court"], first["round"]) == (
+        "North London Optimist Community",
+        "Court 1",
+        "Pool A",
+    )
+    assert first["scheduled_start"] == "2026-10-24T08:45:00"
+    second_wave = next(m for m in snap.matches if m["external_match_id"] == "1003")
+    assert second_wave["scheduled_start"] == "", "A ** slot has no published time"
+    gold = next(m for m in snap.matches if m["round"] == "Gold Medal")
+    assert (gold["home_placeholder"], gold["away_placeholder"]) == ("W7", "W8")
+    assert gold["home_entry_id"] == gold["away_entry_id"] == ""
+
+    played = read_timu({"tournament_id": "4196"}, get=timu_recorded)
+    final = next(m for m in played.matches if m["round"] == "Tier 1 - Gold")
+    assert (final["court"], final["scheduled_start"]) == ("Court 1", "2026-10-17T15:15:00")
+    assert final["home_entry_id"] == "REACH Ultra" and final["status"] == "completed"
+    assert final["set_scores"] == "25-11 25-20"
+    for kind, rows in (("entries", played.entries), ("matches", played.matches)):
+        parsed = CsvAdapter().parse(
+            kind, _csv(rows), timezone="America/Toronto", strict=True
+        )
+        assert not parsed.errors and not any(r.errors for r in parsed.rows)
+
+
+def test_timu_pool_d_slot_stays_a_placeholder():
+    html = timu_recorded("https://www.timu.ca/scoreboards/results.php?tid=4190")
+    snap = parse_timu(html.replace(">B1<", ">D1<"), {"venue": "School"})
+    match = next(m for m in snap.matches if m["home_placeholder"] == "B1")
+    assert match["home_entry_id"] == "" and "D1" not in {
+        e["team_name"] for e in snap.entries
+    }
