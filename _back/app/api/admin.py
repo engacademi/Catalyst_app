@@ -186,8 +186,10 @@ def create_event(
     db.add(event)
     db.flush()
     from app.modules.sponsors import speer_card
+    from app.modules.merchandise import merchandise_card
 
     db.add(speer_card(event))
+    db.add(merchandise_card(event))
     db.add(Source(event_id=event.id, name="Approved CSV import", mode="manual_import"))
     audit(db, request, principal, "event.create", event.id, event, new=1)
     db.commit()

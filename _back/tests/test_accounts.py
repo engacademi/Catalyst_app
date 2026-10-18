@@ -8,10 +8,10 @@ from tests.conftest import ADMIN, OFFICIAL
 
 def test_search_and_testing_tournaments(client, db, demo):
     first = seed_testing(db)
-    assert len(first) == 3
+    assert len(first) == 4
     # Every run rebuilds the same synthetic events instead of adding more.
     assert [e.slug for e in seed_testing(db)] == [e.slug for e in first]
-    assert len(client.get("/v1/events").json()["data"]) == 4
+    assert len(client.get("/v1/events").json()["data"]) == 5
     assert set(
         db.scalars(
             select(Match.status).where(Match.event_id.in_([e.id for e in first]))

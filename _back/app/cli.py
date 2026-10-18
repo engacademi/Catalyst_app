@@ -33,6 +33,7 @@ from app.adapters.timu import INDEX_URL, read_schedule, upcoming_tids
 from app.core.db import get_sessionmaker
 from app.models import Event, Organization, RoleGrant, Source, User, Venue
 from app.modules.geocode import geocode_venues
+from app.modules.merchandise import merchandise_card
 from app.modules.sponsors import speer_card
 from app.seed import TZ, demo_summary, publish_playoff_draw, seed, set_feed_outage
 
@@ -124,6 +125,7 @@ def aes_load(event_key: str, get=fetch_text) -> Event:
             db.add(event)
             db.flush()
             db.add(speer_card(event))
+            db.add(merchandise_card(event))
             if venue:
                 db.add(
                     Venue(
@@ -200,6 +202,7 @@ def myteam_load(today: date, get=fetch_text) -> list[Event]:
             db.flush()
             if source is None:
                 db.add(speer_card(event))
+                db.add(merchandise_card(event))
                 for loc in data["locList"]:
                     db.add(Venue(event_id=event.id, name=loc["name"]))
                 source = Source(
@@ -278,6 +281,7 @@ def timu_load(tid=None, get=fetch_text, today=None) -> list[Event]:
                 db.add(event)
                 db.flush()
                 db.add(speer_card(event))
+                db.add(merchandise_card(event))
                 if info.get("venue_name"):
                     db.add(
                         Venue(

@@ -123,8 +123,8 @@ export function DiscoverView({
   const [period, setPeriod] = useState("all");
   const [location, setLocation] = useState(TORONTO);
   const [locationLabel, setLocationLabel] = useState("Toronto");
-  const [locationChoice, setLocationChoice] = useState("current");
-  const locationSelection = useRef("current");
+  const [locationChoice, setLocationChoice] = useState("all");
+  const locationSelection = useRef("all");
   const [message, setMessage] = useState("");
   const [locating, setLocating] = useState(false);
   const [saved] = usePreference<string[]>("saved-events", []);
@@ -135,6 +135,9 @@ export function DiscoverView({
     saved.includes(e.slug) || (follows.get(e.slug)?.length ?? 0) > 0;
   const requestLocation = () => {
     if (!navigator.geolocation) {
+      setLocation(TORONTO);
+      setLocationLabel("Toronto");
+      setLocationChoice("Toronto");
       setMessage("Location is unavailable. Showing Toronto instead.");
       return;
     }
@@ -161,25 +164,6 @@ export function DiscoverView({
       { timeout: 10000, maximumAge: 300000, enableHighAccuracy: false },
     );
   };
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        if (locationSelection.current !== "current") return;
-        setLocation({
-          latitude: p.coords.latitude,
-          longitude: p.coords.longitude,
-        });
-        setLocationLabel("your location");
-      },
-      () => {
-        if (locationSelection.current !== "current") return;
-        setLocationChoice("Toronto");
-        setMessage("Location wasn’t shared. Showing Toronto instead.");
-      },
-      { timeout: 10000, maximumAge: 300000 },
-    );
-  }, []); // Request browser permission once; Toronto is the fallback.
   const cities = [
     { name: "Toronto", latitude: 43.6532, longitude: -79.3832 },
     { name: "Ottawa", latitude: 45.4215, longitude: -75.6972 },
@@ -190,6 +174,7 @@ export function DiscoverView({
   const all: DiscoveryEvent[] = events.data?.data ?? [];
   const filtered = all.filter(
     (e) =>
+      (locationChoice === "all" || (nearest(e, location) ?? Infinity) <= 100) &&
       (kind === "all" || e.kind === kind) &&
       (`${e.title} ${e.venues.join(" ")}`
         .toLowerCase()
@@ -216,11 +201,6 @@ export function DiscoverView({
         ? b.start_date.localeCompare(a.start_date)
         : a.start_date.localeCompare(b.start_date)),
   );
-  const near = filtered
-    .filter((e) => !isPast(e))
-    .map((event) => ({ event, distance: nearest(event, location) }))
-    .filter((x) => x.distance != null && x.distance <= 100)
-    .sort((a, b) => a.distance! - b.distance!);
   const preferredKinds = new Set([
     ...interests,
     ...all
@@ -318,14 +298,11 @@ export function DiscoverView({
           {["all", "indoor", "beach"].map((k) => (
             <button
               key={k}
+              aria-label={k === "all" ? "All volleyball" : undefined}
               aria-pressed={kind === k}
               onClick={() => setKind(k)}
             >
-              {k === "all"
-                ? "All volleyball"
-                : k === "indoor"
-                  ? "Indoor"
-                  : "Beach"}
+              {k === "all" ? "All" : k === "indoor" ? "Indoor" : "Beach"}
             </button>
           ))}
         </div>
@@ -334,11 +311,47 @@ export function DiscoverView({
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
         >
-          <option value="all">All dates</option>
+          <option value="all">Dates</option>
           <option value="upcoming">Upcoming & ongoing</option>
           <option value="past">Past events</option>
         </select>
+        <label className="discovery-location">
+          <MapPin size={14} aria-hidden />
+          <select
+            aria-label="Event location"
+            value={locationChoice}
+            disabled={locating}
+            onChange={(e) => {
+              const value = e.target.value;
+              locationSelection.current = value;
+              setLocationChoice(value);
+              setLocating(false);
+              setMessage("");
+              if (value === "current") requestLocation();
+              else if (value !== "all") {
+                const city = cities.find((c) => c.name === value)!;
+                setLocation(city);
+                setLocationLabel(city.name);
+              }
+            }}
+          >
+            <option value="all">All areas</option>
+            <option value="current">
+              {locating ? "Locating…" : "Near me"}
+            </option>
+            {cities.map((city) => (
+              <option key={city.name} value={city.name}>
+                {city.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+      {(message || locationChoice !== "all") && (
+        <p role="status" className="mb-3 text-xs text-muted">
+          {message || `Within 100 km of ${locationLabel}`}
+        </p>
+      )}
       {events.isPending ? (
         <Loading label="Loading tournaments" />
       ) : events.error && !events.data ? (
@@ -360,60 +373,6 @@ export function DiscoverView({
                 </section>
               )}
               <SponsorRibbon />
-              <section className="reveal-section">
-                <h2>Near {locationLabel}</h2>
-                <div className="location-strip">
-                  <span>
-                    <MapPin size={17} aria-hidden />
-                    Within 100 km
-                  </span>
-                  <select
-                    aria-label="Event location"
-                    value={locationChoice}
-                    disabled={locating}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      locationSelection.current = value;
-                      setLocationChoice(value);
-                      if (value === "current") requestLocation();
-                      else {
-                        const city = cities.find((c) => c.name === value)!;
-                        setLocation(city);
-                        setLocationLabel(city.name);
-                        setMessage("");
-                      }
-                    }}
-                  >
-                    <option value="current">
-                      {locating ? "Locating…" : "Current location"}
-                    </option>
-                    {cities.map((city) => (
-                      <option key={city.name} value={city.name}>
-                        {city.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {message && (
-                  <p role="status" className="mb-3 text-xs text-muted">
-                    {message}
-                  </p>
-                )}
-                {near.length ? (
-                  <ul className="event-carousel">
-                    {near.map((x) => (
-                      <li key={x.event.id}>
-                        <EventTile {...x} />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyState title="No nearby venues with a confirmed location">
-                    Browse all tournaments below. Events without venue
-                    coordinates are still available.
-                  </EmptyState>
-                )}
-              </section>
               <section className="reveal-section">
                 <div className="section-row">
                   <h2>Picked for you</h2>

@@ -19,6 +19,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.demo_operations import seed_demo_operations
+from app.fall_classic import configure_fall_classic
 from app.models import (
     AccountProfile,
     Announcement,
@@ -40,6 +41,7 @@ from app.models import (
 )
 from app.modules.announcements import deliver_due
 from app.modules.imports import commit_import, stage_import
+from app.modules.merchandise import merchandise_card, sync_merchandise
 from app.modules.sponsors import sponsor_cards, sync_ova_sponsors
 from app.modules.venue_photos import add_venue_photos
 
@@ -373,9 +375,16 @@ def _organization(db: Session) -> Organization:
     return org
 
 
-def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Event:
+def seed(
+    db: Session,
+    *,
+    reset: bool = False,
+    now: datetime | None = None,
+    slug: str = DEMO_SLUG,
+    title: str = "Provincial Champions 2026 · Demo",
+) -> Event:
     """Load the demo event, or with reset rebuild it around the current time."""
-    existing = db.scalar(select(Event).where(Event.slug == DEMO_SLUG))
+    existing = db.scalar(select(Event).where(Event.slug == slug))
     if existing and not reset:
         return existing
 
@@ -384,8 +393,8 @@ def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Ev
     event, kept = _empty_demo_event(
         db,
         org,
-        DEMO_SLUG,
-        title="Provincial Champions 2026 · Demo",
+        slug,
+        title=title,
         kind="indoor",
         start_date=(anchor - timedelta(hours=4)).date(),
         end_date=anchor.date() + timedelta(days=1),
@@ -596,16 +605,7 @@ def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Ev
                 link_url="https://ova5050.org",
                 seller_note="Sold and refunded by the 50/50 operator.",
             ),
-            PartnerCard(
-                event_id=event.id,
-                kind="merchandise",
-                name="Championship merchandise (example)",
-                sort=1,
-                body="Event shirts and hoodies. Pick up at the merch booth.",
-                booth_location="Main lobby, beside registration",
-                link_url="https://www.ontariovolleyball.org/",
-                seller_note="Example card. Checkout happens on the seller's site.",
-            ),
+            merchandise_card(event),
         ]
     )
     db.add_all(sponsor_cards(event, start_sort=2))
@@ -706,7 +706,16 @@ def seed_testing(db: Session) -> list[Event]:
 
     Runs on every deploy, so the demo event always has upcoming matches.
     """
-    added = [seed(db, reset=True)]
+    added = [
+        seed(db, reset=True),
+        seed(
+            db,
+            reset=True,
+            slug="demo-fall-classic-2026",
+            title="Fall Classic Championship 2026 · Demo",
+        ),
+    ]
+    configure_fall_classic(db, added[1])
     org = _organization(db)
     now = datetime.now(ZoneInfo(TZ)).replace(second=0, microsecond=0)
     fixtures = [
@@ -834,6 +843,7 @@ def seed_testing(db: Session) -> list[Event]:
     seed_staff_showcase(db)
     # After the showcase so its placeholder sponsors are replaced by OVA's real ones.
     sync_ova_sponsors(db)
+    sync_merchandise(db)
     add_venue_photos(db)
     db.commit()
     return added

@@ -3,7 +3,7 @@
 import { useHydrated } from "@/lib/hydration";
 
 import Link from "next/link";
-import { Info, Megaphone, Tags, Check } from "lucide-react";
+import { Info, Megaphone, Tags, Check, Shirt } from "lucide-react";
 import { useAnnouncements, useEvent, useMatches } from "@/lib/queries";
 import { useFollows } from "@/lib/follows";
 import { formatDateRange, formatRelative } from "@/lib/format";
@@ -71,6 +71,14 @@ export function EventHomeView({ eventId }: { eventId: string }) {
             title="My teams and kids’ names"
           >
             <Tags size={19} aria-hidden />
+          </Link>
+          <Link
+            className="icon-link"
+            href={`/events/${eventId}/guide#merchandise`}
+            aria-label="Event merchandise"
+            title="Merchandise"
+          >
+            <Shirt size={19} aria-hidden />
           </Link>
         </div>
         <button

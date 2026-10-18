@@ -21,7 +21,14 @@ BASE = "/v1/events/demo-championships"
 
 
 def team(db, name):
-    return db.scalar(select(EventEntry.id).where(EventEntry.team_name == name))
+    return db.scalar(
+        select(EventEntry.id).where(
+            EventEntry.team_name == name,
+            EventEntry.event_id.in_(
+                select(Event.id).where(Event.slug == "demo-championships")
+            ),
+        )
+    )
 
 
 def my_day(client, *names_ids):
@@ -219,4 +226,44 @@ def test_provincial_operations_are_actionable_and_preserve_staff_changes(
     assert any(
         c["event_type"] == "announcement_published" and c["entity_id"] == str(notice.id)
         for c in feed
+    )
+
+
+def test_fall_classic_has_complete_event_data_and_stable_team_ids(client, db):
+    from app.models import Division, ScoreDispute
+
+    seed_testing(db)
+    event = db.scalar(select(Event).where(Event.slug == "demo-fall-classic-2026"))
+    assert event.is_demo and event.title == "Fall Classic Championship 2026 · Demo"
+    entries = set(
+        db.scalars(select(EventEntry.id).where(EventEntry.event_id == event.id))
+    )
+    assert len(entries) == 12
+    assert (
+        len(list(db.scalars(select(Division).where(Division.event_id == event.id))))
+        == 3
+    )
+    matches = list(db.scalars(select(Match).where(Match.event_id == event.id)))
+    assert len(matches) == 24
+    assert {m.status for m in matches} == {"completed", "in_progress", "scheduled"}
+    assert any(m.round_label == "Gold medal" for m in matches)
+    disputes = list(
+        db.scalars(
+            select(ScoreDispute).where(
+                ScoreDispute.match_id.in_([m.id for m in matches])
+            )
+        )
+    )
+    assert sorted(d.status for d in disputes) == ["open", "open", "resolved"]
+    guide = client.get(f"/v1/events/{event.slug}/guide").json()["data"]
+    assert guide["venues"] and guide["partners"][0]["name"] == "Speer"
+    assert client.get(f"/v1/events/{event.slug}/announcements").json()["data"]
+    assert (
+        client.get(f"/v1/admin/events/{event.id}/matches", headers=ADMIN).status_code
+        == 200
+    )
+    seed_testing(db)
+    assert (
+        set(db.scalars(select(EventEntry.id).where(EventEntry.event_id == event.id)))
+        == entries
     )
