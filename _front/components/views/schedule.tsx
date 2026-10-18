@@ -261,9 +261,25 @@ export function ScheduleView() {
               </div>
             ) : null,
           )}
+          {queries.map((q, i) =>
+            !hidden.includes(selected[i].slug) &&
+            q.data &&
+            !q.data.matches.length ? (
+              <p key={selected[i].id} className="empty-inline">
+                {selected[i].title}: the draw isn’t published yet.
+              </p>
+            ) : null,
+          )}
           {!visible.length ? (
             <EmptyState title="All tournaments are hidden">
               Use the visibility controls above to show them again.
+            </EmptyState>
+          ) : !rows.length &&
+            queries.every(
+              (q, i) => hidden.includes(selected[i].slug) || q.isSuccess,
+            ) ? (
+            <EmptyState title="The draw isn’t published yet">
+              Matches will appear here once the organizer publishes them.
             </EmptyState>
           ) : mode === "calendar" ? (
             <TimeGrid rows={inRange} dates={dates} />
