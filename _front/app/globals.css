@@ -3590,7 +3590,7 @@ select[class] {
   padding: 3px 5px;
 }
 .bracket-match > a {
-  min-height: 23px;
+  min-height: 24px;
   font-size: 9px;
 }
 .bracket-champion {

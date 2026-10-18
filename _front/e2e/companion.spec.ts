@@ -26,19 +26,24 @@ test("division follows persist; labels stay private and divisions stay below own
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base + "/teams");
+  await page.locator(".team-picker > summary").click();
   await page
-    .getByRole("button", { name: `+ ${event.divisions[0].name}`, exact: true })
-    .click();
+    .getByRole("checkbox", {
+      name: `Entire ${event.divisions[0].name} division`,
+      exact: true,
+    })
+    .check();
   await page.reload();
+  await page.locator(".team-picker > summary").click();
   await expect(
-    page.getByRole("button", {
-      name: `Following · ${event.divisions[0].name}`,
+    page.getByRole("checkbox", {
+      name: `Entire ${event.divisions[0].name} division`,
       exact: true,
     }),
-  ).toBeVisible();
+  ).toBeChecked();
   await page
-    .getByRole("button", { name: `Follow ${team.team_name}`, exact: true })
-    .click();
+    .getByRole("checkbox", { name: team.team_name })
+    .check();
   await page.goto(base + "/my-teams");
   await page
     .getByRole("textbox", { name: "Private label" })
@@ -90,11 +95,12 @@ test("large event browsing can reach entries beyond the first page", async ({
     ).ok(),
   ).toBeTruthy();
   await page.goto(base + "/teams?q=Scale");
-  await expect(page.getByText("Scale Team 000", { exact: true })).toBeVisible();
+  await page.locator(".team-picker > summary").click();
+  await expect(page.getByRole("checkbox", { name: "Scale Team 000" })).toBeVisible();
   await page
     .getByRole("button", { name: "Load more teams", exact: true })
     .click();
-  await expect(page.getByText("Scale Team 114", { exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Scale Team 114" })).toBeVisible();
 });
 
 test("staff schedule a division notice and manage an expiring court estimate", async ({
@@ -135,9 +141,10 @@ test("core phone journeys have no serious accessibility findings or horizontal o
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(base + "/teams");
+  await page.locator(".team-picker > summary").click();
   await page
-    .getByRole("button", { name: `Follow ${team.team_name}`, exact: true })
-    .click();
+    .getByRole("checkbox", { name: team.team_name })
+    .check();
   for (const route of [
     "/teams",
     "/my-day",
