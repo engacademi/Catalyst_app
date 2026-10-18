@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.adapters.aes import read_aes
+from app.adapters.aes import read_aes, search_aes_championships
 from app.adapters.csv_adapter import CsvAdapter
 from app.adapters.live import fetch_text, parse_timu
 from app.modules.operations import map_registration
@@ -11,6 +11,9 @@ from app.modules.sync import _csv
 
 AES_KEY = "MjAyNl9PbnRhcmlvX0NoYW1waW9uc2hpcHNfX19FdmVudF8yX182djZHX19UTFNHX18xNVVCXw2"
 RECORDED = Path(__file__).parent.parent / "sample_data" / "aes_event2"
+SEARCH = (
+    Path(__file__).parent.parent / "sample_data" / "aes_search" / "landing_events.json"
+)
 
 
 def recorded(calls=None):
@@ -151,3 +154,30 @@ def test_aes_partial_scores_do_not_assert_live_status_and_work_teams_survive():
     assert match["status"] == "scheduled"
     assert match["set_scores"]
     assert match["work_entry_id"] == match["home_entry_id"]
+
+
+def test_aes_search_finds_ontario_championships_with_results_keys():
+    urls = []
+
+    def get(url):
+        urls.append(url)
+        return SEARCH.read_text()
+
+    found = search_aes_championships(get=get)
+    assert urls[0].startswith(
+        "https://www.advancedeventsystems.com/api/landing/events?"
+    )
+    names = [f["name"] for f in found]
+    assert len(names) == 28
+    assert "5th Annual OVA Championships" not in names  # OVA outside Ontario
+    assert "Ontario Volleyball 2023 16U & 18U Fall Classic" not in names
+    assert names[:4] == [
+        "2026 Ontario Championships - Event 3 (6v6B, 16U, 18U)",
+        "2026 Ontario Championships - Event 2 (6v6G, TLSG, 15UB)",
+        "2026 Ontario Championships - Event 1 (TLSB, 15UG, 17UB/G)",
+        "2026 Ontario Championships - 4v4 Boys and Girls",
+    ]
+    assert found[1]["eventSchedulerKey"] == AES_KEY
+    assert found[2]["eventSchedulerKey"] == (
+        "MjAyNl9PbnRhcmlvX0NoYW1waW9uc2hpcHNfX19FdmVudF8xX19UTFNCX18xNVVHX18xN1VCX0df0"
+    )
