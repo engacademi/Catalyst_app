@@ -7,7 +7,7 @@ poolsheet per pool, timestamp. Pool play only; AES times are local to the event.
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from app.adapters.live import Snapshot, fetch_text
 
@@ -17,6 +17,26 @@ def aes_event_url(event_key):
     if not re.fullmatch("[A-Za-z0-9_=-]{1,300}", key):
         raise ValueError("Enter the AES event key from the official event URL")
     return "https://results.advancedeventsystems.com/api/event/" + quote(key, safe="")
+
+
+def search_aes_championships(get=fetch_text):
+    """Ontario Championships events on AES, past and upcoming, newest first."""
+    query = urlencode(
+        {
+            "$filter": "contains(name,'Ontario Championships')",
+            "$top": 100,
+            "$orderby": "startDate desc",
+        }
+    )
+    data = json.loads(
+        get("https://www.advancedeventsystems.com/api/landing/events?" + query)
+    )
+    # "OVA" in AES names often means Ohio, so match the full phrase only.
+    return [
+        e
+        for e in collection(data["value"])
+        if "ontario championships" in e["name"].lower() and e.get("eventSchedulerKey")
+    ]
 
 
 def collection(value):

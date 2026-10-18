@@ -22,6 +22,7 @@ def fetch_text(url: str) -> str:
     parsed = urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname not in {
         "results.advancedeventsystems.com",
+        "www.advancedeventsystems.com",
         "www.timu.ca",
         "myteamclick.herokuapp.com",
     }:
