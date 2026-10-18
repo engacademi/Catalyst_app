@@ -1,6 +1,6 @@
 """The demo scenario: real dates, upcoming matches, and the scripted transitions."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -34,7 +34,7 @@ def test_followed_teams_have_timed_matches_duty_and_areas(client, db, demo):
     maya, sibling = team(db, MAYA_TEAM), team(db, SIBLING_TEAM)
     day = my_day(client, maya, sibling)
     upcoming = [day["matches"][i] for i in day["upcoming_ids"]]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert upcoming and all(
         datetime.fromisoformat(m["scheduled_start"]) > now for m in upcoming
     )
@@ -161,3 +161,62 @@ def test_rebuild_keeps_grants_and_leaves_real_events_alone(client, db, demo):
     )
     assert len(list(db.scalars(dev_grants))) == 1
     assert db.scalar(select(Source.name).where(Source.event_id == real.id)) == "AES"
+
+
+def test_provincial_operations_are_actionable_and_preserve_staff_changes(
+    client, db, demo
+):
+    import uuid
+
+    from app.demo_operations import seed_demo_operations
+    from app.models import Announcement, ScoreDispute, Venue
+
+    assert demo.title == "Provincial Champions 2026 · Demo"
+    reports = client.get(f"/v1/admin/events/{demo.id}/disputes", headers=ADMIN)
+    assert reports.status_code == 200
+    reports = reports.json()["data"]
+    assert sorted(r["status"] for r in reports) == ["open", "open", "resolved"]
+    report = next(r for r in reports if r["status"] == "open")
+    match = db.get(Match, uuid.UUID(report["match_id"]))
+    corrected = client.patch(
+        f"/v1/admin/matches/{match.id}",
+        headers=ADMIN,
+        json={
+            "expected_revision": match.revision,
+            "sets": [[25, 23], [25, 21]],
+        },
+    )
+    assert corrected.status_code == 200
+    assert (
+        client.patch(
+            f"/v1/admin/disputes/{report['id']}/resolve", headers=ADMIN
+        ).status_code
+        == 200
+    )
+    # Re-running the add-on must not reopen disputes or overwrite a lead's delay edits.
+    court = db.scalar(
+        select(Court).where(
+            Court.venue_id.in_(select(Venue.id).where(Venue.event_id == demo.id)),
+            Court.label == "Court 4",
+        )
+    )
+    court.delay = {**court.delay, "minutes": 10}
+    seed_demo_operations(db, demo, court_label="Court 4")
+    db.commit()
+    db.expire_all()
+    assert db.get(ScoreDispute, uuid.UUID(report["id"])).status == "resolved"
+    assert court.delay["minutes"] == 10
+    assert len(list(db.scalars(select(ScoreDispute)))) == 3
+    notice = db.scalar(
+        select(Announcement).where(
+            Announcement.event_id == demo.id,
+            Announcement.title == "Court 4: running ~20 minutes late",
+        )
+    )
+    assert notice and notice.expire_at and notice.state == "published"
+    feed = client.get(f"{BASE}/changes").json()["data"]
+    assert any(c["event_type"] == "delay_notice" for c in feed)
+    assert any(
+        c["event_type"] == "announcement_published" and c["entity_id"] == str(notice.id)
+        for c in feed
+    )

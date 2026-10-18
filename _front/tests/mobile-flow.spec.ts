@@ -962,3 +962,71 @@ for (const width of [320, 390]) {
     await fits(".match-card");
   });
 }
+
+test("tag icon opens searchable teams and private kids names persist", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  const team = {
+    id: "t1",
+    team_name: "Lakeshore Thunder",
+    club_name: "Lakeshore VC",
+    division: { id: "d1", name: "15U Boys D1", code: "15UB" },
+  };
+  await page.route("**/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/teams")) {
+      const q = url.searchParams.get("q") ?? "";
+      return route.fulfill({
+        json: {
+          data: q === "missing" ? [] : [team],
+          total: q === "missing" ? 0 : 1,
+        },
+      });
+    }
+    if (url.pathname.endsWith("/entries/t1"))
+      return route.fulfill({ json: { data: team } });
+    return route.fallback();
+  });
+  await page.goto("/events/ontario-demo");
+  await page.getByRole("link", { name: "My teams and kids’ names" }).click();
+  const search = page.getByRole("searchbox", {
+    name: "Search teams, clubs or divisions",
+  });
+  await search.fill("missing");
+  await expect(
+    page.getByText("No teams match.", { exact: false }),
+  ).toBeVisible();
+  await search.fill("Lakeshore");
+  await page
+    .getByRole("button", { name: "Follow Lakeshore Thunder", exact: true })
+    .click();
+  const names = page.getByRole("textbox", {
+    name: "Kids’ names / private label",
+  });
+  await names.fill("Maya, Alex");
+  await page.reload();
+  await expect(names).toHaveValue("Maya, Alex");
+  await page
+    .locator(".team-grid")
+    .getByRole("button", { name: "Unfollow Lakeshore Thunder", exact: true })
+    .click();
+  await expect(names).toHaveCount(0);
+});
+
+test("discovery cards share the compact tournament card artwork", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  await page.goto("/");
+  const art = page.locator(".event-tile-art").first();
+  await expect(art).toBeVisible();
+  expect((await art.boundingBox())!.height).toBe(62);
+  const discoveryWidth = (await page.locator(".event-tile").first().boundingBox())!.width;
+  await page.goto("/tournaments");
+  await expect(art).toBeVisible();
+  expect((await art.boundingBox())!.height).toBe(62);
+  expect(Math.abs((await page.locator(".event-tile").first().boundingBox())!.width - discoveryWidth)).toBeLessThanOrEqual(2);
+});

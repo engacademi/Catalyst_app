@@ -1,0 +1,13 @@
+# Provincial demo operations and private team labels
+
+The demo event keeps its `demo-championships` slug and stable team IDs so existing follows and staff access survive. Its display name is **Provincial Champions 2026 · Demo**. This is a synthetic provincial championship scenario, not an official live tournament feed. Dates and match times are rebuilt around deployment time by the existing Railway `seed-testing` pre-deploy command.
+
+It contains 12 fictional teams across three divisions, 24 completed/live/upcoming pool and medal matches, rosters, work duties, venue guides, sponsors, and source-labelled updates. Medal placeholders resolve using the existing `python -m app.cli demo-playoffs` command; check `python -m app.cli --help` for the exact available CLI actions. Staff may also edit synthetic match participants and scores through the workspace.
+
+Court 4 starts with a 20-minute delay, a six-hour announcement explaining the cause, and per-match Updates entries. Official start times stay unchanged. Three sample disputes (two open, one resolved) let the lead demonstrate reviewing results and resolving reports. The **Provincial Champions 2026 · Staff Demo** (`staff-showcase`) keeps its existing two-division elimination bracket and adds the same operational scenarios. Synthetic reporter accounts have no role grants or contact data. A source configuration marker prevents repeated seeding from replacing staff changes or resurrecting resolved disputes; resetting the main demo deliberately rebuilds it.
+
+The tag icon opens My Teams with direct, paginated team/club/division search, a division filter and follow controls. Followed teams have autosaved private labels for one or more children's names. Existing label storage remains compatible; names stay on the device and never enter public rosters.
+
+Discovery and tournament cards share the catalogue's compact 62px artwork, typography, padding and minimum height. Horizontal carousel navigation and nearby-distance text remain available.
+
+Speer is a user-requested platform partner, displayed before other sponsors on Discover and all event venue guides. The supplied logo is bundled as `/sponsors/speer.png`, linking to `https://speer.io/`. Deployment backfills Speer on every existing event; staff creation and vendor import paths add it to new events. Public ordering prioritizes Speer even if another sponsor has a lower numeric sort value. OVA's published sponsor roster remains separately scoped.

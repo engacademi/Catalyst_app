@@ -67,8 +67,8 @@ export function EventHomeView({ eventId }: { eventId: string }) {
           <Link
             className="icon-link team-label-link"
             href={`/events/${eventId}/my-teams`}
-            aria-label="Manage team labels"
-            title="Team labels"
+            aria-label="My teams and kids’ names"
+            title="My teams and kids’ names"
           >
             <Tags size={19} aria-hidden />
           </Link>

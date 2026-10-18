@@ -3590,6 +3590,9 @@ select[class] {
 }
 
 /* Compact event browsing and layered competition trees. */
+.discovery-page .event-carousel > li {
+  flex-basis: min(100%, 360px);
+}
 .discover-illustration {
   left: calc(100% + 26px);
 }
@@ -3605,42 +3608,42 @@ select[class] {
 .visibility-panel .visibility-option {
   min-height: 54px;
 }
-.tournament-catalogue .event-tile {
+.discovery-page .event-tile {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 62px 1fr;
   min-height: 225px;
 }
-.tournament-catalogue .event-tile-art {
+.discovery-page .event-tile-art {
   min-height: 62px;
   height: 62px;
   justify-content: flex-end;
   padding: 12px;
 }
-.tournament-catalogue .event-tile-art .eyebrow {
+.discovery-page .event-tile-art .eyebrow {
   display: none;
 }
-.tournament-catalogue .event-tile-art > svg {
+.discovery-page .event-tile-art > svg {
   width: 46px;
 }
-.tournament-catalogue .event-tile-body {
+.discovery-page .event-tile-body {
   padding: 13px 14px;
 }
-.tournament-catalogue .event-tile-body > .flex {
+.discovery-page .event-tile-body > .flex {
   padding-right: 37px;
   min-height: 31px;
 }
-.tournament-catalogue .event-tile h3 {
+.discovery-page .event-tile h3 {
   font-size: 15px;
   line-height: 1.35;
   margin: 5px 0 8px;
 }
-.tournament-catalogue .event-tile p {
+.discovery-page .event-tile p {
   font-size: 11px;
   margin-top: 5px;
   line-height: 1.5;
 }
-.tournament-catalogue .event-tile .save-event {
+.discovery-page .event-tile .save-event {
   top: 9px;
   right: 9px;
 }
@@ -3875,10 +3878,10 @@ select[class] {
     linear-gradient(120deg, #356f63, #91b5a0);
   color: #fff0c9;
 }
-.tournament-catalogue .event-tile-art {
+.discovery-page .event-tile-art {
   padding-right: 66px;
 }
-.tournament-catalogue .event-tile-art > svg {
+.discovery-page .event-tile-art > svg {
   width: 34px;
   height: 34px;
 }

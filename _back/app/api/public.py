@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, get_settings
@@ -216,7 +216,13 @@ def discovery_sponsors(request: Request, db: DB) -> Response:
             PartnerCard.kind == "sponsor",
         )
         # Deterministic so the ribbon credits views and clicks to the same card each time.
-        .order_by(PartnerCard.sort, PartnerCard.name, Event.start_date, PartnerCard.id)
+        .order_by(
+            case((PartnerCard.name == "Speer", 0), else_=1),
+            PartnerCard.sort,
+            PartnerCard.name,
+            Event.start_date,
+            PartnerCard.id,
+        )
     )
     seen = set()
     data = []
@@ -630,7 +636,11 @@ def guide(event_ref: str, request: Request, db: DB) -> Response:
     partners = db.scalars(
         select(PartnerCard)
         .where(PartnerCard.event_id == event.id, PartnerCard.active.is_(True))
-        .order_by(PartnerCard.sort, PartnerCard.name)
+        .order_by(
+            case((PartnerCard.name == "Speer", 0), else_=1),
+            PartnerCard.sort,
+            PartnerCard.name,
+        )
     )
     payload = {
         "data": {

@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.demo_operations import seed_demo_operations
 from app.models import (
     AccountProfile,
     Announcement,
@@ -383,7 +384,7 @@ def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Ev
         db,
         org,
         DEMO_SLUG,
-        title="Ontario Championships Demo (simulated source)",
+        title="Provincial Champions 2026 · Demo",
         kind="indoor",
         start_date=(anchor - timedelta(hours=4)).date(),
         end_date=anchor.date() + timedelta(days=1),
@@ -591,6 +592,7 @@ def seed(db: Session, *, reset: bool = False, now: datetime | None = None) -> Ev
 
     _restore(db, event, kept)
     ensure_dev_users(db, org, event)
+    seed_demo_operations(db, event, court_label="Court 4")
     db.commit()
     return event
 
