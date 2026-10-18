@@ -1495,10 +1495,14 @@ caption {
     linear-gradient(135deg, #e2d0a4, #d1e6d7);
   color: #164c3b;
 }
+/* The eyebrow carries its own shade so it stays at 4.5:1 over light art and bright photos. */
 .event-tile-art .eyebrow {
   font-size: 10px;
   max-width: 110px;
   line-height: 1.9;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #0f2f26c0;
 }
 /* A venue photo replaces the volleyball art; the shade keeps the eyebrow legible. */
 .event-tile-art.has-photo {
@@ -3652,11 +3656,13 @@ select[class] {
 .discovery-page .event-tile-art {
   min-height: 62px;
   height: 62px;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 12px;
 }
 .discovery-page .event-tile-art .eyebrow {
-  display: none;
+  display: block;
+  flex-shrink: 0;
+  line-height: 1.4;
 }
 .discovery-page .event-tile-art > svg {
   width: 46px;
