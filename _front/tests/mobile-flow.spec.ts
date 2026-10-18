@@ -1081,3 +1081,86 @@ test.describe("courtside picks", () => {
     await expect(next).toContainText("vs Northern Lights");
   });
 });
+
+test("event tile eyebrows keep 4.5:1 contrast over art and venue photos", async ({
+  page,
+}) => {
+  await setup(page);
+  const photo = (url: string) => [
+    { name: "Venue", latitude: null, longitude: null, photo_url: url },
+  ];
+  await page.route("**/v1/events", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          event,
+          { ...event, id: "e2", slug: "beach-demo", title: "Beach Tour", kind: "beach" },
+          {
+            ...event,
+            id: "e3",
+            slug: "enercare",
+            title: "Enercare Event",
+            venue_locations: photo("/venues/enercare-centre.jpg"),
+          },
+          {
+            ...event,
+            id: "e4",
+            slug: "exhibition",
+            title: "Exhibition Event",
+            venue_locations: photo("/venues/exhibition-place.jpg"),
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/");
+  const tiles = page.locator('ul[aria-label="Explore tournaments"] .event-tile');
+  await expect(tiles).toHaveCount(4);
+  await page.waitForLoadState("networkidle");
+  const luminance = ([r, g, b]: number[]) => {
+    const f = (c: number) => {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  for (let i = 0; i < 4; i++) {
+    const tile = tiles.nth(i);
+    await tile.scrollIntoViewIfNeeded();
+    // Hide the text, capture what sits behind it, then compare against the text colour.
+    const { box, color } = await tile.evaluate((el) => {
+      const eyebrow = el.querySelector<HTMLElement>(".eyebrow")!;
+      const range = document.createRange();
+      range.selectNodeContents(eyebrow);
+      const r = range.getBoundingClientRect();
+      const color = getComputedStyle(eyebrow).color.match(/\d+/g)!.slice(0, 3).map(Number);
+      eyebrow.style.color = "transparent";
+      return { box: { x: r.x, y: r.y, width: r.width, height: r.height }, color };
+    });
+    const png = await page.screenshot({ clip: box, animations: "disabled" });
+    await tile.evaluate((el) => {
+      el.querySelector<HTMLElement>(".eyebrow")!.style.color = "";
+    });
+    const pixels = await page.evaluate(async (b64) => {
+      const img = await createImageBitmap(
+        await (await fetch(`data:image/png;base64,${b64}`)).blob(),
+      );
+      const canvas = new OffscreenCanvas(img.width, img.height);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, img.width, img.height).data;
+      const out: number[][] = [];
+      for (let p = 0; p < d.length; p += 4) out.push([d[p], d[p + 1], d[p + 2]]);
+      return out;
+    }, png.toString("base64"));
+    const text = luminance(color);
+    const ratios = pixels
+      .map((bg) => {
+        const [hi, lo] = [text, luminance(bg)].sort((a, b) => b - a);
+        return (hi + 0.05) / (lo + 0.05);
+      })
+      .sort((a, b) => a - b);
+    const worst = ratios[Math.floor(ratios.length * 0.02)];
+    expect(worst, `tile ${i} eyebrow contrast`).toBeGreaterThanOrEqual(4.5);
+  }
+});
