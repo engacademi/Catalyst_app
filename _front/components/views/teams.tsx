@@ -10,6 +10,7 @@ import { useFollows } from "@/lib/follows";
 import { useEvent, useTeams } from "@/lib/queries";
 import { TeamRankings } from "../team-rankings";
 import { LoadMore } from "../load-more";
+import { FollowNextSteps } from "../my-day-links";
 import { EmptyState, ErrorState, Loading, PageTitle } from "../ui";
 
 export function TeamsView({ eventId }: { eventId: string }) {
@@ -48,6 +49,7 @@ export function TeamsView({ eventId }: { eventId: string }) {
   return (
     <div>
       <PageTitle>Teams</PageTitle>
+      <FollowNextSteps eventId={eventId} />
       <div className="filter-panel">
         <label className="relative block">
           <span className="sr-only">Search teams, clubs or divisions</span>

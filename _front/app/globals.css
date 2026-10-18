@@ -2110,6 +2110,69 @@ button[aria-pressed="true"] svg,
   gap: 14px;
   margin-top: 20px;
 }
+.my-day-panel {
+  margin-top: 22px;
+  padding: 22px;
+  border-radius: 28px;
+  border: 1px solid #d7e2cc;
+  background: linear-gradient(135deg, #e8f0e3, #f5f8ef);
+}
+.my-day-panel h2 {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.my-day-panel-copy {
+  margin-top: 6px;
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.my-day-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.my-day-panel .secondary-link,
+.follow-next-steps .secondary-link,
+nav.my-day-panel-actions .secondary-link {
+  background: var(--surface);
+}
+.my-day-unread {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: white;
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+}
+.follow-next-steps {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid #d7e2cc;
+  background: var(--brand-soft);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-strong);
+}
+.follow-next-steps .my-day-panel-actions {
+  margin-top: 12px;
+}
+nav.my-day-panel-actions {
+  margin-top: 0;
+}
+@media (max-width: 420px) {
+  .my-day-panel-actions > .primary-link {
+    flex-basis: 100%;
+  }
+}
 .tournament-save {
   display: flex;
   gap: 8px;

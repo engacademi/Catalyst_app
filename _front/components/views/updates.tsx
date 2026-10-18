@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { Megaphone, RefreshCw } from "lucide-react";
 import type { Change, Match } from "@/lib/api";
-import { useFollows, useLastSeen } from "@/lib/follows";
+import { useEventKey, useFollows, useLastSeen } from "@/lib/follows";
 import { formatRelative, formatTime } from "@/lib/format";
 import { useSearchParams } from "next/navigation";
 import { useMatch, useChanges } from "@/lib/queries";
@@ -55,6 +55,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   const query = useChanges(eventId);
   const { ids, divisionIds } = useFollows(eventId);
   const { lastSeen, markSeen } = useLastSeen(eventId);
+  const eventKey = useEventKey(eventId);
   const latest = query.data?.latest_id ?? 0;
 
   // Mark everything as seen a moment after the page shows it.
@@ -70,7 +71,7 @@ export function UpdatesView({ eventId }: { eventId: string }) {
   // Filtering happens here on the device, so the server never learns who follows what.
   const relevant = query.data!.data.filter(
     (c) =>
-      saved.includes(eventId) ||
+      saved.includes(eventKey) ||
       (!c.division_id &&
         c.entry_ids.length === 0 &&
         c.entity_type === "announcement") ||
