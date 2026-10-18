@@ -38,7 +38,7 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/courtside_test uv
 | `app/api/public.py` | Public reads under `/v1` |
 | `app/api/admin.py` | Staff workspace under `/v1/admin` |
 | `app/api/me.py` | Signed-in user's own data (official assignments) |
-| `app/cli.py` | `seed`, `grant`, `aes-load`, `aes-discover`, `myteam-load` and `timu-load` commands |
+| `app/cli.py` | `seed`, `grant`, `aes-load`, `aes-discover`, `myteam-load`, `timu-load` and `geocode-venues` commands |
 | `sample_data/` | Example CSVs and the column reference |
 
 ## How data gets in
@@ -56,6 +56,8 @@ To load a real event from AES, run `uv run python -m app.cli aes-load <event_key
 To load OVA's upcoming beach events, run `uv run python -m app.cli myteam-load`. It reads the active OVA season from MyTeam.click's public JSON and creates or refreshes one beach event, in America/Toronto with its real date and venue, for each event dated today or later. It skips cancelled events. Each event gets a MyTeam.click source keyed by the event id, with `auto_sync` on. Until the draw is published, an event shows only its divisions and accepted teams. After that, polling brings in matches with courts, teams, scores and work teams. MyTeam.click doesn't publish clock times for OVA matches, so those matches have no scheduled start. Running the command again updates the same events. Tests use the recorded responses in `sample_data/myteam/` and never call MyTeam.click.
 
 To load upcoming OVA indoor tournaments from TIMU, run `uv run python -m app.cli timu-load`. It reads the tournament list at timu.ca/ova and, for each tournament dated today or later, creates or refreshes one event (title, date, venue and address, America/Toronto) with a TIMU source keyed by its tournament id and `auto_sync` on, then syncs teams and matches. Pass `--tid 4190` to load one tournament. Running it again changes nothing unless TIMU changed. A match takes its start time from the schedule grid; TIMU shows only the first wave's time before the day and `**` for later rounds, so those matches stay "awaiting schedule" until TIMU publishes a time. Playoff slots such as `W7` stay placeholders. Tests use the trimmed pages in `sample_data/timu/` and never call TIMU.
+
+Discover's "Near Toronto" list needs venue coordinates. Each loader looks up its event's venues on OpenStreetMap Nominatim when they have none, using the address and then the name, and stores the latitude, longitude and, if missing, the city. Lookups wait one second between requests, as Nominatim's usage policy asks. A failed lookup leaves the venue as it was and the load carries on. To fill in venues loaded before this, run `uv run python -m app.cli geocode-venues`; it only looks up venues that still have no coordinates, so running it again sends no requests. Tests use the recorded responses in `sample_data/geocode/` and never call Nominatim.
 
 ## Main endpoints
 

@@ -32,6 +32,16 @@ def clean():
         conn.execute(text(f"truncate {tables} restart identity cascade"))
 
 
+@pytest.fixture(autouse=True)
+def waits(monkeypatch):
+    """Record the spacing between Nominatim lookups instead of sleeping through it."""
+    from app.modules import geocode
+
+    slept = []
+    monkeypatch.setattr(geocode, "sleep", slept.append)
+    return slept
+
+
 @pytest.fixture
 def db():
     with get_sessionmaker()() as session:

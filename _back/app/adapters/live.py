@@ -25,12 +25,15 @@ def fetch_text(url: str) -> str:
         "www.advancedeventsystems.com",
         "www.timu.ca",
         "myteamclick.herokuapp.com",
+        "nominatim.openstreetmap.org",
     }:
         raise ValueError("Unsupported source host")
     with httpx.Client(
         timeout=20,
         follow_redirects=False,
-        headers={"User-Agent": "CourtsideConnected/1.0"},
+        headers={
+            "User-Agent": "CourtsideConnected/1.0 (OVA event companion; https://github.com/engacademi/Catalyst_app)"
+        },
     ) as client:
         with client.stream("GET", url) as response:
             response.raise_for_status()
