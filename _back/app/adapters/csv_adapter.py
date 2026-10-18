@@ -42,7 +42,8 @@ ID_COLUMN = {"assignments": "external_assignment_id", "entries": "external_entry
 STATUSES = {"scheduled", "in_progress", "completed", "cancelled", "postponed"}
 MAX_CELL = 500
 TRUE_VALUES = {"yes", "y", "true", "1"}
-SET_RE = re.compile(r"^(\d{1,2})-(\d{1,2})$")
+# "?" marks a side the source has not published yet; it is stored as null (pending).
+SET_RE = re.compile(r"^(\d{1,2}|\?)-(\d{1,2}|\?)$")
 
 
 def parse_time(value: str, tz: str) -> datetime:
@@ -52,15 +53,15 @@ def parse_time(value: str, tz: str) -> datetime:
     return parsed
 
 
-def parse_sets(value: str) -> list[list[int]]:
+def parse_sets(value: str) -> list[list[int | None]]:
     sets = []
     for token in re.split(r"[\s;,]+", value.strip()):
         if not token:
             continue
         match = SET_RE.match(token)
-        if not match:
-            raise ValueError(f"set score '{token}' should look like 25-20")
-        sets.append([int(match.group(1)), int(match.group(2))])
+        if not match or token == "?-?":
+            raise ValueError(f"set score '{token}' should look like 25-20 or 25-?")
+        sets.append([None if g == "?" else int(g) for g in match.groups()])
     return sets
 
 

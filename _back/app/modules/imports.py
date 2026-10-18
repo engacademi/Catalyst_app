@@ -86,7 +86,9 @@ def stage_import(
     content: bytes,
     options: dict[str, Any],
     actor_id: uuid.UUID | None,
+    commit: bool = True,
 ) -> ImportBatch:
+    """Stage a batch. `commit=False` only flushes, so a caller can apply several atomically."""
     settings = get_settings()
     if len(content) > settings.import_max_bytes:
         raise HTTPException(
@@ -147,7 +149,7 @@ def stage_import(
         },
     )
     db.add(batch)
-    db.commit()
+    db.commit() if commit else db.flush()
     return batch
 
 
@@ -380,8 +382,13 @@ def _stage_rosters(
 
 
 def commit_import(
-    db: Session, batch_id: uuid.UUID, actor_id: uuid.UUID | None, request_id: str | None
+    db: Session,
+    batch_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
+    request_id: str | None,
+    commit: bool = True,
 ) -> ImportBatch:
+    """Apply a staged batch. `commit=False` leaves the transaction open for the caller."""
     batch = db.scalar(
         select(ImportBatch).where(ImportBatch.id == batch_id).with_for_update()
     )
@@ -406,7 +413,7 @@ def commit_import(
             **batch.summary,
             "rejected_reason": "source changed since preview",
         }
-        db.commit()
+        db.commit() if commit else db.flush()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "The source changed since this preview. Upload the file again.",
@@ -452,7 +459,7 @@ def commit_import(
             },
         )
     )
-    db.commit()
+    db.commit() if commit else db.flush()
     return batch
 
 

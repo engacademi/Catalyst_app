@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
@@ -88,6 +88,34 @@ def match_query(
         )
     # Unscheduled matches sort last so they stay discoverable without crowding the top.
     return stmt.order_by(Match.scheduled_start.asc().nulls_last(), Match.external_id)
+
+
+def within_dates(
+    stmt: Select[tuple[Match]],
+    first: date | None,
+    last: date | None,
+    tz: str,
+    *,
+    include_unscheduled: bool = False,
+) -> Select[tuple[Match]]:
+    """Keep matches starting (estimate first, as the calendar shows them) on first..last.
+
+    Dates are inclusive and read in the event's timezone. `include_unscheduled` also keeps
+    matches with no official start, which no date window can place.
+    """
+    start = func.coalesce(Match.estimated_start, Match.scheduled_start)
+    bounds = []
+    if first:
+        bounds.append(start >= datetime.combine(first, time.min, tzinfo=ZoneInfo(tz)))
+    if last:
+        end = datetime.combine(last, time.min, tzinfo=ZoneInfo(tz)) + timedelta(days=1)
+        bounds.append(start < end)
+    if not bounds:
+        return stmt
+    window = and_(*bounds)
+    if include_unscheduled:
+        window = or_(window, Match.scheduled_start.is_(None))
+    return stmt.where(window)
 
 
 def latest_changes(

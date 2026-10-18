@@ -27,7 +27,7 @@ Import in this order: entries, then matches, then rosters. Matches and rosters r
 | home_entry_id, away_entry_id | one of these or a placeholder | |
 | home_placeholder, away_placeholder | | Labels such as `W7` or `1st Pool A` until results decide the team |
 | round | no | Pool A, Quarterfinal, Gold medal |
-| set_scores | no | `25-21 22-25 15-12` |
+| set_scores | no | `25-21 22-25 15-12`; `?` marks a side not yet published, e.g. `25-21 14-?` |
 | estimated_start, source_updated_at, source_revision, external_event_id | no | Provenance from the source |
 
 A match missing from a file is left alone. To cancel one, send it with `status=cancelled`.
