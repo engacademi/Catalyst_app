@@ -246,7 +246,10 @@ export function DiscoverView({
     </span>
   ) : null;
   return (
-    <main id="main" className="platform-main discovery-page">
+    <main
+      id="main"
+      className={`platform-main discovery-page ${catalogue ? "tournament-catalogue" : ""}`}
+    >
       <div className="discovery-heading">
         {catalogue ? (
           <h1>Tournaments</h1>

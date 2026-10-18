@@ -120,9 +120,6 @@ export function TimeGrid({
     )
     .join(" ");
   const today = localDay(new Date().toISOString());
-  const events = [
-    ...new Map(rows.map(({ event }) => [event.id, event])).values(),
-  ];
   return (
     <div
       className="calendar-scroll time-calendar-scroll"
@@ -133,17 +130,7 @@ export function TimeGrid({
         Calendar blocks use one-hour display slots, not confirmed match
         durations. Full match names are available when opening a match.
       </p>
-      <ul className="calendar-legend" aria-label="Event colours">
-        {events.map((event) => (
-          <li key={event.id}>
-            <span
-              className={`event-colour event-colour-${eventColor(event.id)}`}
-              aria-hidden
-            />
-            {event.title}
-          </li>
-        ))}
-      </ul>
+
       <div
         className={`calendar-grid time-calendar ${dates.length === 7 ? "full-week" : ""}`}
         style={{

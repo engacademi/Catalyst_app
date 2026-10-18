@@ -11,6 +11,7 @@ import {
   GitBranch,
   Images,
 } from "lucide-react";
+import { SponsorToast } from "./sponsor-toast";
 import { useNow } from "@/lib/now";
 
 export function EventShell({
@@ -25,7 +26,7 @@ export function EventShell({
   const base = `/events/${eventId}`;
   const links = [
     { href: "", label: "Overview", icon: House },
-    { href: "guide", label: "Venue Guide", icon: MapPinned },
+    { href: "guide", label: "Venue", icon: MapPinned },
     { href: "matches", label: "Matches", icon: CalendarDays },
     { href: "teams", label: "Teams", icon: Users },
     { href: "pathway", label: "Brackets", icon: GitBranch },
@@ -35,7 +36,6 @@ export function EventShell({
     <div className="tournament-shell">
       <div className="tournament-context">
         <Link href="/tournaments">← Tournaments</Link>
-        <span>{event?.title ?? "Tournament"}</span>
       </div>
       {event?.demo_now && (
         <DemoClockBanner
@@ -65,6 +65,9 @@ export function EventShell({
           );
         })}
       </nav>
+      {(path === base || path.startsWith(`${base}/matches/`)) && (
+        <SponsorToast key={path} eventId={eventId} />
+      )}
       <main id="main" className="platform-main">
         <div key={path} className="route-content">
           {children}
